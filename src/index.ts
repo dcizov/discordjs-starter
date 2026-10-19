@@ -57,6 +57,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  console.log(`👋 Received ${signal}, logging out...`);
+  await client.destroy();
+  process.exit(0);
+}
+
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
+
+process.on("unhandledRejection", (error) => {
+  console.error("Unhandled promise rejection:", error);
+});
+
 client.login(config.DISCORD_TOKEN).catch((error) => {
   console.error("Failed to login:", error);
   process.exit(1);
