@@ -7,16 +7,13 @@ export const ping: Command = {
     .setDescription("Replies with the bot latency"),
 
   async execute(interaction) {
-    const sent = await interaction.reply({
-      content: "Pinging...",
-      fetchReply: true,
-    });
-
-    const latency = sent.createdTimestamp - interaction.createdTimestamp;
+    const startedAt = Date.now();
+    await interaction.reply({ content: "Pinging..." });
+    const roundTrip = Date.now() - startedAt;
     const apiLatency = Math.round(interaction.client.ws.ping);
 
     await interaction.editReply(
-      `Pong! 🏓\nLatency: ${latency}ms\nAPI Latency: ${apiLatency}ms`
+      `Pong! 🏓\nRound-trip: ${roundTrip}ms\nWebSocket heartbeat: ${apiLatency}ms`
     );
   },
 };

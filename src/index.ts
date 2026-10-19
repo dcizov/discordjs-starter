@@ -52,7 +52,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     await replyMethod({
       content: "There was an error executing this command!",
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 });
