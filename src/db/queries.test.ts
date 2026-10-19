@@ -5,6 +5,16 @@ import { getOrCreateGuild } from "./queries";
 
 const url = process.env.DATABASE_URL;
 
+function reason(error: unknown): string {
+  if (error instanceof AggregateError) {
+    return error.errors.map((e) => reason(e)).join(", ") || error.message;
+  }
+
+  if (error instanceof Error && error.cause) return reason(error.cause);
+
+  return error instanceof Error ? error.message : String(error);
+}
+
 describe.skipIf(!url)("getOrCreateGuild", () => {
   let connection: ReturnType<typeof createDb> | undefined;
   let db: Database | undefined;
@@ -20,8 +30,8 @@ describe.skipIf(!url)("getOrCreateGuild", () => {
       db = candidate.db;
     } catch (error) {
       console.warn(
-        `⚠️  Database tests are skipped: ${(error as Error).message}\n` +
-          '   Start Postgres with "docker compose up -d postgres" to run them.'
+        `⚠️  Database tests are skipped: ${reason(error)}\n` +
+          '   Start Postgres with "docker compose up -d --wait postgres" to run them.'
       );
     } finally {
       if (!connection) await candidate.pool.end();
