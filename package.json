@@ -1,0 +1,43 @@
+{
+  "name": "discordjs-starter",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": "^24.12.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsup src/index.ts --format cjs --platform node --target node24 --out-dir dist --clean --minify",
+    "lint": "eslint src --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"*.mjs\" package.json tsconfig.json .vscode/settings.json",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.mjs\" package.json tsconfig.json .vscode/settings.json",
+    "typecheck": "tsc --noEmit",
+    "deploy": "tsx src/deploy-commands.ts",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "dotenv": "^18.0.8",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "@typescript-eslint/eslint-plugin": "^8.71.2",
+    "@typescript-eslint/parser": "^8.71.2",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3"
+  },
+  "packageManager": "npm@11.21.1"
+}
