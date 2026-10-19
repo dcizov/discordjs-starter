@@ -8,7 +8,9 @@ import {
   Partials,
 } from "discord.js";
 import { commands } from "./commands";
-import { config } from "./config";
+import { parseEnv } from "./config";
+
+const config = parseEnv();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],

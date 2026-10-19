@@ -1,6 +1,8 @@
 import { REST, Routes } from "discord.js";
 import { commands } from "./commands";
-import { config } from "./config";
+import { parseEnv } from "./config";
+
+const config = parseEnv();
 
 const commandsData = Object.values(commands).map((command) =>
   command.data.toJSON()

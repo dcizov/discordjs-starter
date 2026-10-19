@@ -10,16 +10,21 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "build": "tsup src/index.ts src/deploy-commands.ts --format cjs --platform node --target node24 --out-dir dist --clean --minify",
+    "deploy": "tsx src/deploy-commands.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\" \"*.mjs\" package.json tsconfig.json .vscode/settings.json",
     "format:check": "prettier --check \"src/**/*.ts\" \"*.mjs\" package.json tsconfig.json .vscode/settings.json",
-    "typecheck": "tsc --noEmit",
-    "deploy": "tsx src/deploy-commands.ts",
     "prepare": "husky"
   },
   "dependencies": {
     "discord.js": "^14.27.0",
     "dotenv": "^18.0.8",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
@@ -27,8 +32,11 @@
     "@commitlint/config-conventional": "^21.2.4",
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
     "@typescript-eslint/eslint-plugin": "^8.71.2",
     "@typescript-eslint/parser": "^8.71.2",
+    "@vitest/coverage-v8": "^5.0.5",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
@@ -37,7 +45,8 @@
     "prettier": "^3.9.10",
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
   },
   "packageManager": "npm@11.19.0"
 }
