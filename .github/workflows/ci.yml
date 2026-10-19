@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ci:
-    name: Typecheck, lint, and build
+    name: Typecheck, lint, test, and build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -30,7 +30,7 @@ jobs:
       - name: Check formatting
         run: npm run format:check
       - name: Test
-        run: npm test --if-present
+        run: npm test
       - name: Build
         run: npm run build
   docker:
