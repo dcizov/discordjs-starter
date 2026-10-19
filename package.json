@@ -18,6 +18,10 @@
     "lint": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\" \"*.mjs\" package.json tsconfig.json .vscode/settings.json",
     "format:check": "prettier --check \"src/**/*.ts\" \"*.mjs\" package.json tsconfig.json .vscode/settings.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx src/db/seed.ts",
+    "db:studio": "drizzle-kit studio",
     "prepare": "husky"
   },
   "dependencies": {

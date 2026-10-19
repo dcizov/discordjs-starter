@@ -9,6 +9,7 @@ import {
 } from "discord.js";
 import { commands } from "./commands";
 import { parseEnv } from "./config";
+import { closeDb } from "./db";
 
 const config = parseEnv();
 
@@ -62,6 +63,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.log(`👋 Received ${signal}, logging out...`);
   await client.destroy();
+  await closeDb();
   process.exit(0);
 }
 

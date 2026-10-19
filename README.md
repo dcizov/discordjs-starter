@@ -1,6 +1,6 @@
 # discordjs-starter
 
-discord.js 14 + TypeScript. Slash command handler, zod-validated env, eslint/prettier/husky, tsup build.
+discord.js 14 + TypeScript. Slash command handler, zod-validated env, Postgres via Drizzle, Vitest, eslint/prettier/husky, tsup build.
 
 ## Getting started
 
@@ -11,7 +11,7 @@ git clone https://github.com/dcizov/discordjs-starter.git
 cd discordjs-starter
 ```
 
-**2. Set** `DISCORD_TOKEN` **and** `DISCORD_CLIENT_ID`**.** (Bot needs to be invited with `bot` + `applications.commands` permissions)
+**2. Set** `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` **and** `DATABASE_URL`**.** (Bot needs to be invited with `bot` + `applications.commands` permissions)
 
 ```bash
 cp .env.example .env
@@ -23,7 +23,14 @@ cp .env.example .env
 npm install
 ```
 
-**4. Deploy the commands and run it.**
+**4. Start Postgres and apply the migrations.**
+
+```bash
+docker compose up -d postgres
+npm run db:migrate
+```
+
+**5. Deploy the commands and run it.**
 
 ```bash
 npm run deploy
@@ -43,6 +50,30 @@ With Docker:
 ```bash
 docker compose --profile dev up dev
 ```
+
+## Database
+
+```bash
+docker compose up -d postgres
+npm run db:migrate
+```
+
+- `npm run db:generate` — write a migration after changing `src/db/schema.ts`
+- `npm run db:migrate` — apply pending migrations to `DATABASE_URL`
+- `npm run db:seed` — insert the example rows from `src/db/seed.ts`
+- `npm run db:studio` — browse the data with drizzle-kit studio
+
+Compose reaches Postgres at `postgres:5432`; from the host it is `localhost:5432`. Tests use the `bot_test` database, which the postgres service creates on first start.
+
+## Testing
+
+```bash
+npm test
+npm run test:watch
+npm run test:coverage
+```
+
+The database tests run against `DATABASE_URL` and skip themselves with a warning when no database is reachable.
 
 ## Production
 
