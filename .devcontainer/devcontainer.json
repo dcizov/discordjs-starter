@@ -1,0 +1,31 @@
+{
+  "name": "discordjs-starter",
+  // Reuses the compose file, so the dev container, `docker compose up dev`,
+  // and CI all share one dev image and one Postgres service.
+  "dockerComposeFile": "../docker-compose.yml",
+  "service": "dev",
+  // Defaults to every service, which would also start `bot` and open a second
+  // gateway connection with the same token.
+  "runServices": ["postgres"],
+  "workspaceFolder": "/app",
+  "remoteUser": "node",
+  // Keep the container running; start the bot with `npm run dev`.
+  "overrideCommand": true,
+  "shutdownAction": "stopCompose",
+  // The node_modules volume is seeded from the image, so this only reconciles
+  // it after a dependency change. `install`, not `ci`: npm ci deletes the
+  // directory, which is a volume mount point.
+  "postCreateCommand": "npm install --no-audit --no-fund",
+  "forwardPorts": [4983],
+  "portsAttributes": {
+    "4983": {
+      "label": "Drizzle Studio",
+      "onAutoForward": "silent"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"]
+    }
+  }
+}

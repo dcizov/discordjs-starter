@@ -10,13 +10,21 @@ COPY package.json package-lock.json ./
 FROM base AS deps
 RUN npm ci
 
-FROM deps AS dev
+# Development image, also used as the toolbox for lint, tests, migrations, and
+# seeds on machines without Node. Installed as `node` so the node_modules
+# volume seeded from this image stays writable by the container user.
+FROM base AS dev
 ENV NODE_ENV=development
 
-COPY tsconfig.json ./
-COPY src ./src
-
+RUN chown -R node:node /app
 USER node
+
+RUN npm ci
+
+# src alone is not enough: eslint, vitest, drizzle, and tsup read their configs
+# and migrations from the repository root.
+COPY --chown=node:node . .
+
 CMD ["npm", "run", "dev"]
 
 FROM deps AS build
