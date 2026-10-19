@@ -1,8 +1,17 @@
-import { closeDb, getDb } from "./index";
+import "dotenv/config";
+import { createDb } from "./client";
 import { guilds } from "./schema";
 
+const url = process.env.DATABASE_URL;
+
+if (!url) {
+  console.error("❌ Seeding failed: DATABASE_URL is not set");
+  process.exit(1);
+}
+
+const { db, pool } = createDb(url);
+
 async function main(): Promise<void> {
-  const { db } = getDb();
   const rows = [
     { guildId: "111111111111111111", locale: "de" },
     { guildId: "222222222222222222", locale: "en" },
@@ -18,5 +27,5 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
-    await closeDb();
+    await pool.end();
   });
