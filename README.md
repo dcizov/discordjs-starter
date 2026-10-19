@@ -26,7 +26,7 @@ npm install
 **4. Start Postgres and apply the migrations.**
 
 ```bash
-docker compose up -d postgres
+docker compose up -d --wait postgres
 npm run db:migrate
 ```
 
@@ -54,21 +54,21 @@ docker compose --profile dev up dev
 ## Database
 
 ```bash
-docker compose up -d postgres
+docker compose up -d --wait postgres
 npm run db:migrate
 ```
 
 - `npm run db:generate` — write a migration after changing `src/db/schema.ts`
-- `npm run db:migrate` — apply pending migrations to `DATABASE_URL`
+- `npm run db:migrate` — apply pending migrations to `DATABASE_URL` (the `bot` database)
 - `npm run db:seed` — insert the example rows from `src/db/seed.ts`
 - `npm run db:studio` — browse the data with drizzle-kit studio
 
-Compose reaches Postgres at `postgres:5432`; from the host it is `localhost:5432`. Tests use the `bot_test` database, which the postgres service creates on first start.
+Compose keeps the cluster in the `pgdata` volume, which the postgres 18 image mounts at `/var/lib/postgresql`. From the host the server is `localhost:5432`; from a container it is `postgres:5432`. The init script creates the `bot_test` database on first start.
 
 ## Testing
 
 ```bash
-docker compose up -d postgres
+docker compose up -d --wait postgres
 npm test
 npm run test:watch
 npm run test:coverage
