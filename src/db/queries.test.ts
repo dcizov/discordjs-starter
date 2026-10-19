@@ -20,7 +20,8 @@ describe.skipIf(!url)("getOrCreateGuild", () => {
       db = candidate.db;
     } catch (error) {
       console.warn(
-        `⚠️  Database tests are skipped: ${(error as Error).message}`
+        `⚠️  Database tests are skipped: ${(error as Error).message}\n` +
+          '   Start Postgres with "docker compose up -d postgres" to run them.'
       );
     } finally {
       if (!connection) await candidate.pool.end();

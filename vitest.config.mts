@@ -12,7 +12,13 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
-      exclude: ["src/**/*.test.ts", "src/db/index.ts", "src/types/**"],
+      exclude: [
+        "src/index.ts",
+        "src/deploy-commands.ts",
+        "src/db/seed.ts",
+        "src/**/*.test.ts",
+        "src/types/**",
+      ],
     },
   },
 });

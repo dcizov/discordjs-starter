@@ -68,12 +68,13 @@ Compose reaches Postgres at `postgres:5432`; from the host it is `localhost:5432
 ## Testing
 
 ```bash
+docker compose up -d postgres
 npm test
 npm run test:watch
 npm run test:coverage
 ```
 
-The database tests run against `DATABASE_URL` and skip themselves with a warning when no database is reachable.
+CI runs the same commands against the same Postgres image. Without a reachable database the database tests skip themselves with a warning, so `npm test` also works on a machine without Docker.
 
 ## Production
 
