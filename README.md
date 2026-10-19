@@ -93,6 +93,9 @@ docker compose logs -f bot
 ```
 
 **Deploy commands**
+
+Global commands can take up to an hour to show up in Discord. Set `DISCORD_GUILD_ID` in `.env` to deploy to a single server instead — guild commands register instantly.
+
 With Node:
 
 ```bash
