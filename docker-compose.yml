@@ -1,0 +1,40 @@
+services:
+  bot:
+    image: discordjs-starter
+    build:
+      context: .
+      target: runtime
+    container_name: discordjs-starter
+    restart: unless-stopped
+    env_file:
+      - .env
+    stop_grace_period: 20s
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  dev:
+    profiles: [dev]
+    image: discordjs-starter:dev
+    build:
+      context: .
+      target: dev
+    volumes:
+      - ./src:/app/src
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "false"
+    init: true
+    stop_grace_period: 10s
+    develop:
+      watch:
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
