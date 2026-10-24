@@ -85,6 +85,11 @@ jobs:
           docker run --rm --network container:orbit-lavalink-ci --entrypoint node orbit:ci-dev --input-type=module -e '
             import assert from "node:assert/strict";
             import { setTimeout } from "node:timers/promises";
+            process.on("uncaughtException", error => {
+              const detail = String(error.stack ?? error).replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
+              console.error(`::error title=Music backend smoke test failed::${detail}`);
+              process.exit(1);
+            });
             let info, lastError;
             for (let attempt = 0; attempt < 90; attempt++) {
               try {

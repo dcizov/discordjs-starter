@@ -83,6 +83,7 @@ describe("Compose startup and upgrade safety", () => {
     expect(metadata).toContain('apiVersion.set("4.2.2")');
     expect(metadata).toContain('name.set("soundy")');
     expect(metadata).toContain('path.set("com.waris4ly.soundy")');
+    expect(metadata).toContain('dependsOn(":source:compileTestJava")');
     expect(dockerfile).toContain(
       "/opt/Lavalink/plugins/soundy-plugin-1.1.0.jar"
     );

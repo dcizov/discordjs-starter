@@ -7,3 +7,10 @@ lavalinkPlugin {
     name.set("soundy")
     path.set("com.waris4ly.soundy")
 }
+
+// The older Lavalink Gradle plugin copies the whole classes root (filtering to
+// main classes). Gradle 8 still tracks the sibling test output as an input;
+// declare its producer when unit tests and jar packaging share one build.
+tasks.jar {
+    dependsOn(":source:compileTestJava")
+}
