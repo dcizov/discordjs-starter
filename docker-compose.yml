@@ -74,6 +74,30 @@ services:
       redis:
         condition: service_healthy
 
+  # Persistent editor/toolbox, never another automatically logged-in bot.
+  # The Dev Container also starts `web` through its explicit runServices list.
+  dev:
+    <<: *app
+    profiles: [dev]
+    build:
+      context: .
+      target: dev
+    image: orbit-community:dev
+    command: ["sleep", "infinity"]
+    environment:
+      <<: *app-env
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "${CHOKIDAR_USEPOLLING:-true}"
+    volumes:
+      - .:/app
+      - dev_node_modules:/app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: "no"
+
   postgres:
     image: postgres:17-alpine
     environment:
@@ -142,3 +166,4 @@ volumes:
   orbit_pgdata_v17:
   redisdata:
   demo_data:
+  dev_node_modules:

@@ -15,10 +15,16 @@ FROM manifests AS deps
 RUN npm ci --no-audit --no-fund
 
 FROM deps AS dev
+# Editor/CLI tooling only; the production image does not include these tools.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git ca-certificates openssh-client \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
 # Seed writable named volumes before the development bind mount hides /app.
 RUN mkdir -p .data apps/web/.next && chown -R node:node /app
 USER node
+# The intended /app bind mount may be owned by a different host UID.
+RUN git config --global --add safe.directory /app
 ENV NODE_ENV=development
 EXPOSE 3000
 CMD ["npm","run","dev"]

@@ -127,6 +127,12 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 
 Open **http://localhost:3000**. This uses the **dev image**: Next hot reload, `tsx watch` for the bot/worker, source bind mounts, container-only dependencies, and a separate Next development cache. PostgreSQL, Redis, and Lavalink run alongside them; migrations run before app services. No host Node/npm installation is required. Module/integration setup and source availability still apply; development is **not** credential-free demo mode.
 
+**Dashboard connection refused?** Check that `web` is running. A bot-only startup does not start a web server, and `3000/tcp` on `bot` is not a published host port. To add the missing dashboard/worker:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build web worker
+```
+
 The **main bot is the `bot` service**. To run only it, its dependencies, and music (not the dashboard/scheduled worker):
 
 ```sh
@@ -134,6 +140,12 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 ```
 
 See [the Docker development guide](docs/DEVELOPMENT.md#run-just-the-main-bot) for prerequisites, logs, registration, dependency updates, and data-safe stopping. The music image builds the pinned Soundy AAC/fMP4 adapter instead of using Lavaplayer's legacy SoundCloud loader; see [the unsupported-formats diagnosis](docs/MUSIC.md#soundcloud-did-not-detect-any-supported-formats).
+
+### Dev Container (VS Code / compatible editors)
+
+Open the repository and choose **Dev Containers: Reopen in Container**. `.devcontainer/devcontainer.json` reuses the same Compose files/dev image, starts the dashboard and infrastructure, and opens a persistent **`dev`** workspace as `node`. It deliberately does **not** auto-start another bot/worker. The dashboard is already running at **http://localhost:3000**; run `npm run dev:bot` in the workspace only after stopping any existing Docker bot with the same token.
+
+See [Dev Container setup](docs/DEVCONTAINER.md) for live/demo configuration, CLI use, internal service addresses, dependency updates, UID/volume handling, and stopping. Closing the editor leaves the stack running rather than unexpectedly stopping an existing bot/database.
 
 ### Runtime images / demo
 

@@ -1,4 +1,4 @@
-# Full-stack hot reload. Combine with the base file; keep DEMO_MODE=false in .env
+# Full-stack hot reload. The dashboard is `web`, not the `bot` service. Combine with the base file; keep DEMO_MODE=false in .env
 # for a real test-server bot. Production Compose remains unchanged.
 # docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
 x-dev-app: &dev-app

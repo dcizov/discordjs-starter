@@ -70,6 +70,24 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 ```
 
+## Dashboard unreachable at localhost:3000
+
+The **`web` service runs the dashboard**. The `bot` service is only the Discord gateway; `worker` handles scheduled jobs. A successful bot login/Lavalink connection does not start an HTTP server.
+
+If you ran `up ... bot lavalink`, the dashboard was intentionally **not started**. Add it (and the scheduled worker) without deleting data or stopping the bot:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build web worker
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music ps -a web
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web
+```
+
+Wait for Next to report ready, then open **http://localhost:3000**. The web container should be **Up**, with a host mapping like **`0.0.0.0:3000->3000/tcp`**. A bare **`3000/tcp` on `bot`** is just the shared image's `EXPOSE` metadata: no host port was published, and no dashboard is running there. Do not add a port mapping to the bot to fix this.
+
+If `web` exits or restarts, read its logs and migration status rather than resetting the database. If Docker reports port 3000 already allocated, stop the conflicting host process/project; do not delete volumes. For remote Docker, `localhost` in your browser is your own computer, so use SSH/editor port forwarding to the Docker host. The Next dev command already binds `0.0.0.0:3000` inside the container.
+
+For editor-based development, use the checked-in [Dev Container setup](DEVCONTAINER.md): it starts `web` and infrastructure automatically, and opens a separate persistent workspace without automatically logging in a second bot.
+
 ## Run just the main bot
 
 **`bot` is the main Discord gateway process.** With this override it runs `npm run dev:bot` (`tsx watch apps/bot/src/index.ts`), not the compiled production entrypoint. You do not need Node/npm on the host and must not start a second host bot with the same token.
@@ -80,7 +98,7 @@ After the `.env` setup above (`DEMO_MODE=false` and the Discord credentials), st
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build bot lavalink
 ```
 
-Compose starts the bot's PostgreSQL/migration/Redis dependencies too. The explicit service list **does not start `web` or `worker`**; already-running services are not stopped. Scheduled news/deals jobs need `worker`, and the dashboard needs `web`—use the full-stack command above when you want those too. Without music, leave both Lavalink variables empty and omit `lavalink`/`--profile music`.
+Compose starts the bot's PostgreSQL/migration/Redis dependencies too. **This is a headless bot-only command: http://localhost:3000 will not be available unless `web` is already running.** The explicit service list does not start `web` or `worker`; already-running services are not stopped. Scheduled news/deals jobs need `worker`, and the dashboard needs `web`—use the full-stack command above when you want those too. Without music, leave both Lavalink variables empty and omit `lavalink`/`--profile music`.
 
 Register commands and follow the main bot's logs:
 

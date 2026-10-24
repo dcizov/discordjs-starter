@@ -1,0 +1,27 @@
+{
+  "name": "Orbit community development",
+  "dockerComposeFile": ["../docker-compose.yml", "../docker-compose.dev.yml"],
+  "service": "dev",
+  "runServices": ["dev", "web", "migrate", "postgres", "redis", "lavalink"],
+  "workspaceFolder": "/app",
+  "remoteUser": "node",
+  "updateRemoteUserUID": false,
+  "overrideCommand": false,
+  "shutdownAction": "none",
+  "forwardPorts": ["web:3000"],
+  "portsAttributes": {
+    "3000": {
+      "label": "Orbit dashboard",
+      "onAutoForward": "openBrowserOnce"
+    }
+  },
+  "postCreateCommand": "node --version && npm --version && git --version",
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint", "esbenp.prettier-vscode"],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
