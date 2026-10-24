@@ -388,7 +388,7 @@ export async function saveConfig(
 }
 export async function getDashboardData(
   guildId: string
-): Promise<Omit<DashboardData, "user" | "guilds">> {
+): Promise<Omit<DashboardData, "user" | "guilds" | "presentation">> {
   const guild = await getGuild(guildId);
   if (!guild) throw new Error("Server not found");
   if (isDemo()) {

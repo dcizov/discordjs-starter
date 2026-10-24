@@ -249,24 +249,24 @@ publish a Docker UDP port. Audio playback has not started at that point.
 
 Orbit now uses `MusicDiscordConnector` / `joinMusicVoice` to:
 
-- Fail explicitly if the guild's gateway shard is missing, rather than silently
-  dropping the voice request.
+- Fail explicitly if the guild's real gateway shard is missing, incorrect or not ready, rather than silently dropping/replaying the voice request.
+- Replace (not duplicate) the Shoukaku 4.3 listener contract, retain shard metadata, initialize an already-ready client's bot identity after construction, and detach listeners at shutdown. Normal startup still constructs the service before login; late construction is a protected edge, not an established live root cause.
+- Claim attempt ownership before stale cleanup and reject overlapping joins without disconnecting the pending attempt. MusicService's existing per-guild locks are retained, not presented as a newly missing feature.
+- Pair only this guild/bot/expected channel/shard; ignore unrelated or stale wrong-channel state and retain the existing server-before-state buffer.
 - Accept either order of the bot's `VOICE_STATE_UPDATE` and `VOICE_SERVER_UPDATE`.
   Shoukaku 4.3 otherwise assumes the state/session event arrives first.
 - Leave and await the bot's own leave acknowledgement before retrying an orphaned
   same-channel connection. Shoukaku's failed initial join removes its connection
   map entry without sending a voice leave; a same-channel retry can receive no
   fresh server event/token. This failure loop is reproduced in offline tests.
-- Send a voice leave on a failed join **even when no player was ever created**.
+- Await **both** the bot's leave acknowledgement and completion of the old Lavalink player destruction before a new join. Otherwise Shoukaku can delete the new guild player-map entry when the old REST cleanup finally resolves; an offline deferred-destruction regression reproduces that ordering.
+- Send a voice leave on a failed join **even when no player was ever created**, but only while the attempt still owns its connection; recheck ownership after awaited cleanup. Old player close/end/update callbacks cannot overwrite a replacement session, including after acquiring the existing guild lock.
   `/stop` can also clear a pending/orphaned same-room connection without a player.
 - Reject full channels without the relevant Move Members bypass permission, and
   report unsupported Stage channels explicitly. Do not grant Administrator just
   to work around a voice-channel user limit.
 
-The error now reports **booleans only**: join requested, own voice state received,
-voice server received, endpoint present and whether cleanup was sent. It does
-not dump voice tokens, session IDs, raw packets or endpoints. Raw Shoukaku debug
-logging stays off.
+Structured `voiceHandshake` logs report a lifecycle stage (`gateway-failed`, `player-failed`, `player-created`), safe guild/channel/shard identifiers, readiness/identity/listener/event booleans, a bounded guild-event count and elapsed milliseconds. Text errors carry the corresponding flags, including unexpected-channel and wrong-shard observations. `joinSent=true` means a local gateway frame was submitted, **not a Discord acknowledgement**; `player-created` still does not prove a track is audible. No voice token, session ID, raw packet or endpoint is dumped. Raw Shoukaku debug logging stays off, and generic error sanitization also redacts session-ID/endpoint fields.
 
 If a fresh request still fails after updating:
 
@@ -296,7 +296,7 @@ do not prove that every external server/network problem is resolved.
 
 `Lavalink connected` + `/v4/info` + a successfully loaded track establishes that backend authentication and track lookup work. If the next error says **own voice state received: false; voice server received: false**, no Discord voice handshake completed, and no Lavalink player was created. This is a different failure from an unavailable backend, a failed YouTube lookup, or a later UDP/decoder problem. "Join sent" means the connector submitted the request to the local gateway shard; it is not a Discord acknowledgement or packet-capture proof that the request reached the server.
 
-Both missing events alone do **not** identify the exact cause. Verify View Channel/Connect/Speak including per-channel overrides, a connected correct gateway shard, the requested GuildVoiceStates intent and exactly one gateway process for the token. The permission preflight now explicitly includes View Channel and refreshes the bot's member roles. It fails before track lookup/join if a required permission is missing. The connector also fails immediately for a non-ready target shard or a running client missing GuildVoiceStates, instead of silently queueing a join for later. Timeout diagnostics include only gateway/shard-ready and intent booleans; these narrow the failure without exposing raw gateway payloads. Do not grant Administrator, enable a nonexistent privileged voice intent, or replace audio plugins to diagnose missing gateway acknowledgements.
+Both missing events alone do **not** identify the exact cause. Verify View Channel/Connect/Speak including per-channel overrides, a connected correct gateway shard, the requested GuildVoiceStates intent and exactly one gateway process for the token. The permission preflight now explicitly includes View Channel and refreshes the bot's member roles. It fails before track lookup/join if a required permission is missing. The connector also fails immediately for a non-ready target shard or a running client missing GuildVoiceStates, instead of silently queueing a join for later. Diagnostics include safe gateway/shard-ready, intent, attached-listener, matching-identity and unexpected-event flags/counts; these narrow the failure without exposing raw gateway payloads. Do not grant Administrator, enable a nonexistent privileged voice intent, or replace audio plugins to diagnose missing gateway acknowledgements.
 
 Also verify the code actually deployed. The reported build still showed the older Lavalink Dockerfile **without the `Healthcheck.java` compile/copy stages**, the older unqualified `Lavalink connected` log (the newer one includes resume booleans), and the old inline deal layout. Those are evidence of an older/mixed checkout, not evidence that a fresh build of the newest code was used. Old startup lines are also retained in `docker compose logs` when a container is not recreated.
 
@@ -332,3 +332,13 @@ Music slash/action/playback failures are also sent to the dashboard's **Audit** 
 Volume is bounded to 0–100%; queue limits are configurable. Unsupported sources produce an error, not fabricated success. Accepted play requests do not certify audible playback. The dashboard waits for actual job completion and warns rather than claiming success if completion remains unconfirmed; failures are audited. Requests older than 30 seconds at execution are rejected instead of replayed. Music actions are not automatically retried, since a repeated skip/play could alter the queue twice.
 
 Queue snapshots are for dashboard observation, not automatic voice-session restoration. An ordinary Lavalink reconnect can use its short resume window, but a full bot/backend restart or source-adapter change needs a new session. In demo mode all tracks are fictional previews and **no audio is played**.
+
+## Verification boundary for this repair
+
+The inspected lockfile resolves Shoukaku **4.3.0**, Discord.js **14.27.0** and @discordjs/ws **1.2.3**. Tests use the installed Shoukaku Connection/Player implementation with an offline gateway transport, not a mocked replacement music pipeline. They cover both event orders, synchronous delivery, wrong identity/guild/channel/shard, late initialization, concurrent joins, stale leave + REST cleanup ordering, retry/listener cleanup, player REST failure after both events and obsolete player callbacks. Separate real local WebSocket fixtures retain the backend retry/startup/recovery checks.
+
+These demonstrate concrete edge/race defects and protect the installed library contract. They **do not establish which edge or deployment condition caused your live both-events-absent trace**. The original runtime already enabled GuildVoiceStates, checked permissions, buffered event order and serialized actions per guild; those are not relabeled as newly discovered missing prerequisites. The normal service starts before Discord login and already holds a per-guild action lock. Missing acknowledgements remain an authorized live gateway/deployment investigation, not proof of a source/plugin/UDP/DAVE issue.
+
+Compose and the editor were inspected: the `bot` service owns the gateway, the editor is idle, and registration/doctor processes do not log in. The sandbox cannot inventory separately launched processes on another host or another Compose stack; verify only one intended gateway for this token. No duplicate external process was killed and no global distributed gateway-lease claim is made.
+
+Use [PERMISSIONS.md](PERMISSIONS.md) for installation scopes, exact selected-channel permissions, actor/DJ restrictions and Docker-only setup. The read-only doctor diagnoses backend/track loading, **not** a successful Discord voice join. No live guild credentials or authorized audible test were available for this change set.

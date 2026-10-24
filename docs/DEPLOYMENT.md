@@ -9,7 +9,7 @@
 - [ ] Database/Redis/Lavalink credentials are strong and held in a secret manager or protected environment files. No `NEXT_PUBLIC_*` secret variables exist.
 - [ ] Database, Redis, and Lavalink are private. Worker and audio egress cannot reach metadata/private networks.
 - [ ] Migrations have been applied **before** routing live traffic. Backups and recovery have been tested.
-- [ ] Invite has no Administrator permission; bot hierarchy, channel overwrites, notification-role mentionability, and moderator hierarchy are tested in a staging guild.
+- [ ] Minimal posting invite (`19456`) and only needed feature grants are reviewed using [PERMISSIONS.md](PERMISSIONS.md); bot hierarchy, channel overwrites, notification-role mentionability, and moderator hierarchy are tested in a staging guild. No Administrator default.
 - [ ] `ITAD_API_KEY` is present if deals are enabled, quotas allow the chosen intervals, and region/currency/store mappings are verified.
 - [ ] Publisher URLs are verified and authorized. Blizzard/Wowhead/Mojang starters are either configured or left paused/setup-required.
 - [ ] Music sources and the current voice protocol/encryption are verified against your installed Lavalink release and provider terms.
@@ -107,3 +107,5 @@ The initial migration replaces the original starter schema. It is intended for a
 ## What was verified automatically
 
 The repository includes local PostgreSQL-WASM tests and CI real-PostgreSQL execution, TypeScript checks for all services and the web app, ESLint, a production Next/services build, and credential-free Playwright flows. Live Discord OAuth, gateway, provider availability/quotas, external feed DNS/TLS, actual Discord message delivery, and audio playback still require your own infrastructure and authorized test credentials. Do not interpret a passing demo as a live-integration certification.
+
+For the 2026-10-25 voice/card/hydration/setup changes, see [IMPLEMENTATION-REVIEW.md](IMPLEMENTATION-REVIEW.md). New synced permission fields reuse existing JSON columns; this update needs no new SQL migration. Never reset a database or remove volumes to refresh metadata or a renderer. A current checkout/rebuilt bot and a fresh Discord response are needed to judge the new embed layout; an old screenshot alone cannot establish the deployed revision.

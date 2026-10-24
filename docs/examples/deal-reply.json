@@ -1,0 +1,34 @@
+{
+  "content": "",
+  "embeds": [
+    {
+      "title": "Fictional popular test game",
+      "url": "https://isthereanydeal.com/game/test-game/",
+      "description": "Base game · Released **1 Jan 2020**\nTags: Strategy",
+      "color": 4441502,
+      "image": {
+        "url": "https://assets.example.com/banner.jpg"
+      },
+      "fields": [
+        {
+          "name": "Current offer",
+          "value": "**€10.00**  ~~€40.00~~  ·  **75% off**\n[Shop at Test shop ↗](<https://itad.link/test?affiliate=retained&tag=a%2Fb>)\nRecorded low: **€10.00** · **low-price match**",
+          "inline": false
+        },
+        {
+          "name": "Steam community",
+          "value": "**90% positive** · 50,000 reviews\n**1,200** recent Steam players · ITAD snapshot\nITAD popularity: **#10** · waitlists + collections",
+          "inline": false
+        }
+      ],
+      "footer": {
+        "text": "IsThereAnyDeal · DE · Check shop price/terms · Not affiliated"
+      },
+      "timestamp": "2026-10-25T12:00:00.000Z"
+    }
+  ],
+  "components": [],
+  "allowedMentions": {
+    "parse": []
+  }
+}

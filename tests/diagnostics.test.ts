@@ -59,6 +59,14 @@ describe("safe, copyable diagnostics", () => {
     });
     expect(errorDiagnostic(error)).toBe("Safe failure");
   });
+  it("redacts gateway/voice session IDs and sensitive endpoint fields in provider error messages", () => {
+    const text = diagnosticText(
+      'session_id=private-session\n"sessionId": "another-private-session"\n"endpoint":"private-voice.example"\ntoken=private-token',
+      8192,
+      {}
+    );
+    expect(text).not.toContain("private-");
+  });
   it("masks short standalone development credentials and non-HTTP URL userinfo", () => {
     expect(
       diagnosticText("Password rejected: abc", 8192, {

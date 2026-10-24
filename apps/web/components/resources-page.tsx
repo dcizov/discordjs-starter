@@ -1,4 +1,5 @@
 "use client";
+import { ModuleSetupBanner } from "./module-setup";
 import { cn, number, relativeTime } from "@/lib/utils";
 import type { Resource, ResourceKind, Delivery } from "@orbit/core";
 import {
@@ -58,6 +59,7 @@ import {
 } from "./ui/primitives";
 import { Switch } from "./ui/switch";
 import { useWorkspace } from "./workspace";
+import { sourceSetupIssue } from "@orbit/core/module-setup";
 import { dealQuality } from "@orbit/core/deal-policy";
 const settings = {
   roles: {
@@ -118,7 +120,10 @@ export function ResourcesPage({
       (r.name + " " + JSON.stringify(r.data))
         .toLowerCase()
         .includes(query.toLowerCase()) &&
-      (filter === "all" || r.enabled === (filter === "enabled"))
+      (filter === "all" ||
+        (filter === "needs-setup"
+          ? r.kind === "source" && !!sourceSetupIssue(r)
+          : r.enabled === (filter === "enabled")))
   );
   async function toggle(r: Resource, v: boolean) {
     try {
@@ -234,6 +239,7 @@ export function ResourcesPage({
           {tab === "routes" ? "Create routing rule" : s.action}
         </Button>
       </PageHeader>
+      <ModuleSetupBanner module={section} />
       {!data.guild.config.modules[section] && (
         <div className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/10">
           <span className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
@@ -431,6 +437,9 @@ export function ResourcesPage({
           <option value="all">All statuses</option>
           <option value="enabled">Enabled</option>
           <option value="paused">Paused</option>
+          {section === "news" && tab === "main" && (
+            <option value="needs-setup">Needs setup</option>
+          )}
         </Select>
       </div>
       {tab === "history" ? (
@@ -489,7 +498,7 @@ export function ResourcesPage({
                 label: "Created",
                 render: (r) => (
                   <span className="whitespace-nowrap text-muted-foreground">
-                    {relativeTime(r.createdAt)}
+                    {relativeTime(r.createdAt, data.presentation.referenceAt)}
                   </span>
                 ),
               },
@@ -627,7 +636,8 @@ export function ResourcesPage({
                       : r.data.adapter === "webhook"
                         ? Webhook
                         : Rss;
-            const healthy = r.data.health === "healthy";
+            const setupIssue = sourceSetupIssue(r);
+            const healthy = !setupIssue && r.data.health === "healthy";
             return (
               <Card key={r.id} className="p-5">
                 <div className="flex items-center justify-between">
@@ -671,9 +681,11 @@ export function ResourcesPage({
                     />
                     {healthy
                       ? "Healthy"
-                      : r.data.health === "degraded"
-                        ? "Needs attention"
-                        : "Setup required"}
+                      : setupIssue
+                        ? "Setup required"
+                        : r.data.health === "degraded"
+                          ? "Needs attention"
+                          : "Awaiting check"}
                   </Badge>
                   {!r.enabled && <Badge>Paused</Badge>}
                 </div>
@@ -684,8 +696,9 @@ export function ResourcesPage({
                       : r.data.adapter === "webhook"
                         ? "Your own integration, routed safely into Discord."
                         : r.data.url
-                    : (r.data.lastError ??
-                      "Add a verified RSS/Atom URL or configure a signed webhook to get started.")}
+                    : (setupIssue ??
+                      r.data.lastError ??
+                      "Configured; test the source and inspect its next worker check. Webhook signing credentials are managed separately.")}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-1.5">
                   {(r.data.tags ?? []).map((tag: string) => (
@@ -1186,7 +1199,7 @@ function DeliveryTable({ query, filter }: { query: string; filter: string }) {
           label: "When",
           render: (r) => (
             <span className="whitespace-nowrap text-muted-foreground">
-              {relativeTime(r.createdAt)}
+              {relativeTime(r.createdAt, data.presentation.referenceAt)}
             </span>
           ),
         },

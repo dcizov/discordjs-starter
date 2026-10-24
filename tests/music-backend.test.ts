@@ -26,6 +26,7 @@ async function unusedPort() {
 function transport() {
   const client = Object.assign(new EventEmitter(), {
     user: { id: "120000000000000001" },
+    isReady: () => false,
     ws: { shards: new Map() },
   });
   return {

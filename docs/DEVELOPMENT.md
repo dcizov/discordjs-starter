@@ -200,3 +200,11 @@ Compose/image commands such as `command: ["npm", "run", "dev:bot"]` or `docker c
 The previously reviewed [`arena/752cdf1a-discordjs-starter@2ed0fec`](https://github.com/dcizov/discordjs-starter/tree/2ed0fecbe66a33228a10d1e2acbc7e5d7b6e8615) has a separate editor setup. Its persistent-workspace/shared-Linux-dependency ideas informed this branch, but it should not be confused with the `main` configuration compared above.
 
 Sources on the pinned main revision: [Compose](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/docker-compose.yml), [Dockerfile](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/Dockerfile), [package scripts](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/package.json), [database init](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/docker/postgres/init.d/01-databases.sql).
+
+## Permission and deployment checks after this update
+
+Follow [the least-privilege setup guide](PERMISSIONS.md), not the Portal's invite permission calculator as a live audit. New invitations request basic text posting only; feature permissions are conditional grants in Discord. No existing role/overwrite is silently modified. The permission screen expands existing synced JSON metadata and needs no database migration/reset; wait for the intended bot to sync old records.
+
+The current deal reply style removes UUID fields even from `/deals info`, removes Game deals headings/counters, and uses large provider artwork independently of concise fields. If a **fresh** reply still has those old elements, compare your checkout/head and bot logs, rebuild/recreate the intended service and inspect bind mounts. `up --build` does not fetch Git. Older already-sent messages are not rewritten. This presentation-only change does not alter slash definitions; re-register only if your deployment predates title autocomplete or other command definition updates.
+
+Do not start a second bot in the editor while Compose already owns the gateway. The doctor/registration are read-only/REST-only with respect to Discord gateway login. See [the implementation review](IMPLEMENTATION-REVIEW.md) for verified tests, reference-license research and live-integration limits.

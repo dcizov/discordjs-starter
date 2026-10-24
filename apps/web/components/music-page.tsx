@@ -1,4 +1,5 @@
 "use client";
+import { ModuleSetupBanner } from "./module-setup";
 import { BotActionPendingError } from "@orbit/core/bot-actions";
 import { cn, duration } from "@/lib/utils";
 import {
@@ -81,6 +82,7 @@ export function MusicPage() {
           Music settings
         </Button>
       </PageHeader>
+      <ModuleSetupBanner module={"music"} />
       <div
         className={cn(
           "mb-5 flex items-center gap-2 rounded-lg border px-4 py-3 text-[11px]",

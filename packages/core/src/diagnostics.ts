@@ -53,7 +53,7 @@ export function diagnosticText(
     }
   );
   text = text.replace(
-    /(["']?(?:authorization|(?:access[_-]?|refresh[_-]?|secret[_-]?)?token|client[_-]?(?:id|secret)|password|api[_-]?key)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|(?:Bearer|Bot|Basic)\s+[^\s,;&)]+|[^\s,;&)]+)/gi,
+    /(["']?(?:authorization|session[_-]?id|endpoint|(?:access[_-]?|refresh[_-]?|secret[_-]?)?token|client[_-]?(?:id|secret)|password|api[_-]?key)["']?\s*[:=]\s*)(?:"[^"]*"|'[^']*'|(?:Bearer|Bot|Basic)\s+[^\s,;&)]+|[^\s,;&)]+)/gi,
     "$1[REDACTED]"
   );
   // Strip terminal controls, preserving the actual multiline error for copying.

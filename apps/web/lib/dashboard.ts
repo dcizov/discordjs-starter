@@ -1,4 +1,6 @@
 import type { DashboardData } from "@orbit/core";
+import { activitySnapshot } from "@orbit/core/activity";
+import { activityCounts } from "@orbit/db";
 import { defaultConfig, isDemo } from "@orbit/core";
 import { emptyMusic, getDashboardData, getAccount } from "@orbit/db";
 import "server-only";
@@ -7,6 +9,7 @@ export async function loadDashboard(
   guildId: string,
   authorized?: Awaited<ReturnType<typeof authorize>>
 ): Promise<DashboardData> {
+  const referenceAt = new Date().toISOString();
   const { user, guild, guilds } = authorized ?? (await authorize(guildId));
   if (guild.id !== guildId)
     throw new HttpError(
@@ -36,6 +39,21 @@ export async function loadDashboard(
       };
   return {
     ...data,
+    presentation: {
+      referenceAt,
+      activity: activitySnapshot(
+        referenceAt,
+        data.guild.config.timezone,
+        guild.installed && !data.demo
+          ? await activityCounts(
+              guildId,
+              data.guild.config.timezone,
+              referenceAt
+            )
+          : [],
+        data.demo
+      ),
+    },
     wallet: guild.installed ? await getAccount(guildId, user.id) : null,
     integrations: {
       itad: !!process.env.ITAD_API_KEY,

@@ -112,7 +112,7 @@ npm run dev:worker # schedules, feeds, deals, and outbound deliveries
 
 For Docker-only development, use the **direct Compose commands below**, not a host npm wrapper. The images provide Node/npm and run the application scripts internally. **`npm run dev` alone is web-only**, unlike the original starter branches. The Dev Container already starts web/infra but deliberately not a second bot: run `npm run dev:bot` inside that container only after stopping any Compose bot. Offline bot actions are rejected instead of reported as success.
 
-Sign in with Discord. Only communities you own or have **Manage Server / Administrator** permission for appear. Choose a community and click **Invite Orbit** if it is not installed. The invite does not request Administrator or Mention Everyone. Place Orbit above the community roles it will assign.
+Sign in with Discord. Only communities you own or have **Manage Server / Administrator** permission for appear. Choose a community and click **Invite Orbit** if it is not installed. The invite requests basic text posting only (View Channel, Send Messages, Embed Links; mask `19456`), not role/moderation/voice/Admin powers. Opt into the required feature permissions in Discord and place Orbit above only the safe roles it manages. See the [exact least-privilege matrix and setup steps](docs/PERMISSIONS.md).
 
 Configuration is read on every bot action/message; feed schedules are reconciled every minute. No bot restart is required. Channel and role metadata syncs on Discord events and every five minutes.
 
@@ -203,6 +203,14 @@ Use the server ID from your dashboard URL. This read-only utility uses `DISCORD_
 
 See [channel/role export options, format, and privacy](docs/CHANNEL_EXPORT.md) for `--out`, JSON piping, limits, and the compiled CLI. Export files can contain private channel names and member IDs—keep them private.
 
+## Dashboard setup, activity and permission checks
+
+The overview filters modules by enabled/paused/needs-setup/not-verified state. Existing feature pages explain missing prerequisites; news starters can be filtered by **Needs setup**. “Configured” describes saved settings and synced metadata, not a successful message or audible playback.
+
+**Channels & roles → Permissions** is a read-only selected-channel check using bot-synced effective permission bits, role membership and timestamps. It distinguishes sample, legacy/unknown, and synced data; it does not change grants or claim a live Portal audit. The role picker and protection view share the server's safety policy rather than treating all nonzero permissions as elevated.
+
+The activity chart's real **7/14/30 calendar-day** windows are serialized server-side with one reference time, explicit guild timezone (default Europe/Berlin; invalid/legacy zone → UTC), labels, values and preceding-period counts. SSR and hydration reuse that exact snapshot. Metrics are **activity reward events / distinct rewarded members per day**, not commands, all messages or total membership; today is partial. Demo samples are labeled, and production charts/sparklines do not invent comparison history. Details and verification conditions: [activity architecture](docs/ARCHITECTURE.md#server-serialized-activity-and-render-time) and [implementation review](docs/IMPLEMENTATION-REVIEW.md).
+
 ## Dashboard command reference and error diagnostics
 
 The **Commands** sidebar page lists all implemented slash-command invocations, with search, module filters, current module switches, usage copying, arguments/choices/limits, and permission notes. It is generated from the same builders used by registration, not a second hand-maintained command list. It does **not** verify the commands currently registered in Discord. See [command reference behavior](docs/COMMANDS.md).
@@ -218,6 +226,8 @@ npm run music:doctor -- --query "the same failing search text"
 It reports backend versions, enabled sources, and the provider's sanitized cause/severity, without Discord login, queue changes, or audio playback. See [music troubleshooting](docs/MUSIC.md#connected-but-a-track-will-not-load). Source availability and live playback still require verification on your deployment.
 
 ## Verification
+
+For a Docker-only host, run the checks inside the dev image using [the container workflow](docs/DEVELOPMENT.md#development-lifecycle). The following is the optional host-Node workflow:
 
 ```sh
 npm run lint

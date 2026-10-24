@@ -1,4 +1,4 @@
-import { defaultConfig } from "@orbit/core";
+import { defaultConfig, type GuildChannel } from "@orbit/core";
 import { database, schema } from "@orbit/db";
 import { ChannelType, PermissionFlagsBits, type Guild } from "discord.js";
 import { eq } from "drizzle-orm";
@@ -7,38 +7,58 @@ export async function syncGuild(guild: Guild) {
   const me = await guild.members.fetchMe();
   await guild.roles.fetch();
   await guild.channels.fetch();
-  const channels = guild.channels.cache
-    .map((c) => {
-      const type =
-        c.type === ChannelType.GuildVoice ||
-        c.type === ChannelType.GuildStageVoice
-          ? ("voice" as const)
-          : c.type === ChannelType.GuildCategory
-            ? ("category" as const)
-            : ("text" as const);
-      const perms = c.permissionsFor(me);
+  const syncedAt = new Date().toISOString();
+  const channels: GuildChannel[] = guild.channels.cache
+    .filter((channel) => !channel.isThread())
+    .map((channel) => {
+      const type: GuildChannel["type"] =
+        channel.type === ChannelType.GuildVoice
+          ? "voice"
+          : channel.type === ChannelType.GuildStageVoice
+            ? "stage"
+            : channel.type === ChannelType.GuildCategory
+              ? "category"
+              : channel.type === ChannelType.GuildForum
+                ? "forum"
+                : channel.type === ChannelType.GuildMedia
+                  ? "media"
+                  : [
+                        ChannelType.GuildText,
+                        ChannelType.GuildAnnouncement,
+                      ].includes(channel.type)
+                    ? "text"
+                    : "other";
+      const perms = channel.permissionsFor(me);
       return {
-        id: c.id,
-        name: c.name,
+        id: channel.id,
+        name: channel.name,
         type,
-        canSend: !!perms?.has(
+        canSend:
           type === "voice"
-            ? [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak]
-            : [
+            ? !!perms?.has([
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.Connect,
+                PermissionFlagsBits.Speak,
+              ])
+            : type === "text" &&
+              !!perms?.has([
                 PermissionFlagsBits.ViewChannel,
                 PermissionFlagsBits.SendMessages,
                 PermissionFlagsBits.EmbedLinks,
-              ]
-        ),
+              ]),
+        permissionBits: perms?.bitfield.toString(),
+        permissionsSyncedAt: syncedAt,
       };
-    })
-    .filter((c) => !guild.channels.cache.get(c.id)?.isThread());
+    });
   const metadata = {
     name: guild.name,
     icon: guild.icon,
     installed: true,
     memberCount: guild.memberCount,
-    roles: roleView(guild),
+    roles: roleView(guild).map((role) => ({
+      ...role,
+      assignedToBot: me.roles.cache.has(role.id),
+    })),
     channels,
     botRolePosition: me.roles.highest.position,
     updatedAt: new Date(),

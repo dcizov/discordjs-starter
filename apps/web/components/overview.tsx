@@ -1,5 +1,6 @@
 "use client";
 import { cn, number, relativeTime } from "@/lib/utils";
+import { moduleSetup } from "@orbit/core/module-setup";
 import type { ModuleKey } from "@orbit/core";
 import {
   Activity,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ActivityChart } from "./activity-chart";
 import { PageHeader } from "./page-header";
 import { Button } from "./ui/button";
 import {
@@ -104,21 +106,34 @@ const modules: {
 ];
 export function Overview() {
   const { data, navigate, saveConfig } = useWorkspace();
+  const [moduleFilter, setModuleFilter] = useState("all");
   const [range, setRange] = useState("Last 7 days");
   const [customize, setCustomize] = useState(false);
   const [customizeBusy, setCustomizeBusy] = useState(false);
   const [status, setStatus] = useState(false);
   const [toggling, setToggling] = useState<string | null>(null);
   const config = data.guild.config;
-  const online =
-    data.health.find((h) => h.name === "Discord API")?.status === "healthy";
+  const setups = Object.fromEntries(
+    modules.map((item) => [item.key, moduleSetup(data, item.key)])
+  ) as Record<ModuleKey, ReturnType<typeof moduleSetup>>;
+  const visibleModules = modules.filter(
+    (item) =>
+      moduleFilter === "all" ||
+      (moduleFilter === "enabled"
+        ? config.modules[item.key]
+        : setups[item.key].state === moduleFilter)
+  );
+  const gateway = data.health.find((health) => health.name === "Discord API");
+  const online = gateway?.status === "healthy";
   const counts = {
     roles: `${data.resources.filter((r) => r.kind === "panel" && r.enabled).length} active panels`,
     moderation: `${data.resources.filter((r) => r.kind === "rule" && r.enabled).length} rules keeping watch`,
     economy: `${number(data.stats?.circulation ?? data.accounts.reduce((n, a) => n + a.balance, 0))} ${config.economy.currency.toLowerCase()} in circulation`,
     music: data.music.current
       ? "Something good is playing"
-      : "Ready for your next request",
+      : setups.music.state === "configured"
+        ? "Configured · live audio not verified"
+        : setups.music.label,
     deals: `${data.resources.filter((r) => r.kind === "deal" && r.enabled).length} active subscriptions`,
     news: `${data.resources.filter((r) => r.kind === "source").length} sources, one home for updates`,
   };
@@ -151,14 +166,14 @@ export function Overview() {
     : [
         "Total members",
         "Economy members",
-        "Moderation actions",
+        "Recent moderation actions",
         "Bot connection",
       ];
   return (
     <>
       <PageHeader
         title="Server overview"
-        description={`A little snapshot of life in ${data.guild.name}.`}
+        description={`A little snapshot of life in ${data.guild.name}. The date range applies to the activity chart; other cards show current/recent state.`}
       >
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -270,26 +285,43 @@ export function Overview() {
                   {i < 3 ? (
                     <>
                       <span className="flex items-center text-[#6aa68a]">
-                        <TrendingUp size={10} className="mr-0.5" />
-                        {data.demo ? m.change : "—"}
+                        {data.demo ? (
+                          <>
+                            <TrendingUp size={10} className="mr-0.5" />
+                            {m.change}
+                          </>
+                        ) : (
+                          [
+                            "Synced member count",
+                            "Current account count",
+                            "Recent 200 audit records",
+                          ][i]
+                        )}
                       </span>
                       <span className="ml-0.5 hidden sm:inline">
-                        {data.demo ? "vs. previous period" : "this workspace"}
+                        {data.demo ? "sample comparison" : ""}
                       </span>
                     </>
                   ) : (
                     <>
-                      <span className="size-1 rounded-full bg-emerald-400" />
+                      <span
+                        className={cn(
+                          "size-1 rounded-full",
+                          online ? "bg-emerald-400" : "bg-amber-400"
+                        )}
+                      />
                       <span>
                         {online
-                          ? "All systems operational"
+                          ? data.demo
+                            ? "Sample gateway status"
+                            : "Gateway connected"
                           : "Awaiting connection"}
                       </span>
                     </>
                   )}
                 </p>
               </div>
-              {i < 3 && (
+              {i < 3 && data.demo && (
                 <Sparkline
                   values={m.spark}
                   color={i === 0 ? "#ab94df" : i === 1 ? "#a0b8e1" : "#e1bc88"}
@@ -312,19 +344,24 @@ export function Overview() {
                     online ? "bg-emerald-500" : "bg-amber-500"
                   )}
                 />
-                {online ? "Online" : "Connecting"}
+                {online ? "Online" : "Not connected"}
               </Badge>
             </div>
             <div className="flex items-center gap-3.5 px-5 pb-4 pt-5">
               <div className="relative flex size-10 shrink-0 items-center justify-center rounded-xl border border-violet-100 bg-violet-50 text-primary dark:border-violet-500/20 dark:bg-violet-500/10">
                 <Orbit size={25} strokeWidth={1.4} />
-                <span className="absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card bg-emerald-400" />
+                <span
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card",
+                    online ? "bg-emerald-400" : "bg-amber-400"
+                  )}
+                />
               </div>
               <div>
                 <p className="text-[12px] font-semibold">
                   {online
                     ? "Orbit is in good spirits."
-                    : "Orbit is getting connected."}
+                    : "No current gateway connection."}
                 </p>
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   {data.demo
@@ -339,11 +376,7 @@ export function Overview() {
                   Gateway latency
                 </p>
                 <p className="mt-1 text-[14px] font-semibold">
-                  {data.health.find((h) => h.name === "Discord API")?.latency ??
-                    0}
-                  <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">
-                    ms
-                  </span>
+                  {online && gateway ? `${gateway.latency} ms` : "Unavailable"}
                 </p>
               </div>
               <div className="pl-5">
@@ -351,7 +384,12 @@ export function Overview() {
                   Last heartbeat
                 </p>
                 <p className="mt-1 text-[14px] font-semibold">
-                  {online ? "Just now" : "Unavailable"}
+                  {gateway?.updatedAt
+                    ? relativeTime(
+                        gateway.updatedAt,
+                        data.presentation.referenceAt
+                      )
+                    : "Unavailable"}
                 </p>
               </div>
             </div>
@@ -410,25 +448,47 @@ export function Overview() {
                 Your community toolkit
               </h2>
               <p className="mt-1 text-[11px] text-muted-foreground">
-                A little structure. A lot more possibility.
+                {modules.filter((item) => config.modules[item.key]).length}{" "}
+                enabled ·{" "}
+                {
+                  modules.filter(
+                    (item) => setups[item.key].state === "needs-setup"
+                  ).length
+                }{" "}
+                need setup. Configuration is not proof of live service health.
               </p>
             </div>
-            <button
-              onClick={() => navigate("settings")}
-              className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground hover:text-primary"
-            >
-              Manage modules
-              <ArrowUpRight size={12} />
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <Select
+                aria-label="Filter module setup"
+                value={moduleFilter}
+                onChange={(event) => setModuleFilter(event.target.value)}
+                className="h-8 w-36 text-[10px]"
+              >
+                <option value="all">All modules</option>
+                <option value="enabled">Enabled</option>
+                <option value="needs-setup">Needs setup</option>
+                <option value="not-verified">Not verified</option>
+                <option value="paused">Paused</option>
+              </Select>
+              <button
+                onClick={() => navigate("settings")}
+                className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground hover:text-primary"
+              >
+                Manage modules
+                <ArrowUpRight size={12} />
+              </button>
+            </div>
           </div>
           <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
-            {modules.map((m) => (
+            {visibleModules.map((m) => (
               <Card
                 className={cn(
                   "group px-4 py-4 transition hover:border-violet-200 dark:hover:border-violet-500/30",
                   !config.modules[m.key] && "opacity-70"
                 )}
                 key={m.key}
+                data-module-card={m.key}
               >
                 <div className="flex items-center justify-between">
                   <span
@@ -466,6 +526,22 @@ export function Overview() {
                   <p className="mt-1.5 text-[11px] text-muted-foreground">
                     {m.description}
                   </p>
+                  <div className="mt-3">
+                    <Badge
+                      tone={
+                        setups[m.key].state === "needs-setup"
+                          ? "amber"
+                          : setups[m.key].state === "configured"
+                            ? "green"
+                            : "neutral"
+                      }
+                    >
+                      {setups[m.key].label}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                    {setups[m.key].detail}
+                  </p>
                   <p className="mt-3 flex items-center gap-1.5 text-[9px] text-muted-foreground/85">
                     <span
                       className={cn(
@@ -481,6 +557,11 @@ export function Overview() {
               </Card>
             ))}
           </div>
+          {!visibleModules.length && (
+            <p className="rounded-lg border border-dashed p-6 text-center text-xs text-muted-foreground">
+              No modules match this setup filter.
+            </p>
+          )}
         </section>
       )}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -523,7 +604,7 @@ export function Overview() {
                     {a.target}
                   </p>
                   <p className="mt-1 text-[9px] text-muted-foreground">
-                    {relativeTime(a.createdAt)}
+                    {relativeTime(a.createdAt, data.presentation.referenceAt)}
                   </p>
                 </div>
                 <span className="size-1.5 rounded-full bg-violet-200 dark:bg-violet-400/30" />
@@ -640,7 +721,8 @@ export function Overview() {
                   </Badge>
                 </div>
                 <p className="mt-2 text-[11px] text-muted-foreground">
-                  {h.detail} · {h.latency}ms · {relativeTime(h.updatedAt)}
+                  {h.detail} · {h.latency}ms ·{" "}
+                  {relativeTime(h.updatedAt, data.presentation.referenceAt)}
                 </p>
               </div>
             ))}
@@ -675,193 +757,6 @@ function Sparkline({ values, color }: { values: number[]; color: string }) {
         opacity=".07"
       />
     </svg>
-  );
-}
-function curve(points: [number, number][]) {
-  return points
-    .map(([x, y], i) => {
-      if (!i) return `M${x},${y}`;
-      const prev = points[i - 1],
-        before = points[i - 2] ?? prev,
-        next = points[i + 1] ?? [x, y];
-      return `C${prev[0] + (x - before[0]) / 6},${prev[1] + (y - before[1]) / 6} ${x - (next[0] - prev[0]) / 6},${y - (next[1] - prev[1]) / 6} ${x},${y}`;
-    })
-    .join(" ");
-}
-function ActivityChart({ range }: { range: string }) {
-  const { data } = useWorkspace();
-  const [metric, setMetric] = useState("Members");
-  const [hover, setHover] = useState<number | null>(null);
-  const factor =
-    range === "Last 30 days" ? 1.35 : range === "Last 14 days" ? 1.15 : 1;
-  const values = data.demo
-    ? (metric === "Members"
-        ? [320, 465, 390, 590, 475, 715, 640]
-        : [180, 320, 240, 410, 310, 545, 460]
-      ).map((v) => Math.floor(v * factor))
-    : Array.from(
-        { length: 7 },
-        (_, i) =>
-          data.ledger.filter(
-            (l) =>
-              l.type === "activity" &&
-              new Date(l.createdAt).toDateString() ===
-                new Date(Date.now() - (6 - i) * 86400000).toDateString()
-          ).length
-      );
-  const max = data.demo ? 1000 : Math.max(10, ...values) * 1.2;
-  const points = values.map((v, i): [number, number] => [
-    48 + i * 88,
-    180 - (v / max) * 150,
-  ]);
-  const line = curve(points);
-  const previous = curve(
-    points.map(([x, y], i) => [x, Math.min(181, y + 22 + (i % 2 ? 18 : 7))])
-  );
-  return (
-    <Card className="overflow-hidden">
-      <div className="flex items-center justify-between px-5 pb-2 pt-4">
-        <div>
-          <h2 className="text-[12px] font-semibold">Community activity</h2>
-          <p className="mt-1 text-[10px] text-muted-foreground">
-            {data.demo
-              ? "A happy little corner of the internet."
-              : "Rewarded activity in the past seven days."}
-          </p>
-        </div>
-        <Select
-          aria-label="Chart metric"
-          value={metric}
-          onChange={(e) => setMetric(e.target.value)}
-          className="h-7 w-24 rounded-md px-2 text-[10px]"
-        >
-          <option>Members</option>
-          <option>Commands</option>
-        </Select>
-      </div>
-      <div className="ml-5 mt-2 flex gap-4 text-[9px] text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="size-1.5 rounded-full bg-[#a58ad7]" />
-          This period
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-1.5 rounded-full bg-[#d4c5ea]" />
-          Previous period
-        </span>
-        {data.demo && (
-          <span className="ml-auto mr-5 text-[7px] uppercase tracking-wider text-muted-foreground/60">
-            Sample activity
-          </span>
-        )}
-      </div>
-      <div className="relative px-1 pb-0.5">
-        <svg
-          viewBox="0 0 640 214"
-          className="block w-full"
-          role="img"
-          aria-label={`${metric} activity chart`}
-          onMouseLeave={() => setHover(null)}
-        >
-          <defs>
-            <linearGradient id="activityFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#b197e4" stopOpacity=".19" />
-              <stop offset="1" stopColor="#b197e4" stopOpacity=".015" />
-            </linearGradient>
-          </defs>
-          {[0, 250, 500, 750, 1000].map((n, i) => (
-            <g key={n}>
-              <line
-                x1="48"
-                x2="598"
-                y1={180 - i * 37.5}
-                y2={180 - i * 37.5}
-                stroke="currentColor"
-                className="text-border"
-                strokeDasharray={i === 0 ? "0" : "3 4"}
-                strokeWidth=".7"
-              />
-              <text
-                x="30"
-                y={183 - i * 37.5}
-                textAnchor="end"
-                className="fill-muted-foreground"
-                fontSize="8"
-              >
-                {Math.round((n / 1000) * max)}
-              </text>
-            </g>
-          ))}
-          <path d={`${line} L576,180 L48,180Z`} fill="url(#activityFill)" />
-          <path
-            d={previous}
-            fill="none"
-            stroke="#d3c6e7"
-            strokeWidth="1.5"
-            strokeDasharray="4 4"
-          />
-          <path d={line} fill="none" stroke="#a48ad5" strokeWidth="2" />
-          {points.map(([x, y], i) => (
-            <g key={i}>
-              <text
-                x={x}
-                y="204"
-                textAnchor="middle"
-                className="fill-muted-foreground"
-                fontSize="8"
-              >
-                {new Date(Date.now() - (6 - i) * 86400000).toLocaleDateString(
-                  "en-US",
-                  { month: "short", day: "numeric" }
-                )}
-              </text>
-              <rect
-                x={x - 40}
-                y="10"
-                width="80"
-                height="174"
-                fill="transparent"
-                onMouseEnter={() => setHover(i)}
-              />
-              {hover === i && (
-                <>
-                  <line
-                    x1={x}
-                    y1="21"
-                    x2={x}
-                    y2="180"
-                    stroke="#a48ad5"
-                    strokeDasharray="3 3"
-                    opacity=".4"
-                  />
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r="4"
-                    fill="#a48ad5"
-                    stroke="white"
-                    strokeWidth="2"
-                  />
-                  <g
-                    transform={`translate(${Math.max(45, Math.min(x - 29, 545))},${Math.max(2, y - 29)})`}
-                  >
-                    <rect width="58" height="21" rx="5" fill="#65517f" />
-                    <text
-                      x="29"
-                      y="14"
-                      textAnchor="middle"
-                      fill="white"
-                      fontSize="9"
-                    >
-                      {number(values[i])}
-                    </text>
-                  </g>
-                </>
-              )}
-            </g>
-          ))}
-        </svg>
-      </div>
-    </Card>
   );
 }
 function UpcomingDeliveries() {

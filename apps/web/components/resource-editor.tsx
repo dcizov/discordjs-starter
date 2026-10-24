@@ -1,6 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import type { Resource, ResourceKind } from "@orbit/core";
+import { roleAssignmentIssue } from "@orbit/core/permissions";
 import { DEAL_QUALITY_DEFAULTS } from "@orbit/core/deal-policy";
 import {
   AlertCircle,
@@ -56,11 +57,8 @@ export function ResourceEditor({
   const channels = data.guild.channels.filter((c) => c.type === "text");
   const roles = data.guild.roles;
   const safeRoles = roles.filter(
-    (r) =>
-      !r.managed &&
-      r.position < data.guild.botRolePosition &&
-      r.permissions === "0" &&
-      r.id !== data.guild.id
+    (role) =>
+      !roleAssignmentIssue(role, data.guild.botRolePosition, data.guild.id)
   );
   const defaults: Record<string, Record<string, any>> = {
     panel: {

@@ -3,8 +3,9 @@ import { twMerge } from "tailwind-merge";
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
-export function relativeTime(value: string) {
-  const d = Date.now() - new Date(value).getTime();
+export function relativeTime(value: string, referenceAt: string) {
+  const d = Math.max(0, Date.parse(referenceAt) - Date.parse(value));
+  if (!Number.isFinite(d)) return "Time unavailable";
   if (d < 60000) return "Just now";
   if (d < 3600000) return `${Math.floor(d / 60000)} min ago`;
   if (d < 86400000) return `${Math.floor(d / 3600000)} hr ago`;

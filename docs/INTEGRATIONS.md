@@ -26,6 +26,8 @@ RSS/Atom fetching requires HTTPS, a public DNS resolution, the standard HTTPS po
 7. Review source health and full delivery history. Missing permissions/upstream errors are retained.
 8. Add routing rules for additional destinations or filtered paths.
 
+Use the source list's **Needs setup** filter to find unconfigured starters. Module setup guidance distinguishes configured settings from verified delivery. A source may use its own direct destination or enabled routing rules; both feed the same deduplicated outbox. A configured source with no check yet is “Awaiting check”, not falsely “Healthy”.
+
 In demo mode, both test actions are simulated and clearly labeled. No publisher is contacted.
 
 ## Incoming webhooks

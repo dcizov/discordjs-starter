@@ -1,3 +1,4 @@
+import { elevatedRoleMask } from "@orbit/core/permissions";
 import type { GuildRole } from "@orbit/core";
 import {
   assertAssignableRole,
@@ -60,7 +61,9 @@ describe("self-role assignment safety", () => {
           "everyone"
         )
       ).toThrow();
-    for (const p of Object.values(Permissions))
+    for (const p of Object.values(Permissions).filter(
+      (value) => (value & elevatedRoleMask) !== 0n
+    ))
       expect(() =>
         assertAssignableRole(role("danger", 2, p.toString()), 10, "everyone")
       ).toThrow();
@@ -68,6 +71,15 @@ describe("self-role assignment safety", () => {
     expect(() =>
       assertAssignableRole(role("equal", 10), 10, "everyone")
     ).toThrow();
+  });
+  it("allows benign nonzero permissions while matching the shared browser policy", () => {
+    expect(() =>
+      assertAssignableRole(
+        role("reader", 2, Permissions.ViewChannel.toString()),
+        10,
+        "everyone"
+      )
+    ).not.toThrow();
   });
   it("checks prerequisites only when adding, so members can always opt out", () => {
     expect(() => plan({ prerequisiteIds: ["c"] })).toThrow("prerequisite");

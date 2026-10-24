@@ -148,6 +148,7 @@ export class MusicService {
     player.on("end", (event) => {
       if (event.reason === "replaced" || event.reason === "cleanup") return;
       void this.locked(player.guildId, async () => {
+        if (this.backend?.players.get(player.guildId) !== player) return;
         const state = this.state(player.guildId);
         if (event.reason === "finished" && state.current) {
           if (state.repeat === "track") state.tracks.unshift(state.current);
@@ -162,6 +163,7 @@ export class MusicService {
       );
     });
     player.on("update", (update) => {
+      if (this.backend?.players.get(player.guildId) !== player) return;
       const state = this.state(player.guildId);
       state.position = update.state.position;
       if (Date.now() - (this.lastSave.get(player.guildId) ?? 0) > 15000) {
@@ -172,6 +174,7 @@ export class MusicService {
       }
     });
     player.on("exception", (event) => {
+      if (this.backend?.players.get(player.guildId) !== player) return;
       const detail = musicSourceFailure(event.exception, {
         stage: "playback",
         source: null,
@@ -197,6 +200,7 @@ export class MusicService {
     player.on("closed", () => {
       if (this.backend?.players.get(player.guildId) !== player) return;
       void this.locked(player.guildId, async () => {
+        if (this.backend?.players.get(player.guildId) !== player) return;
         this.sessions.set(player.guildId, emptyMusic());
         await this.persist(player.guildId);
       }).catch((e) =>
@@ -300,12 +304,28 @@ export class MusicService {
         if (state.tracks.length + tracks.length > stored.config.music.maxQueue)
           throw new Error("This request would exceed the queue limit.");
         if (!player) {
-          player = await joinMusicVoice(this.backend, this.voiceConnector, {
-            guildId: guild.id,
-            channelId: voice.id,
-            shardId: guild.shardId,
-            currentChannelId: me.voice.channelId,
-          });
+          player = await joinMusicVoice(
+            this.backend,
+            this.voiceConnector,
+            {
+              guildId: guild.id,
+              channelId: voice.id,
+              shardId: guild.shardId,
+              currentChannelId: me.voice.channelId,
+            },
+            (voiceHandshake) => {
+              if (voiceHandshake.stage === "player-created")
+                logger.info(
+                  { voiceHandshake },
+                  "Discord voice handshake completed; player created, playback not yet proven"
+                );
+              else
+                logger.warn(
+                  { voiceHandshake },
+                  "Music join failed at the reported lifecycle stage"
+                );
+            }
+          );
           state.volume = stored.config.music.defaultVolume;
           await player.setGlobalVolume(state.volume);
           this.wire(player);
@@ -429,11 +449,33 @@ export class MusicService {
     );
   }
   async shutdown() {
-    if (!this.backend) return;
+    if (!this.backend) {
+      this.voiceConnector.dispose();
+      return;
+    }
     this.backend.stop();
-    for (const id of this.backend.players.keys()) {
-      await this.backend.leaveVoiceChannel(id).catch(() => {});
-      await putMusicState(id, emptyMusic());
+    try {
+      for (const id of new Set([
+        ...this.backend.players.keys(),
+        ...this.backend.connections.keys(),
+      ])) {
+        await this.backend
+          .leaveVoiceChannel(id)
+          .catch((error) =>
+            logger.warn(
+              { guildId: id, error: errorDiagnostic(error) },
+              "Music voice cleanup failed during shutdown"
+            )
+          );
+        await putMusicState(id, emptyMusic()).catch((error) =>
+          logger.warn(
+            { guildId: id, error: errorDiagnostic(error) },
+            "Music shutdown snapshot persistence failed after voice cleanup attempt"
+          )
+        );
+      }
+    } finally {
+      this.voiceConnector.dispose();
     }
   }
 }

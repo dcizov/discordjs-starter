@@ -1,3 +1,4 @@
+import type { ActivitySnapshot } from "./activity";
 import type { GameDeal } from "./deal-types";
 export type ModuleKey =
   "roles" | "moderation" | "economy" | "music" | "deals" | "news";
@@ -20,12 +21,17 @@ export type GuildRole = {
   position: number;
   permissions: string;
   managed: boolean;
+  /** Present on new bot syncs; missing legacy/demo data is not a live audit. */
+  assignedToBot?: boolean;
 };
 export type GuildChannel = {
   id: string;
   name: string;
-  type: "text" | "voice" | "category";
+  type: "text" | "voice" | "stage" | "category" | "forum" | "media" | "other";
   canSend: boolean;
+  /** Effective bot permissions including channel/category overwrites at sync. */
+  permissionBits?: string;
+  permissionsSyncedAt?: string;
 };
 export type GuildConfig = {
   locale: string;
@@ -130,6 +136,7 @@ export type ServiceHealth = {
   detail: string;
 };
 export type DashboardData = {
+  presentation: { referenceAt: string; activity: ActivitySnapshot };
   guild: Guild;
   resources: Resource[];
   audit: AuditEntry[];

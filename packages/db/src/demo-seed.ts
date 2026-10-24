@@ -1,3 +1,4 @@
+import { Permissions as P } from "@orbit/core/permissions";
 import type {
   Account,
   AuditEntry,
@@ -43,7 +44,14 @@ export function createDemo(): DemoState {
   const roles = [
     role(101, "Admin", "#e16b73", 15, "8"),
     role(102, "Moderator", "#60a5a0", 12, "1099511635968"),
-    role(103, "Orbit", "#8b5cf6", 10, "268443648", true),
+    role(
+      103,
+      "Orbit",
+      "#8b5cf6",
+      10,
+      (P.ManageRoles | P.ManageMessages | P.ModerateMembers).toString(),
+      true
+    ),
     role(104, "Community", "#9c8aee", 2),
     role(105, "PC gaming", "#9d8be2", 3),
     role(106, "Console gaming", "#e7a671", 3),
@@ -113,8 +121,27 @@ export function createDemo(): DemoState {
     installed: true,
     memberCount: 2846,
     config,
-    roles,
-    channels,
+    roles: roles.map((item) => ({
+      ...item,
+      assignedToBot: item.name === "Orbit",
+    })),
+    channels: channels.map((item) => ({
+      ...item,
+      permissionBits:
+        item.name === "staff-only"
+          ? "0"
+          : item.type === "voice"
+            ? (P.ViewChannel | P.Connect | P.Speak).toString()
+            : (
+                P.ViewChannel |
+                P.SendMessages |
+                P.EmbedLinks |
+                P.ReadMessageHistory |
+                P.AddReactions |
+                P.ManageMessages
+              ).toString(),
+      permissionsSyncedAt: minutesAgo(0),
+    })),
     botRolePosition: 10,
     updatedAt: minutesAgo(0),
   };

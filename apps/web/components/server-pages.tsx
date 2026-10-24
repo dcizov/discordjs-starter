@@ -1,6 +1,8 @@
 "use client";
 import { copyText } from "@/lib/clipboard";
 import { cn, relativeTime } from "@/lib/utils";
+import { roleAssignmentIssue } from "@orbit/core/permissions";
+import { PermissionSetup } from "./permission-setup";
 import type { AuditEntry, GuildConfig } from "@orbit/core";
 import {
   Check,
@@ -17,7 +19,6 @@ import {
   Rss,
   Save,
   Settings2,
-  Shield,
   ShieldCheck,
   Tags,
   UsersRound,
@@ -138,6 +139,8 @@ export function ChannelsPage() {
                 <option value="text">Text</option>
                 <option value="voice">Voice</option>
                 <option value="category">Categories</option>
+                <option value="stage">Stage (unsupported)</option>
+                <option value="forum">Forums</option>
               </Select>
             )}
           </div>
@@ -174,9 +177,25 @@ export function ChannelsPage() {
                     key: "status",
                     label: "Bot access",
                     render: (r) => (
-                      <Badge tone={r.canSend ? "green" : "amber"}>
+                      <Badge
+                        tone={
+                          !r.permissionBits
+                            ? "neutral"
+                            : r.canSend
+                              ? "green"
+                              : "amber"
+                        }
+                      >
                         {r.canSend ? <Check size={10} /> : <Lock size={10} />}
-                        {r.canSend ? "Ready to use" : "Missing permissions"}
+                        {r.type === "stage"
+                          ? "Unsupported Stage"
+                          : !["text", "voice"].includes(r.type)
+                            ? "Not a destination"
+                            : !r.permissionBits
+                              ? "Not verified"
+                              : r.canSend
+                                ? "Synced access"
+                                : "Missing permissions"}
                       </Badge>
                     ),
                   },
@@ -245,15 +264,23 @@ export function ChannelsPage() {
                         tone={
                           r.managed
                             ? "blue"
-                            : r.permissions !== "0"
+                            : roleAssignmentIssue(
+                                  r,
+                                  data.guild.botRolePosition,
+                                  data.guild.id
+                                )
                               ? "amber"
                               : "neutral"
                         }
                       >
                         {r.managed
                           ? "Integration"
-                          : r.permissions !== "0"
-                            ? "Elevated permissions"
+                          : roleAssignmentIssue(
+                                r,
+                                data.guild.botRolePosition,
+                                data.guild.id
+                              )
+                            ? "Protected role"
                             : "Community role"}
                       </Badge>
                     ),
@@ -264,16 +291,20 @@ export function ChannelsPage() {
                     render: (r) => (
                       <Badge
                         tone={
-                          !r.managed &&
-                          r.permissions === "0" &&
-                          r.position < data.guild.botRolePosition
+                          !roleAssignmentIssue(
+                            r,
+                            data.guild.botRolePosition,
+                            data.guild.id
+                          )
                             ? "green"
                             : "neutral"
                         }
                       >
-                        {!r.managed &&
-                        r.permissions === "0" &&
-                        r.position < data.guild.botRolePosition ? (
+                        {!roleAssignmentIssue(
+                          r,
+                          data.guild.botRolePosition,
+                          data.guild.id
+                        ) ? (
                           <>
                             <Check size={10} />
                             Assignable
@@ -308,47 +339,7 @@ export function ChannelsPage() {
           </Card>
         </>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2">
-          {[
-            {
-              title: "Role management",
-              icon: UsersRound,
-              text: "Manage Roles allows Orbit to assign safe roles below its own highest role. Administrator, moderation, integration, and other privileged roles are blocked.",
-              permission: "Manage Roles · below bot hierarchy",
-            },
-            {
-              title: "News & deal deliveries",
-              icon: Rss,
-              text: "Destinations require View Channel, Send Messages, and Embed Links. Optional role notifications must be explicitly configured; mass mentions are suppressed.",
-              permission: "View Channel · Send Messages · Embed Links",
-            },
-            {
-              title: "Moderation",
-              icon: Shield,
-              text: "Orbit and the moderator both need the relevant action permission, and both must outrank the target. The owner, bot, and acting moderator are always protected.",
-              permission: "Kick · Ban · Moderate Members · Manage Messages",
-            },
-            {
-              title: "Music playback",
-              icon: Music2,
-              text: "Orbit joins a requester’s voice channel only when it can Connect and Speak. DJ restrictions and same-channel checks apply to playback controls.",
-              permission: "Connect · Speak",
-            },
-          ].map((c) => (
-            <Card key={c.title} className="p-6">
-              <span className="flex size-10 items-center justify-center rounded-xl bg-violet-50 text-primary dark:bg-violet-500/10">
-                <c.icon size={19} />
-              </span>
-              <h2 className="mt-4 text-sm font-semibold">{c.title}</h2>
-              <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-                {c.text}
-              </p>
-              <p className="mt-4 border-t pt-4 text-[10px] font-medium text-primary">
-                {c.permission}
-              </p>
-            </Card>
-          ))}
-        </div>
+        <PermissionSetup />
       )}
     </>
   );
@@ -440,7 +431,7 @@ export function AuditPage() {
               label: "When",
               render: (r) => (
                 <span className="whitespace-nowrap text-muted-foreground">
-                  {relativeTime(r.createdAt)}
+                  {relativeTime(r.createdAt, data.presentation.referenceAt)}
                 </span>
               ),
             },

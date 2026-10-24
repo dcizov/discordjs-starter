@@ -39,6 +39,7 @@ function service(configured = true) {
   const client = Object.assign(new EventEmitter(), {
     user: { id: "120000000000000001" },
     ws: { shards: new Map() },
+    isReady: () => false,
   });
   // Never emit clientReady: these state/health tests must make no network calls.
   const music = new MusicService(client as unknown as Client);
@@ -163,6 +164,73 @@ describe("music configuration, availability and session truthfulness", () => {
     expect(leave).toHaveBeenCalledWith(id);
     expect(join).not.toHaveBeenCalled();
     expect(backend.players.size).toBe(0);
+  });
+  it("does not let an old queued voice-close callback erase a replacement player's session", async () => {
+    const music = service(),
+      id = "120000000000000002";
+    const old = Object.assign(new EventEmitter(), {
+      guildId: id,
+    }) as unknown as Player;
+    const replacement = Object.assign(new EventEmitter(), {
+      guildId: id,
+    }) as unknown as Player;
+    const internal = music as unknown as {
+      wire(player: Player): void;
+      locked(id: string, fn: () => Promise<void>): Promise<void>;
+    };
+    let release!: () => void;
+    const held = internal.locked(
+      id,
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        })
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    music.backend!.players.set(id, old);
+    internal.wire(old);
+    (old as unknown as EventEmitter).emit("closed", {});
+    music.backend!.players.set(id, replacement);
+    music.state(id).position = 1234;
+    release();
+    await held;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(music.state(id).position).toBe(1234);
+    expect(db.putMusicState).not.toHaveBeenCalled();
+  });
+  it("ignores track end and position updates from an obsolete player", async () => {
+    const music = service(),
+      id = "120000000000000002";
+    const old = Object.assign(new EventEmitter(), {
+      guildId: id,
+    }) as unknown as Player;
+    const replacement = Object.assign(new EventEmitter(), {
+      guildId: id,
+    }) as unknown as Player;
+    (music as unknown as { wire(player: Player): void }).wire(old);
+    music.backend!.players.set(id, replacement);
+    music.state(id).position = 4321;
+    (old as unknown as EventEmitter).emit("update", { state: { position: 0 } });
+    (old as unknown as EventEmitter).emit("end", { reason: "finished" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(music.state(id).position).toBe(4321);
+    expect(db.putMusicState).not.toHaveBeenCalled();
+  });
+  it("detaches connector listeners even if shutdown snapshot persistence fails", async () => {
+    const music = service(),
+      id = "120000000000000002";
+    const client = (music as unknown as { client: EventEmitter }).client;
+    music.backend!.players.set(id, {} as Player);
+    vi.spyOn(music.backend!, "leaveVoiceChannel").mockImplementationOnce(
+      async () => {
+        music.backend!.players.delete(id);
+      }
+    );
+    db.putMusicState.mockRejectedValueOnce(
+      new Error("Test database unavailable")
+    );
+    await expect(music.shutdown()).resolves.toBeUndefined();
+    expect(client.listenerCount("raw")).toBe(0);
   });
   it("preserves an actually resumed Lavalink session rather than erasing its queue", async () => {
     const music = service(),

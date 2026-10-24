@@ -31,7 +31,7 @@ Also apply **network egress controls** to the worker/Lavalink containers. Applic
 
 ## Roles and moderation
 
-Roles must be explicitly included in a panel/shop configuration, non-integration, below Orbit, not `@everyone`, and free of privileged permission bits. Safety checks apply to both additions and removals. Prerequisites are required for new grants; members can still opt out after losing a prerequisite. Single/multi limits and exclusive groups are checked per request, and Redis member locks serialize changes.
+Roles must be explicitly included in a panel/shop configuration, non-integration, below Orbit, not `@everyone`, and free of privileged/sensitive permission bits. The shared browser/server policy blocks moderation/management, audit/insight access, expression/event creation, Pin Messages and Bypass Slowmode; unrecognized future bits fail closed until audited. Raw bitfields remain intact in exports. Benign nonzero permissions such as View Channel are not falsely treated as elevated. Safety checks apply to both additions and removals. Prerequisites are required for new grants; members can still opt out after losing a prerequisite. Single/multi limits and exclusive groups are checked per request, and Redis member locks serialize changes.
 
 Moderation requires the acting member and bot to have the relevant permission and outrank the target. The owner, acting moderator, and bot are protected. Administrator timeouts are rejected. Auto rules exempt configured roles/channels, administrators, the owner, bots, and members above the bot. Discord API failures are handled without claiming a successful action.
 
@@ -39,10 +39,12 @@ Discord does not offer a transaction across role removal and role addition. A pa
 
 ## Storage, logging, and operations
 
-No token, API key, signing secret, or database URL is sent as public configuration. Logs redact named credentials and never intentionally include OAuth token responses, source URL query secrets, or webhook bodies. API keys are configured only in the server environment. Source URLs are visible to authorized administrators and must not contain credentials.
+No token, API key, signing secret, or database URL is sent as public configuration. Logs redact named credentials and never intentionally include OAuth token responses, source URL query secrets, voice session IDs/raw voice-server payloads, or webhook bodies. API keys are configured only in the server environment. Source URLs are visible to authorized administrators and must not contain credentials.
 
 Configuration changes, moderation cases, inventory, ledger entries, and delivery attempts are retained. Audit/case/ledger records are append-only through the application, **not cryptographically tamper-proof against a database owner**. Use separate least-privilege database credentials, protected backups, and database-level grants/monitoring where stronger guarantees are required.
 
 Rotate `APP_SECRET` carefully: existing encrypted sessions/webhook secrets cannot be decrypted with a different key. Clear sessions, rotate webhook secrets, and plan user sign-in again. Rotate Discord and provider credentials via their official portals. Never paste them into chat, issue trackers, or browser code.
 
 Run `npm audit --omit=dev`, tests, and production builds as part of updates. Maintain a tested dependency/backend image baseline and regularly patch it. Report security issues privately to your deployment owner rather than publishing live credentials or exploit payloads against an active community.
+
+The Channels & roles permission screen is read-only synced metadata, explicitly not a live audit or a grant operation. Legacy/missing bitfields are unknown rather than green, and sample metadata is labeled. The minimal posting invite requests `19456`; optional per-feature grants must be made deliberately in Discord. See [PERMISSIONS.md](PERMISSIONS.md) for scopes, Portal/code intents, effective channel permissions and hierarchy restrictions.

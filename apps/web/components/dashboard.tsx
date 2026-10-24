@@ -637,7 +637,7 @@ export function Dashboard({
                       {a.detail}
                     </p>
                     <p className="mt-2 text-[10px] text-muted-foreground">
-                      {relativeTime(a.createdAt)}
+                      {relativeTime(a.createdAt, data.presentation.referenceAt)}
                     </p>
                   </div>
                 </div>

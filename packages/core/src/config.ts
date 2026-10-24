@@ -1,3 +1,4 @@
+import { baselineInvitePermissions } from "./permissions";
 import { z } from "zod";
 import { DEAL_QUALITY_DEFAULTS } from "./deal-policy";
 import type { GuildConfig } from "./types";
@@ -258,7 +259,7 @@ export function required(name: string) {
 export function inviteUrl(guildId?: string) {
   const app = process.env.DISCORD_CLIENT_ID;
   if (!app) return null;
-  const permissions = "1099783302214";
+  const permissions = baselineInvitePermissions;
   return `https://discord.com/oauth2/authorize?client_id=${app}&scope=bot%20applications.commands&permissions=${permissions}${guildId ? `&guild_id=${guildId}&disable_guild_select=true` : ""}`;
 }
 export function validateEnvironment(service: "web" | "bot" | "worker") {

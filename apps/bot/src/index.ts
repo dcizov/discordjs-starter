@@ -1,3 +1,4 @@
+import { gatewayIntentNames } from "@orbit/core/permissions";
 import {
   fingerprint,
   isDemo,
@@ -43,14 +44,7 @@ async function main() {
   }
   validateEnvironment("bot");
   const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMembers,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildMessageReactions,
-      GatewayIntentBits.GuildVoiceStates,
-    ],
+    intents: gatewayIntentNames.map((name) => GatewayIntentBits[name]),
     partials: [
       Partials.Message,
       Partials.Channel,
@@ -127,6 +121,15 @@ async function main() {
           logger.warn({ error: e.message }, "Channel sync failed")
         );
     });
+  client.on(Events.GuildMemberUpdate, (_before, member) => {
+    if (member.id === client.user?.id)
+      void syncGuild(member.guild).catch((error) =>
+        logger.warn(
+          { guildId: member.guild.id, error: errorDiagnostic(error) },
+          "Bot role-membership permission sync failed"
+        )
+      );
+  });
   client.on(Events.ShardDisconnect, (close) => {
     if (close.code === 4014) {
       logger.fatal(

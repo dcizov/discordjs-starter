@@ -34,15 +34,16 @@ function takeLink(url: string, seen?: Set<string>) {
 }
 
 /**
- * Shared by slash replies and persistent delivery. Compact cards use a small
- * cover and an in-card shop link, NOT detached action rows beneath all results.
- * Detailed/channel cards use one banner and at most one distinct shop button;
- * their clickable game title already opens ITAD's comparison page.
+ * Shared by slash replies and persistent delivery. Information density and
+ * artwork size are independent. Existing channel consumers keep their default;
+ * slash search cards opt into large artwork while retaining concise fields.
+ * Links stay with their game, never in detached rows below multiple embeds.
  */
 export function dealEmbed(
   result: GameDeal,
   compact = false,
-  seenLinks?: Set<string>
+  seenLinks?: Set<string>,
+  options: { artwork?: "large" | "compact" } = {}
 ): APIEmbed {
   const { game, offer } = result;
   if (game.mature !== false || game.type !== "game")
@@ -101,6 +102,18 @@ export function dealEmbed(
       inline: false,
     });
 
+  if (
+    offer &&
+    offer.price.amountInt > 0 &&
+    game.tags.some((tag) => /^free[ -]+to[ -]+play$/i.test(tag.trim()))
+  )
+    fields.push({
+      name: "Catalog / offer note",
+      value:
+        "“Free to Play” is a catalog tag, not this offer’s price. The shop may sell a paid package containing the game. Check included products at the linked store.",
+      inline: false,
+    });
+
   const steam = steamReview(game.reviews);
   const community = [
     steam?.score != null
@@ -153,30 +166,46 @@ export function dealEmbed(
         inline: false,
       });
   }
-  // Public cards do not need technical IDs. The explicit /deals info reply
-  // can expose its advanced reference separately; workers use this clean default.
+  // Keep API/watch/dedup identities out of ALL user-facing deal text.
   const released = releaseDate(game.releaseDate);
   const image = providerUrl(game.image, true),
     boxart = providerUrl(game.boxart, true);
-  const thumbnail = compact ? boxart || image : !image ? boxart : "";
+  const large = options.artwork === "large";
+  const artwork = large
+    ? image || boxart
+    : options.artwork === "compact"
+      ? ""
+      : !compact
+        ? image
+        : "";
+  const thumbnail = artwork
+    ? ""
+    : options.artwork === "compact"
+      ? boxart || image
+      : compact
+        ? boxart || image
+        : boxart;
+  const coverFallback = large && artwork && (!image || image === boxart);
   return {
     title: safeText(game.title, 180),
     ...(url ? { url } : {}),
     description: [
       `Base game${released ? ` · Released **${released}**` : ""}`,
-      [...new Set(game.tags)]
-        .slice(0, compact ? 3 : 5)
-        .map((tag) => label(tag, 24))
-        .join(" · "),
+      game.tags.length
+        ? `Tags: ${[...new Set(game.tags)]
+            .slice(0, compact ? 3 : 5)
+            .map((tag) => label(tag, 24))
+            .join(" · ")}`
+        : "",
     ]
       .filter(Boolean)
       .join("\n"),
     color: offer?.atHistoricalLow ? 0x43c59e : 0x8b5cf6,
-    ...(!compact && image ? { image: { url: image } } : {}),
+    ...(artwork ? { image: { url: artwork } } : {}),
     ...(thumbnail ? { thumbnail: { url: thumbnail } } : {}),
     fields,
     footer: {
-      text: `IsThereAnyDeal · ${result.country} · Check shop price/terms · Not affiliated`,
+      text: `IsThereAnyDeal · ${result.country} · Check shop price/terms · Not affiliated${coverFallback ? " · Cover artwork" : ""}`,
     },
     ...(Number.isFinite(Date.parse(result.checkedAt))
       ? { timestamp: result.checkedAt }

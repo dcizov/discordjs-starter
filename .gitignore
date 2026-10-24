@@ -34,3 +34,6 @@ test-results/
 # Build-time Python artifact tooling.
 __pycache__/
 *.pyc
+
+# Local browser/tool downloads (not application dependencies).
+.cache/

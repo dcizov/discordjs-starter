@@ -1,4 +1,5 @@
 "use client";
+import { ModuleSetupBanner } from "./module-setup";
 import { cn, number, relativeTime } from "@/lib/utils";
 import type { Resource, LedgerEntry } from "@orbit/core";
 import {
@@ -74,7 +75,10 @@ export function EconomyPage() {
   const total =
     data.stats?.circulation ?? data.accounts.reduce((n, a) => n + a.balance, 0);
   const dailyReady =
-    !me?.lastDaily || Date.now() - new Date(me.lastDaily).getTime() >= 86400000;
+    !me?.lastDaily ||
+    Date.parse(data.presentation.referenceAt) -
+      new Date(me.lastDaily).getTime() >=
+      86400000;
   async function claimDaily() {
     setBusy(true);
     try {
@@ -109,6 +113,7 @@ export function EconomyPage() {
           Add shop item
         </Button>
       </PageHeader>
+      <ModuleSetupBanner module={"economy"} />
       {!data.guild.config.modules.economy && (
         <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
           The economy is paused. Enable it in Server settings to allow rewards
@@ -518,7 +523,10 @@ export function EconomyPage() {
                     label: "When",
                     render: (r) => (
                       <span className="whitespace-nowrap text-muted-foreground">
-                        {relativeTime(r.createdAt)}
+                        {relativeTime(
+                          r.createdAt,
+                          data.presentation.referenceAt
+                        )}
                       </span>
                     ),
                   },

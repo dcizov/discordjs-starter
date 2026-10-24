@@ -11,21 +11,9 @@ export function gameDealReply(results: GameDeal[], detailed = false) {
     })
     .slice(0, detailed ? 1 : 3);
   const links = new Set<string>();
-  const embeds = games.map((game, index) => ({
-    ...dealEmbed(game, !detailed, links),
-    author: {
-      name:
-        games.length > 1
-          ? `Game deals · ${index + 1} / ${games.length}`
-          : "Game deals",
-    },
-  }));
-  if (detailed && games[0])
-    embeds[0].fields!.push({
-      name: "Game ID · advanced reference",
-      value: `\`${games[0].game.id}\``,
-      inline: false,
-    });
+  const embeds = games.map((game) =>
+    dealEmbed(game, !detailed, links, { artwork: "large" })
+  );
   // Discord positions ALL action rows after ALL embeds, not beneath each card.
   // Search/preview links live in the corresponding card. Only a single detailed
   // result gets a shop button; its title already links to the comparison page.

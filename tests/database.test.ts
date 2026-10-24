@@ -1,6 +1,7 @@
 import { defaultConfig } from "@orbit/core";
 import {
   audit,
+  activityCounts,
   closeDb,
   database,
   deleteResource,
@@ -490,5 +491,65 @@ describe("complete server-paginated history and exact wallets", () => {
         })
       ).total
     ).toBe(0);
+  });
+});
+
+describe("complete zoned activity chart SQL", () => {
+  it("aggregates all rewards rather than latest history, isolates tenants and matches calendar labels across DST", async () => {
+    const rows = Array.from({ length: 250 }, (_, index) => ({
+      guildId: g1,
+      userId: index % 2 ? u1 : u2,
+      type: "activity",
+      amount: 10,
+      key: randomUUID(),
+      note: "test",
+      createdAt: new Date("2026-10-25T01:30:00Z"),
+    }));
+    rows.push(
+      {
+        ...rows[0],
+        key: randomUUID(),
+        createdAt: new Date("2026-10-24T22:00:00Z"),
+      },
+      {
+        ...rows[0],
+        key: randomUUID(),
+        createdAt: new Date("2026-10-25T00:30:00Z"),
+      },
+      {
+        ...rows[0],
+        key: randomUUID(),
+        createdAt: new Date("2026-10-25T23:00:00Z"),
+      },
+      {
+        ...rows[0],
+        key: randomUUID(),
+        createdAt: new Date("2026-10-24T21:59:59Z"),
+      },
+      {
+        ...rows[0],
+        key: randomUUID(),
+        createdAt: new Date("2026-10-26T00:00:00Z"),
+      },
+      {
+        ...rows[0],
+        key: randomUUID(),
+        createdAt: new Date("2026-08-01T00:00:00Z"),
+      },
+      { ...rows[0], key: randomUUID(), guildId: g2 },
+      { ...rows[0], key: randomUUID(), type: "transfer" },
+      { ...rows[0], key: randomUUID(), type: "daily" }
+    );
+    await database().db.insert(s.ledger).values(rows);
+    const result = await activityCounts(
+      g1,
+      "Europe/Berlin",
+      "2026-10-25T23:30:00Z"
+    );
+    expect(result.sort((a, b) => a.key.localeCompare(b.key))).toEqual([
+      { key: "2026-10-24", events: 1, members: 1 },
+      { key: "2026-10-25", events: 252, members: 2 },
+      { key: "2026-10-26", events: 1, members: 1 },
+    ]);
   });
 });

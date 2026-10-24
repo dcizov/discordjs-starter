@@ -33,9 +33,9 @@ Search/info/now replies remain ephemeral and do not ping anyone. Their shop link
 
 ### Are visible game IDs necessary?
 
-No. ITAD's UUID identifies the game **internally** for API requests, saved watches and delivery deduplication. It is public metadata, not an API key, entitlement or purchase requirement. Ordinary deal cards do not need to display it.
+No. ITAD's UUID identifies the game **internally** for API requests, saved watches and delivery deduplication. It is public metadata, not an API key, entitlement or purchase requirement. No deal embed displays it, including detailed `/deals info`.
 
-Run `/deals search` (or `/deals now`), then select the game **by title** in the `game` suggestions for `/deals info` or `/deals watch`. A unique, exact recently searched title also works without selecting a suggestion; ambiguous editions are never guessed. Existing UUID-based commands/watches remain compatible. Only the explicit detailed-info card exposes the technical reference for advanced use; automated channel posts stay clean.
+Run `/deals search` (or `/deals now`), then select the game **by title** in the `game` suggestions for `/deals info` or `/deals watch`. A unique, exact recently searched title also works without selecting a suggestion; ambiguous editions are never guessed. Existing UUID-based commands/watches remain compatible. IDs remain internal; detailed-info cards and automatic channel posts stay clean too.
 
 Suggestions are scoped to the current **guild and requesting user**, kept in bounded memory with a 15-minute inactivity expiry, and lost on bot restart. Search again if they expire. There are **no ITAD calls per autocomplete keystroke**, and no searches, API keys or prices are disclosed to other members. Watch execution still rechecks Manage Server, module state, destination permissions and provider metadata.
 
@@ -47,10 +47,23 @@ The default country is Germany/EUR. Slash choices also cover US/USD, GB/GBP, CA/
 
 Discord renders **all message action rows after all embeds**, not underneath each individual game. The old search reply added two generic buttons per result, producing a detached pile of similar-looking shop/compare rows. The comparison button also duplicated the already-clickable game title. Identical labels across different games did not necessarily mean identical URLs.
 
-- **Search/preview:** numbered compact cards, a small provider cover, human-readable release/tags, full-width **Current offer** and **Steam community** sections. No cramped three-column price/review grid or three giant banners. Prices have currency-aware formatting, original-price strikethrough and a clear discount; recorded low, required coupon and known expiry stay with their offer.
+- **Search/preview:** concise information with a **large provider-supplied landscape image**. If only cover art exists it is shown large and labeled “Cover artwork”; absent artwork is omitted, not invented. Artwork size is independent of detail density. There is **no Game deals author/header, card counter, or internal ID**, including detailed `/deals info`. Human-readable release/tags and full-width **Current offer** and **Steam community** sections remain. Prices retain currency formatting, original-price strikethrough, discount, recorded low, required coupon and known expiry.
 - **Links stay with their game:** each compact card contains its own **Shop at …** link. Click the **game title** for the ITAD comparison page. There are no detached search button rows. Exact repeated destination URLs and duplicate game IDs are suppressed; different game pages remain distinct, even at the same shop.
-- **Detailed info / automatic channel post:** one landscape banner (or a cover fallback), extra supplied critic/developer/platform details, and at most **one distinct shop button**. The title already serves as the comparison link, so no duplicate Compare button is added. Technical IDs are absent from search/preview and automatic channel posts. Only an explicitly requested `/deals info` card includes an advanced, copyable ID reference.
+- **Detailed info:** the same large-art policy, extra supplied critic/developer/platform details and at most **one distinct shop button**. The title is already the comparison link, so no duplicate Compare button is added. No advanced-ID field is added.
+- **Automatic channel posts:** retain their existing shared-presenter artwork defaults and scheduled-delivery behavior; slash-specific large artwork is an explicit option, not an accidental schedule redesign. Missing metadata, prices, IDs, deduplication, destination authorization and mentions keep their existing safeguards.
 - **No rewritten purchase links:** affiliate parameters are retained verbatim, including escaping/encoded values. A URL longer than Discord's 512-character button limit can use an in-card link if it fits. A URL that cannot fit is explicitly omitted, never silently truncated into another destination. Repeated platform/DRM tags are deduplicated too.
+
+A [generated example reply payload](examples/deal-reply.json) comes directly from `gameDealReply` with the fictional offline fixture and a fixed timestamp. Its example artwork URLs, game and €10 price are **not live offers**; the JSON demonstrates the large `image`, clean title, in-card links and absence of UUID/header/counter fields. Tests keep this example aligned with the renderer.
+
+### Why “Free to Play” can coexist with a paid ARK offer
+
+Public pages reviewed on 2026-10-25 explain the screenshot without inventing a zero price:
+
+- [Steam app 407530 — ARK: The Survival Of The Fittest](https://store.steampowered.com/app/407530/ARK_The_Survival_Of_The_Fittest/) has a user-defined Free to Play tag **and** an explicit notice that it is bundled with ARK: Survival Evolved, which must be purchased to play.
+- [ITAD info](https://isthereanydeal.com/game/ark-the-survival-of-the-fittest/info/) shows the same catalog identity as the screenshot. Its [products page](https://isthereanydeal.com/game/ark-the-survival-of-the-fittest/products/) associates app **407530** with paid package **sub/59321 — ARK: Survival Evolved**. A catalog tag is not the current offer/package price.
+- The public pages displayed a USD price during inspection, **not a fresh German/EUR API quote**. Orbit keeps the actually returned regional offer, original shop URL, affiliate parameters and quote identity. It now labels tags explicitly and adds a catalog/offer explanation if a paid offer accompanies a Free to Play tag. A missing quote stays unavailable; a genuinely returned zero remains valid.
+
+The request/price maps and caches were inspected: game UUID, requested country and price-request payload remain identity boundaries, and game-info IDs are checked. No local cross-game price/cache mix-up was reproduced. If a live quote differs, inspect the actual returned game/offer/products rather than replacing it with another game's or a fabricated free price.
 
 ## Configure a channel for automatic posting
 

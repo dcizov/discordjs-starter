@@ -85,8 +85,9 @@ describe("implemented deals command dispatch (no live Discord/ITAD)", () => {
     await t.run();
     expect(api.searchGameDeals).toHaveBeenCalledWith("Test title", "DE", 3);
     const reply = t.i.editReply.mock.calls[0][0] as any;
-    expect(reply.embeds[0].thumbnail.url).toBe(deal().game.boxart);
-    expect(reply.embeds[0].image).toBeUndefined();
+    expect(reply.embeds[0].image.url).toBe(deal().game.image);
+    expect(reply.embeds[0].thumbnail).toBeUndefined();
+    expect(reply.embeds[0].author).toBeUndefined();
     expect(reply.components).toEqual([]);
     expect(
       reply.embeds[0].fields.find(

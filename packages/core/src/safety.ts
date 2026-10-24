@@ -9,25 +9,8 @@ import {
 import { BlockList, isIP } from "node:net";
 import sanitizeHtml from "sanitize-html";
 import type { GuildRole } from "./types";
-export const Permissions = {
-  Administrator: 8n,
-  ManageGuild: 32n,
-  ManageRoles: 268435456n,
-  ManageChannels: 16n,
-  KickMembers: 2n,
-  BanMembers: 4n,
-  ModerateMembers: 1099511627776n,
-  ManageMessages: 8192n,
-  MentionEveryone: 131072n,
-  ManageWebhooks: 536870912n,
-  ManageNicknames: 134217728n,
-  ManageExpressions: 1073741824n,
-  ManageEvents: 8589934592n,
-  ManageThreads: 17179869184n,
-  MuteMembers: 4194304n,
-  DeafenMembers: 8388608n,
-  MoveMembers: 16777216n,
-};
+import { Permissions, roleAssignmentIssue } from "./permissions";
+export { Permissions } from "./permissions";
 export function canManageGuild(g: { owner?: boolean; permissions: string }) {
   try {
     return (
@@ -40,19 +23,13 @@ export function canManageGuild(g: { owner?: boolean; permissions: string }) {
     return false;
   }
 }
-const forbidden = Object.values(Permissions).reduce((a, b) => a | b, 0n);
 export function assertAssignableRole(
   role: GuildRole | undefined,
   botPosition: number,
   guildId: string
 ) {
-  if (!role) throw new Error("This role no longer exists.");
-  if (role.id === guildId || role.managed)
-    throw new Error("Managed roles and @everyone cannot be self-assigned.");
-  if (role.position >= botPosition)
-    throw new Error("Move the Orbit role above the roles it manages.");
-  if ((BigInt(role.permissions) & forbidden) !== 0n)
-    throw new Error("Roles with elevated permissions cannot be self-assigned.");
+  const issue = roleAssignmentIssue(role, botPosition, guildId);
+  if (issue) throw new Error(issue);
 }
 export function planRoleAssignment(input: {
   roles: GuildRole[];

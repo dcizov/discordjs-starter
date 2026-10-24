@@ -30,6 +30,10 @@ export default defineConfig({
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
     timeout: 90000,
-    env: { DEMO_MODE: "true", DEMO_DATA_PATH: resolve(".data/e2e.json") },
+    env: {
+      DEMO_MODE: "true",
+      DEMO_DATA_PATH: resolve(".data/e2e.json"),
+      TZ: "UTC",
+    },
   },
 });
