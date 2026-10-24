@@ -2,9 +2,17 @@ import type { DashboardData } from "@orbit/core";
 import { defaultConfig, isDemo } from "@orbit/core";
 import { emptyMusic, getDashboardData, getAccount } from "@orbit/db";
 import "server-only";
-import { authorize } from "./auth";
-export async function loadDashboard(guildId: string): Promise<DashboardData> {
-  const { user, guild, guilds } = await authorize(guildId);
+import { authorize, HttpError } from "./auth";
+export async function loadDashboard(
+  guildId: string,
+  authorized?: Awaited<ReturnType<typeof authorize>>
+): Promise<DashboardData> {
+  const { user, guild, guilds } = authorized ?? (await authorize(guildId));
+  if (guild.id !== guildId)
+    throw new HttpError(
+      403,
+      "Server authorization does not match this workspace"
+    );
   const data = guild.installed
     ? await getDashboardData(guildId)
     : {

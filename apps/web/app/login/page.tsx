@@ -9,6 +9,7 @@ export default function Login() {
     <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden px-6">
       <div className="absolute -top-48 left-1/2 -z-10 h-[650px] w-[650px] -translate-x-1/2 rounded-full bg-violet-200/30 blur-3xl" />
       <Link
+        prefetch={false}
         href="/"
         className="mb-12 flex items-center gap-2 text-3xl font-semibold tracking-tight"
       >

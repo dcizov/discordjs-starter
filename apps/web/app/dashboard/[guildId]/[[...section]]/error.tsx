@@ -20,7 +20,9 @@ export default function ErrorPage({
       </p>
       <div className="mt-6 flex gap-3">
         <Button variant="outline" asChild>
-          <Link href="/">Switch workspace</Link>
+          <Link prefetch={false} href="/">
+            Switch workspace
+          </Link>
         </Button>
         <Button onClick={reset}>Try again</Button>
       </div>

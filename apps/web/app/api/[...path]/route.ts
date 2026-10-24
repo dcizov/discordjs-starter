@@ -75,7 +75,7 @@ async function handle(req: Request, context: Context) {
       }
     }
     if (path.length === 2 && req.method === "GET")
-      return NextResponse.json(await loadDashboard(guildId));
+      return NextResponse.json(await loadDashboard(guildId, auth));
     if (path[2] === "history" && req.method === "GET") {
       const u = new URL(req.url);
       const kind = z
@@ -509,7 +509,17 @@ async function handle(req: Request, context: Context) {
         : error instanceof Error
           ? error.message
           : "Something went wrong";
-    return NextResponse.json({ error: message }, { status });
+    const retryAfterSeconds =
+      error instanceof HttpError ? error.retryAfterSeconds : undefined;
+    return NextResponse.json(
+      { error: message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) },
+      {
+        status,
+        ...(retryAfterSeconds
+          ? { headers: { "Retry-After": String(retryAfterSeconds) } }
+          : {}),
+      }
+    );
   }
 }
 export const GET = handle;

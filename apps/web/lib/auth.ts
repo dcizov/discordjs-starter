@@ -7,6 +7,13 @@ import {
   required,
 } from "@orbit/core";
 import { database, listInstalledGuilds, schema } from "@orbit/db";
+import {
+  createDiscordPermissionState,
+  DiscordPermissionClient,
+  isDiscordPermissionError,
+  type DiscordPermissionState,
+} from "@orbit/core/discord-permissions";
+import { logger } from "@orbit/core/logger";
 import { and, eq, gt } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { createHash, randomBytes } from "node:crypto";
@@ -67,7 +74,17 @@ export async function identity(): Promise<Identity | null> {
     accessToken: access,
   };
 }
-const cache = new Map<string, { time: number; data: any[] }>();
+// Share data and in-flight requests between RSC/API bundles and Next dev reloads.
+// No tokens are retained in these keys or successful response snapshots.
+const globalAuth = globalThis as typeof globalThis & {
+  orbitDiscordPermissionsV1?: DiscordPermissionState;
+};
+const permissions = new DiscordPermissionClient({
+  state: (globalAuth.orbitDiscordPermissionsV1 ??=
+    createDiscordPermissionState()),
+  onFailure: (info) =>
+    logger.warn(info, "Discord guild-permission lookup failed"),
+});
 export async function manageableGuilds(user: Identity, fresh = false) {
   const installed = await listInstalledGuilds();
   if (isDemo())
@@ -77,25 +94,17 @@ export async function manageableGuilds(user: Identity, fresh = false) {
       icon: g.icon,
       installed: g.installed,
     }));
-  const key = user.sessionId!;
-  let guilds = cache.get(key);
-  if (fresh || !guilds || Date.now() - guilds.time > 30000) {
-    const r = await fetch("https://discord.com/api/v10/users/@me/guilds", {
-      headers: { Authorization: `Bearer ${user.accessToken}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!r.ok)
-      throw new HttpError(
-        r.status === 429 ? 429 : 401,
-        "Discord could not verify your server permissions. Please try again."
-      );
-    const data = await r.json();
-    guilds = { time: Date.now(), data };
-    cache.set(key, guilds);
-    if (cache.size > 1000) cache.delete(cache.keys().next().value!);
+  if (!user.sessionId || !user.accessToken)
+    throw new HttpError(401, "Sign in with Discord to continue");
+  let guilds;
+  try {
+    guilds = await permissions.guilds(user.sessionId, user.accessToken, fresh);
+  } catch (error) {
+    if (isDiscordPermissionError(error))
+      throw new HttpError(error.status, error.message, error.retryAfterSeconds);
+    throw error;
   }
-  return guilds.data.filter(canManageGuild).map((g) => ({
+  return guilds.filter(canManageGuild).map((g) => ({
     id: g.id,
     name: g.name,
     icon: g.icon ?? null,
@@ -105,7 +114,8 @@ export async function manageableGuilds(user: Identity, fresh = false) {
 export class HttpError extends Error {
   constructor(
     public status: number,
-    message: string
+    message: string,
+    public retryAfterSeconds?: number
   ) {
     super(message);
   }

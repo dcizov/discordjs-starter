@@ -68,6 +68,16 @@ http://localhost:3000/api/auth/callback
 
 Set `APP_URL=http://localhost:3000` (without a trailing slash), restart the development server after `.env` changes, and start sign-in again from the dashboard rather than reusing an old authorization URL. `localhost` versus `127.0.0.1`, HTTP versus HTTPS, port, path, and a trailing slash all need to match. For a deployed site, register its exact HTTPS callback instead. Never share your client secret, bot token, or `.env` file while troubleshooting.
 
+### Dashboard cannot verify Discord server permissions
+
+This is a Discord OAuth guild-list lookup, not a Lavalink error. Check web stdout for `Discord guild-permission lookup failed`: it includes the upstream HTTP status and retry delay, but no tokens or upstream response bodies.
+
+- **429:** wait for the displayed cooldown. Do not repeatedly refresh or repeatedly authorize the application. The dashboard coalesces in-flight checks, honors `Retry-After`/`retry_after`, disables speculative prefetch on protected navigation, and shows a recoverable wait screen.
+- **401/403 from Discord:** start sign-in again from `/login`; make sure the selected application's OAuth scopes include `identify` and `guilds`. You still need ownership, Administrator, or Manage Server permission for the selected community.
+- **503/network failures:** Discord or the connection is temporarily unavailable. Retry after the displayed delay. Do not rotate unrelated bot, database, or Lavalink credentials.
+
+No operation is authorized with expired cached guild permissions when verification fails. The permission cache and cooldowns are process-local; multiple web replicas have independent caches, so large deployments should coordinate upstream quotas across replicas rather than lengthening authorization-cache lifetimes. Bot actions continue to independently validate current member permissions.
+
 ## Health and observability
 
 - `GET /api/healthz` is a lightweight web liveness endpoint; it intentionally does not claim database or bot readiness.

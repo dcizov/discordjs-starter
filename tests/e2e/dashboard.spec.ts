@@ -369,3 +369,22 @@ test("mobile navigation and layouts have no page-level horizontal overflow", asy
     )
   ).toBe(true);
 });
+
+test("unavailable server permissions render a recoverable page without exposing workspace data", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/990000000000000999/music");
+  await expect(
+    page.getByRole("heading", { name: "Server access denied", exact: true })
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Nothing was changed. Your server settings remain protected."
+    )
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in again" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Try again", exact: true })
+  ).toBeVisible();
+  await expect(page.locator('[data-hydrated="true"]')).toHaveCount(0);
+});

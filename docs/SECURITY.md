@@ -9,7 +9,9 @@
 
 ## Sessions and requests
 
-Opaque session cookies are HTTP-only, SameSite=Lax, and Secure in production. Sessions expire after seven days; upstream OAuth tokens refresh server-side and are encrypted at rest. OAuth state is random, expires in ten minutes, and is compared before exchanging a code. State is cleared on success.
+Opaque session cookies are HTTP-only, SameSite=Lax, and Secure in production. Guild permission verification coalesces concurrent lookups, reads honor a strict 30-second cache, and mutations bypass the positive cache. Discord 429 responses hold a cooldown and fail closed; expired permission data is never a fallback. HTTP 401/403 from the OAuth endpoint require sign-in again, while network/5xx failures are temporary unavailability rather than proof of a bad session. Only upstream status and retry timing are logged, never OAuth response bodies or tokens.
+
+Sessions expire after seven days; upstream OAuth tokens refresh server-side and are encrypted at rest. OAuth state is random, expires in ten minutes, and is compared before exchanging a code. State is cleared on success.
 
 Mutating dashboard requests require the configured public `APP_URL` origin. Demo/development supports the preview proxy’s forwarded host without weakening the live origin policy. Redis-backed request limits fail closed when live infrastructure is unavailable. API responses use no-store and content-type sniffing is disabled. Live production pages reject framing; isolated demo previews may be embedded.
 

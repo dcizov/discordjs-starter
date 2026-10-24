@@ -151,6 +151,7 @@ export function Dashboard({
   const sidebar = (
     <>
       <Link
+        prefetch={false}
         href="/"
         className="mb-8 ml-3 flex w-fit items-center gap-2.5"
         aria-label="Orbit home"
@@ -184,7 +185,7 @@ export function Dashboard({
           </p>
           {data.guilds.map((g) => (
             <DropdownMenuItem key={g.id} asChild>
-              <Link href={guildHref(g.id)}>
+              <Link prefetch={false} href={guildHref(g.id)}>
                 <ServerIcon name={g.name} small />
                 <span className="flex-1">
                   {g.name}
@@ -220,6 +221,7 @@ export function Dashboard({
                 .filter((n) => n.group === group)
                 .map((n) => (
                   <Link
+                    prefetch={false}
                     key={n.id}
                     href={`/dashboard/${data.guild.id}/${n.id}`}
                     onClick={() => setMobile(false)}
