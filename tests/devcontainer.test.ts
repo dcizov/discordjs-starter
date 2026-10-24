@@ -209,6 +209,26 @@ describe("Dev Container and dashboard startup contract", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("refuses the real-queue CI smoke outside its credential-free isolated project", () => {
+    const result = spawnSync(
+      process.execPath,
+      ["--import", "tsx", "tests/integration/action-queue-smoke.ts"],
+      {
+        cwd: process.cwd(),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_ACTIONS: "false",
+          ORBIT_ACTION_QUEUE_SMOKE: "false",
+        },
+        timeout: 5000,
+      }
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("credential-free, isolated CI");
+    expect(result.stderr).not.toContain("Transform failed");
+  });
+
   it("retains the PostgreSQL 17 layout and never reintroduces the reference branch's legacy volume", () => {
     expect(compose.services.postgres.image).toBe("postgres:17-alpine");
     expect(compose.services.postgres.volumes).toEqual([
