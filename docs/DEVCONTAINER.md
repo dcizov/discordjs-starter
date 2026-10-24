@@ -15,6 +15,8 @@ The explicit `runServices` list starts:
 - **`migrate`, `postgres`, `redis`** — migrations and the same database/queue services used by Docker development.
 - **`lavalink`** — the pinned Soundy-enabled audio backend. Its first build downloads Java build dependencies; no provider or Discord integration test runs during that build.
 
+The workspace and dashboard wait for `migrate`. Besides applying the schema, this orders container creation so **one migration container seeds a cold shared `dev_node_modules` volume first**. Creating several dev-image consumers in parallel can otherwise race Docker's volume copy-up and fail with `mkdir ... node_modules/...: file exists`. No PostgreSQL volume is deleted or replaced.
+
 It deliberately **does not automatically start `bot` or `worker`**. This avoids a second gateway login or duplicate deliveries when you already have them running. Opening the editor does not register commands, seed/reset the database, or log in to Discord. Migrations run against the configured local development database. Existing containers outside this startup list are not stopped.
 
 ## Open it

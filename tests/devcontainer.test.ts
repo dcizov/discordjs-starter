@@ -118,6 +118,26 @@ describe("Dev Container and dashboard startup contract", () => {
     expect(pkg.scripts.dev).toContain("--hostname 0.0.0.0 --port 3000");
   });
 
+  it("serializes cold dependency-volume population before the workspace/dashboard are created", () => {
+    // migrate is the first dev-image consumer. Compose's dependency creation
+    // order prevents concurrent Docker copy-up into a brand new shared volume.
+    expect(compose.services.dev.depends_on.migrate.condition).toBe(
+      "service_completed_successfully"
+    );
+    for (const name of ["web", "bot", "worker"])
+      expect(
+        (
+          development.services[name].depends_on ??
+          compose.services[name].depends_on
+        ).migrate.condition
+      ).toBe("service_completed_successfully");
+    expect(compose.services.migrate.depends_on.postgres.condition).toBe(
+      "service_healthy"
+    );
+    expect(compose.services.dev.depends_on).not.toHaveProperty("bot");
+    expect(compose.services.dev.depends_on).not.toHaveProperty("worker");
+  });
+
   it("keeps the editor alive independently and does not stop an existing stack on editor close", () => {
     expect(compose.services.dev.command).toEqual(["sleep", "infinity"]);
     expect(compose.services.dev.profiles).toEqual(["dev"]);
@@ -148,6 +168,7 @@ describe("Dev Container and dashboard startup contract", () => {
     expect(config).not.toHaveProperty("containerEnv");
     expect(config).not.toHaveProperty("remoteEnv");
     expect(compose.services.dev.depends_on).toEqual({
+      migrate: { condition: "service_completed_successfully" },
       postgres: { condition: "service_healthy" },
       redis: { condition: "service_healthy" },
     });

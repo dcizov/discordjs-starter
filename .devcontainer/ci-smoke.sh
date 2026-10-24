@@ -9,6 +9,8 @@ fi
 export COMPOSE_PROJECT_NAME=orbit-devcontainer-ci
 export DEMO_MODE=true
 export APP_URL=http://localhost:3000
+export COMPOSE_ANSI=never
+export COMPOSE_PROGRESS=plain
 export POSTGRES_PASSWORD=ci-only-database-password
 export LAVALINK_PASSWORD=ci-only-devcontainer-password
 # No command in this test needs live credentials.

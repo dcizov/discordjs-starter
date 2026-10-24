@@ -92,6 +92,11 @@ services:
       - .:/app
       - dev_node_modules:/app/node_modules
     depends_on:
+      # One creator must populate the cold shared dependency volume first.
+      # Without this edge the CLI creates dev/migrate in parallel and Docker's
+      # volume copy-up can fail with mkdir/file-exists on node_modules.
+      migrate:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
