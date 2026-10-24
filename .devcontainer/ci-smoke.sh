@@ -26,14 +26,15 @@ cleanup() {
     services="$(mktemp "$RUNNER_TEMP/orbit-devcontainer-services.XXXXXX")"
     "${compose[@]}" logs --no-color --tail=45 dev web migrate postgres redis lavalink > "$services" 2>&1 || true
     python3 - "$output" "$log" "$services" <<'PYTHON'
+import re
 import sys
 from pathlib import Path
 # Check annotations are capped at 4096 characters by GitHub. Keep each chunk
 # below that limit, and retain the CLI's final JSON report separately.
 for label, filename, budget in zip(
-    ("CLI result", "Recent startup output", "Service logs"), sys.argv[1:], (3000, 9000, 9000)
+    ("CLI output", "Recent startup output", "Service logs"), sys.argv[1:], (9000, 9000, 9000)
 ):
-    text = Path(filename).read_text(errors="replace")[-budget:]
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", Path(filename).read_text(errors="replace"))[-budget:]
     if not text.strip():
         continue
     chunks = [text[offset:offset + 3000] for offset in range(0, len(text), 3000)]
@@ -57,12 +58,17 @@ fi
 sudo setfacl -R -m u:1000:rwX .
 find . -type d -not -path './.git/*' -exec sudo setfacl -m "d:u:1000:rwx,d:u:$(id -u):rwx" {} +
 
-"${cli[@]}" up --workspace-folder . --log-level info > "$output"
+# CLI 0.89 suppresses compose-up stderr in its non-PTY execution path.
+# A real terminal preserves those errors and matches the editor's startup path;
+# --return ensures a failing CLI still fails this smoke (no masked exit code).
+printf -v cli_up '%q ' "${cli[@]}" up --workspace-folder . --log-level info
+script --quiet --return --command "$cli_up" /dev/null > "$output"
 cat "$output"
 container_id="$(node --input-type=module - "$output" <<'JS'
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-const lines = fs.readFileSync(process.argv[2], 'utf8').trim().split('\n');
+import { stripVTControlCharacters } from 'node:util';
+const lines = stripVTControlCharacters(fs.readFileSync(process.argv[2], 'utf8')).trim().split(/\r\n|\n|\r/).map(line => line.trim());
 const report = JSON.parse(lines.findLast(line => line.startsWith('{')));
 assert.equal(report.outcome, 'success');
 assert.match(report.containerId, /^[a-f0-9]{12,64}$/);
