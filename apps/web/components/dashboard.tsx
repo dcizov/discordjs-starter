@@ -1,4 +1,5 @@
 "use client";
+import { waitForBotAction } from "@orbit/core/bot-actions";
 import { cn, relativeTime, request } from "@/lib/utils";
 import type { DashboardData, GuildConfig } from "@orbit/core";
 import {
@@ -90,17 +91,10 @@ export function Dashboard({
         headers
       );
       if (result?.jobId && method === "POST") {
-        for (let n = 0; n < 10; n++) {
-          await new Promise((r) => setTimeout(r, 500));
-          const job = await request<any>(
-            `${base}/actions/${encodeURIComponent(result.jobId)}`
-          );
-          if (job.state === "failed")
-            throw new Error(
-              job.error ?? "The bot could not complete this action"
-            );
-          if (job.state === "completed") return { ...result, completed: true };
-        }
+        const job = await waitForBotAction(result.jobId, () =>
+          request(`${base}/actions/${encodeURIComponent(result.jobId)}`)
+        );
+        return { ...result, completed: true, result: job.result };
       }
       return result;
     },

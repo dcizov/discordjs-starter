@@ -53,6 +53,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+      - name: Review pinned plugin artifacts (no provider requests)
+        timeout-minutes: 6
+        run: python3 docker/lavalink/install-plugins.py --output "$RUNNER_TEMP/reviewed-plugins" --review-unpinned
       - name: Validate full-stack development Compose override
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music config --quiet
       - run: docker build --target runtime -t orbit:ci .

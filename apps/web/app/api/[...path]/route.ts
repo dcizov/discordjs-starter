@@ -11,6 +11,7 @@ import {
   resourceSchemas,
   snowflake,
 } from "@orbit/core";
+import { BotActionUnavailableError } from "@orbit/core/bot-actions";
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { pollSource, searchGames } from "@orbit/core/feeds";
@@ -469,10 +470,13 @@ async function handle(req: Request, context: Context) {
           guildId,
           actor,
           "updated",
-          "Music queue",
-          `Music action: ${input.action}`
+          "Music request",
+          `Accepted ${input.action} for the bot; execution/playback is not yet confirmed.`
         );
-        return NextResponse.json({ ok: true, demo: false, jobId: job.id });
+        return NextResponse.json(
+          { accepted: true, demo: false, jobId: job.id },
+          { status: 202 }
+        );
       }
       await audit(
         guildId,
@@ -505,7 +509,7 @@ async function handle(req: Request, context: Context) {
     throw new HttpError(404, "Endpoint not found");
   } catch (error) {
     const status =
-      error instanceof HttpError
+      error instanceof HttpError || error instanceof BotActionUnavailableError
         ? error.status
         : error instanceof ZodError
           ? 422

@@ -122,6 +122,29 @@ describe("interaction reply wiring (no Discord login)", () => {
       allowedMentions: { parse: [] },
     });
   });
+  it.each(["play", "leaderboard"])(
+    "acknowledges /%s before any slow member/database/backend lookup",
+    async (command) => {
+      const i = interaction(command);
+      let release!: (value: any) => void;
+      i.guild.members.fetch.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = resolve;
+        })
+      );
+      const pending = dispatch(i);
+      await Promise.resolve();
+      expect(i.deferReply).toHaveBeenCalledWith({
+        flags: MessageFlags.Ephemeral,
+      });
+      expect(db.getGuild).not.toHaveBeenCalled();
+      expect(music.action).not.toHaveBeenCalled();
+      release({ id: memberId, displayName: "Member" });
+      await pending;
+      expect(i.editReply).toHaveBeenCalled();
+    }
+  );
+
   it("uses the new leaderboard/queue cards in the real handler", async () => {
     const board = interaction("leaderboard");
     await dispatch(board);

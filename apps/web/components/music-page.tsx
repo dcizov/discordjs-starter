@@ -1,4 +1,5 @@
 "use client";
+import { BotActionPendingError } from "@orbit/core/bot-actions";
 import { cn, duration } from "@/lib/utils";
 import {
   AudioLines,
@@ -58,11 +59,13 @@ export function MusicPage() {
         toast.success(
           data.demo
             ? "Added to the preview queue. No audio is played."
-            : "Playback request queued for the bot."
+            : "The bot processed your request. Check Now playing/queue; audio plays in Discord."
         );
-      } else if (!data.demo) toast.success("Music command queued");
+      } else if (!data.demo)
+        toast.success("The bot completed the music command");
     } catch (e: any) {
-      toast.error(e.message);
+      if (e instanceof BotActionPendingError) toast.warning(e.message);
+      else toast.error(e.message);
     } finally {
       setBusy(null);
     }
@@ -89,7 +92,7 @@ export function MusicPage() {
         <Info size={14} className="shrink-0" />
         {data.demo
           ? "A little listening-room preview. Queue controls work, but no audio is played or sent to Discord."
-          : "Music plays in Discord, not this browser. Join a voice channel before requesting a track. A configured Lavalink backend is required."}
+          : "Music requires a running bot service as well as the dashboard. Music plays in Discord, not this browser. Join a voice channel before requesting a track. A configured Lavalink backend is required."}
       </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px]">
         <Card className="overflow-hidden">

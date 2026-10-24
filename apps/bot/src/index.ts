@@ -5,6 +5,7 @@ import {
   safeText,
   validateEnvironment,
 } from "@orbit/core";
+import { assertFreshBotAction } from "@orbit/core/bot-actions";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import { redisConnection } from "@orbit/core/queue";
@@ -139,10 +140,19 @@ async function main() {
     void (async () => {
       logger.info(
         { userId: client.user!.id, guilds: client.guilds.cache.size },
-        "Orbit is ready"
+        "Discord gateway connected; initializing bot services"
       );
+      if (client.user!.id !== required("DISCORD_CLIENT_ID"))
+        throw new Error(
+          "DISCORD_CLIENT_ID does not match the logged-in bot. Use the application ID belonging to DISCORD_TOKEN, then register commands in that application."
+        );
       for (const guild of client.guilds.cache.values()) {
-        await syncGuild(guild);
+        await syncGuild(guild).catch((error) =>
+          logger.warn(
+            { guildId: guild.id, error: errorDiagnostic(error) },
+            "Initial guild sync failed; scheduled sync will retry"
+          )
+        );
         await putMusicState(guild.id, emptyMusic());
       }
       const beat = async () => {
@@ -172,6 +182,11 @@ async function main() {
         "discord-actions",
         async (job) => {
           try {
+            if (!client.isReady())
+              throw new Error(
+                "The Discord gateway is reconnecting. No action was executed; retry when the bot is ready."
+              );
+            assertFreshBotAction(job.name, job.timestamp);
             const { guildId, actorId } = job.data;
             const guild = await client.guilds.fetch(guildId),
               actor = await guild.members.fetch({ user: actorId, force: true });
@@ -266,6 +281,15 @@ async function main() {
       });
       actionWorker.on("error", (e) =>
         logger.error({ error: e.message }, "Bot action queue error")
+      );
+      await actionWorker.waitUntilReady();
+      logger.info(
+        {
+          userId: client.user!.id,
+          guilds: client.guilds.cache.size,
+          actionQueue: "discord-actions",
+        },
+        "Orbit is ready; dashboard action consumer is listening"
       );
     })().catch((e) => {
       logger.fatal({ error: e.message }, "Bot startup failed");

@@ -30,3 +30,7 @@ test-results/
 
 # Private, generated Discord configuration exports.
 .exports/
+
+# Build-time Python artifact tooling.
+__pycache__/
+*.pyc

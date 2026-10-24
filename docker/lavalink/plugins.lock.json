@@ -1,0 +1,87 @@
+{
+  "lavalink": "4.2.2",
+  "reviewed": "2026-10-24",
+  "plugins": [
+    {
+      "id": "youtube-plugin",
+      "version": "1.18.2",
+      "repository": "https://github.com/lavalink-devs/youtube-source",
+      "revision": "158726dc7d570e8ff32512d6ab15736d561040b7",
+      "url": "https://github.com/lavalink-devs/youtube-source/releases/download/1.18.2/youtube-plugin-1.18.2.jar",
+      "sha256": "dd4b3bce50dbc7582c80776bad47bad87bef1dc683c69d66ab4a084aa3006238",
+      "role": "YouTube audio; built-in loader remains disabled"
+    },
+    {
+      "id": "sponsorblock-plugin",
+      "version": "3.0.1",
+      "repository": "https://github.com/topi314/SponsorBlock-Plugin",
+      "revision": "a484d92d78b15866bb5aca6d22f3dde7b739b312",
+      "url": "https://github.com/topi314/SponsorBlock-Plugin/releases/download/3.0.1/sponsorblock-plugin-3.0.1.jar",
+      "sha256": "",
+      "role": "Sponsor segment control; not a source or content-rating filter"
+    },
+    {
+      "id": "lavasrc-plugin",
+      "version": "4.8.3",
+      "repository": "https://github.com/topi314/LavaSrc",
+      "revision": "20d6b0bd1cdddcde86ba4d3fc8e78b97a00e159d",
+      "url": "https://github.com/topi314/LavaSrc/releases/download/4.8.3/lavasrc-plugin-4.8.3.jar",
+      "sha256": "4ec389bdae64fd381ee62fcdb902e15d9402823b1ad0b982bd5633619a07c1b3",
+      "role": "YouTube extended search + LRCLIB lyrics only; no mirroring/premium sources"
+    },
+    {
+      "id": "lavasearch-plugin",
+      "version": "1.0.0",
+      "repository": "https://github.com/topi314/LavaSearch",
+      "revision": "706a8ee84c75cd75739f3b16dc5f38e505110e40",
+      "url": "https://github.com/topi314/LavaSearch/releases/download/1.0.0/lavasearch-plugin-1.0.0.jar",
+      "sha256": "",
+      "role": "Extended search REST facade; no additional audio manager"
+    },
+    {
+      "id": "lavalyrics-plugin",
+      "version": "1.1.0",
+      "repository": "https://github.com/topi314/LavaLyrics",
+      "revision": "7d6007703735e07f1182cc41e71cdf60f18f5dfe",
+      "url": "https://maven.lavalink.dev/releases/com/github/topi314/lavalyrics/lavalyrics-plugin/1.1.0/lavalyrics-plugin-1.1.0.jar",
+      "sha256": "",
+      "role": "LRCLIB facade only; YouTube lyrics are owned by lyrics.kt"
+    },
+    {
+      "id": "lava-xm-plugin",
+      "version": "0.2.8",
+      "repository": "https://github.com/esmBot/lava-xm-plugin",
+      "revision": "71b6d5b2ad2e6699fa456ee2f98d9689c81092bf",
+      "url": "https://github.com/esmBot/lava-xm-plugin/releases/download/v0.2.8/lava-xm-plugin-0.2.8.jar",
+      "sha256": "05999770b3f7aecdd9264daa164c5402875e9cfbf8ae66e30f74b4d4abe21af2",
+      "role": "Tracker format decoder; does not enable arbitrary HTTP/local sources"
+    },
+    {
+      "id": "lyrics",
+      "version": "2.6.1",
+      "repository": "https://github.com/DRSchlaubi/lyrics.kt",
+      "revision": "7f1e89b01e9b66b504e59e3f7854e3f893a811c3",
+      "url": "https://github.com/DRSchlaubi/lyrics.kt/releases/download/2.6.1/lavalink-2.6.1.jar",
+      "sha256": "",
+      "role": "YouTube lyrics only; no second LavaSrc YouTube lyrics source"
+    },
+    {
+      "id": "lavadspx-plugin",
+      "version": "0.0.5",
+      "repository": "https://github.com/Devoxin/LavaDSPX-Plugin",
+      "revision": "7f19382c8867e14d9184a9416f7fadbbe9d8d0d8",
+      "url": "https://jitpack.io/com/github/devoxin/lavadspx-plugin/0.0.5/lavadspx-plugin-0.0.5.jar",
+      "sha256": "",
+      "role": "DSP extensions; packaging metadata normalized to one plugin identity"
+    },
+    {
+      "id": "DuncteBot-plugin",
+      "version": "1.7.2",
+      "repository": "https://github.com/DuncteBot/skybot-lavalink-plugin",
+      "revision": "a17f93854ae35ed2e655fe50b115f389def9056e",
+      "url": "https://github.com/DuncteBot/skybot-lavalink-plugin/releases/download/1.7.2/skybot-lavalink-plugin-1.7.2.jar",
+      "sha256": "d53876857d29980aabeef64b1e7a0c0bcb4f49866b0b00761f7a5d68e1d4bd0d",
+      "role": "OC ReMix only; adult and unmoderated adapters explicitly disabled"
+    }
+  ]
+}
