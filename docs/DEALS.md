@@ -9,10 +9,10 @@ Keep your existing live `.env`, database and volumes. Set `ITAD_API_KEY` **serve
 From the **Docker host**:
 
 ```sh
-npm run dev:stack
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
 # Registration is a REST-only one-off: this does NOT start a second gateway bot.
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music run --rm --no-deps bot npm run commands:register
-npm run dev:stack:logs
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 ```
 
 For host/editor development use `npm run commands:register` with the same application's environment. `DISCORD_GUILD_ID` selects fast development-guild registration; otherwise the existing registration script updates global commands. Register in the intended scope and remove obsolete registrations explicitly if changing scope. Definitions are not automatically registered by opening the dashboard or starting containers.

@@ -118,6 +118,43 @@ const devDocument = parseDocument(
 const development = devDocument.toJS();
 const applicationServices = ["web", "bot", "worker", "migrate"] as const;
 describe("full-stack Docker development override", () => {
+  it("keeps Docker host entrypoints out of npm while preserving container app commands", () => {
+    const { scripts } = JSON.parse(
+      readFileSync(new URL("../package.json", import.meta.url), "utf8")
+    ) as { scripts: Record<string, string> };
+    const dockerWrappers = Object.entries(scripts).filter(([, command]) =>
+      /(?:^|[\s;&|])docker(?:-compose)?\s/u.test(command)
+    );
+    expect(dockerWrappers).toEqual([]);
+    for (const name of [
+      "dev",
+      "dev:bot",
+      "dev:worker",
+      "db:migrate",
+      "commands:register",
+    ])
+      expect(scripts[name]).toEqual(expect.any(String));
+  });
+
+  it("documents direct Docker host commands instead of removed npm wrappers", () => {
+    const prefix =
+      "docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music";
+    for (const path of [
+      "README.md",
+      "docs/DEVELOPMENT.md",
+      "docs/DEALS.md",
+      "docs/MUSIC.md",
+      "docs/MUSIC-PLUGINS.md",
+    ]) {
+      const text = readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+      expect(text).not.toMatch(/\bnpm run dev:(?:stack|docker)\b/u);
+      expect(text).toContain(`${prefix} up -d --build`);
+      expect(text).toContain(
+        `${prefix} logs -f --tail=100 web bot worker lavalink`
+      );
+    }
+  });
+
   it("is valid YAML and overrides only the four application services", () => {
     expect(devDocument.errors).toEqual([]);
     expect(Object.keys(development.services).sort()).toEqual(

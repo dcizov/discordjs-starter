@@ -16,8 +16,8 @@ Discord credentials, database settings and music password) already configured:
 ```sh
 # Starts/rebuilds web, bot, delivery worker and their infrastructure together.
 # Does not delete volumes, seed data, or register/replace Discord commands.
-npm run dev:stack
-npm run dev:stack:logs
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 
 # Confirm the bot is Up, not Exited (143), and web actually publishes :3000.
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music ps -a

@@ -51,8 +51,8 @@ Normal builds reject missing/mismatched hashes. `--review-unpinned` exists only 
 
 ```sh
 # From the Docker host, with existing live .env configured. No volume reset.
-npm run dev:stack
-npm run dev:stack:logs
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 ```
 
 Update an **existing** `.env` host list if you want the newly included public sources (copying `.env.example` is not automatic):

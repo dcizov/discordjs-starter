@@ -6,9 +6,11 @@ A Discord community bot and responsive configuration dashboard, built on **Disco
 
 This is an executable monorepo, not a collection of dashboard mockups. Demo mode is deliberately isolated from live Discord and third-party services. Live operation requires your own application, API credentials, infrastructure, and appropriate Discord permissions.
 
+**Docker-only host?** Go straight to [Docker Compose](#docker-compose). Only Docker Engine/Desktop and Compose are required on the host; Node, npm and application dependencies run inside the images.
+
 ## Try it without credentials
 
-Requires Node **22.14+** and npm 10+.
+This optional **host-Node** workflow requires Node **22.14+** and npm 10+.
 
 ```sh
 npm ci
@@ -58,6 +60,8 @@ DEMO_MODE=true npm start
 
 ## Run live
 
+Steps 2–4 below use the **host-Node workflow**. On a machine without host Node/npm, use [full-stack Docker development](#full-stack-development-with-hot-reload) instead; it provides containerized migration and registration commands too.
+
 ### 1. Create your Discord application
 
 In the Discord Developer Portal:
@@ -68,7 +72,10 @@ In the Discord Developer Portal:
 4. Set `DEMO_MODE=false`. Generate a strong application secret:
 
    ```sh
+   # With host Node installed:
    node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+   # Or on a Docker-only host (Node runs inside the temporary container):
+   docker run --rm node:22-bookworm-slim node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
    ```
 
 5. Set `APP_SECRET` to that value and `APP_URL` to the public origin, without a trailing slash. Public live deployments require HTTPS. HTTP localhost is allowed for development.
@@ -103,7 +110,7 @@ npm run dev:bot    # Discord gateway + command handler + dashboard-action worker
 npm run dev:worker # schedules, feeds, deals, and outbound deliveries
 ```
 
-For Docker development on the host, `npm run dev:stack` starts web + bot + delivery worker + configured music/infra together; `npm run dev:stack:logs` follows their logs. **`npm run dev` alone is web-only**, unlike the original starter branches. The Dev Container already starts web/infra but deliberately not a second bot: run `npm run dev:bot` there only after stopping any Compose bot. Offline bot actions are rejected instead of reported as success.
+For Docker-only development, use the **direct Compose commands below**, not a host npm wrapper. The images provide Node/npm and run the application scripts internally. **`npm run dev` alone is web-only**, unlike the original starter branches. The Dev Container already starts web/infra but deliberately not a second bot: run `npm run dev:bot` inside that container only after stopping any Compose bot. Offline bot actions are rejected instead of reported as success.
 
 Sign in with Discord. Only communities you own or have **Manage Server / Administrator** permission for appear. Choose a community and click **Invite Orbit** if it is not installed. The invite does not request Administrator or Mention Everyone. Place Orbit above the community roles it will assign.
 
@@ -120,11 +127,14 @@ Configuration is read on every bot action/message; feed schedules are reconciled
 
 ### Full-stack development with hot reload
 
+**Host prerequisites: Docker Engine/Desktop with Compose v2.24+ only; no host Node/npm.** All `npm` commands in this Docker workflow run inside containers. See [the comparison with `main`](docs/DEVELOPMENT.md#docker-development-compared-with-main) for the architecture, hot reload and database differences.
+
 Keep your existing `.env`, set `DEMO_MODE=false`, and configure Discord/OAuth, your deals API key, and a strong Lavalink password. Stop any host-run bot/worker and web process on port 3000, then run:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music run --rm --no-deps bot npm run commands:register
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 ```
 
 Open **http://localhost:3000**. This uses the **dev image**: Next hot reload, `tsx watch` for the bot/worker, source bind mounts, container-only dependencies, and a separate Next development cache. PostgreSQL, Redis, and Lavalink run alongside them; migrations run before app services. No host Node/npm installation is required. Module/integration setup and source availability still apply; development is **not** credential-free demo mode.

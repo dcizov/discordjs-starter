@@ -2,7 +2,7 @@
 
 ## Before launch
 
-- [ ] Node 22.14+, PostgreSQL 17+, Redis 7+, and optional current Lavalink v4 are available.
+- [ ] Node 22.14+, PostgreSQL 17+, Redis 7+, and optional current Lavalink v4 are available **inside containers**, or installed for the non-Docker workflow. Docker hosts do not need Node/npm installed.
 - [ ] `DEMO_MODE=false` is explicit on all live services; demo mode is never used as authentication.
 - [ ] Discord application, OAuth callback, bot token, members/message-content intents, and command registration are configured.
 - [ ] `APP_URL` is the actual HTTPS origin (no trailing slash), proxy forwards trusted headers, secure cookies are enabled, and `APP_SECRET` is at least 32 random characters.
@@ -42,8 +42,13 @@ The original starter used PostgreSQL 18 with `pgdata` mounted at `/var/lib/postg
 The corrected Compose file uses the separate `orbit_pgdata_v17` volume, leaving the original `pgdata` untouched. Pull the updated branch, stop your development web process, and run:
 
 ```sh
-docker compose up -d --wait postgres redis && npm run db:migrate && npm run dev
+# Docker-only runtime; Node/npm are supplied by the application image.
+docker compose up -d --wait postgres redis
+docker compose --profile live run --rm --build migrate
+docker compose --profile live up -d --build
 ```
+
+For hot-reloading Docker development, use the [development override/startup commands](DEVELOPMENT.md#2-start-every-service) instead. Host-run Node services remain a separate optional workflow.
 
 Do **not** delete the old volume or run `docker compose down -v` as a troubleshooting shortcut. The new Orbit database starts empty. If you need data from the original installation, keep its volume, back it up using a compatible PostgreSQL version, and plan an explicit import into Orbit's new schema. If an earlier Orbit installation already stored data in `pgdata`, back it up before moving that data to the new volume; the volume switch does not migrate it automatically.
 

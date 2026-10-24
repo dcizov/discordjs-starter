@@ -164,34 +164,39 @@ Do **not** use `down -v` as a troubleshooting shortcut: PostgreSQL, Redis, and d
 
 Containers run as the unprivileged `node` user (UID/GID 1000). The dependency and Next-cache volumes are initialized from node-owned image directories. On Linux, ensure that this UID can read the checkout and write generated, ignored web TypeScript metadata; resolve ownership/ACL issues for your development checkout rather than running all services as root or making the repository world-writable.
 
-## Why the earlier branches' dev command behaved differently
+## Docker development compared with main
 
-Rechecked all other branches available on 2026-10-24, without switching this
-checkout: [`main@dc9726a`](https://github.com/dcizov/discordjs-starter/tree/dc9726a8aa039c31b5e5be33de738c8c95756710)
-and [`arena/752cdf1a-discordjs-starter@2ed0fec`](https://github.com/dcizov/discordjs-starter/tree/2ed0fecbe66a33228a10d1e2acbc7e5d7b6e8615).
-Both use `npm run dev` = `tsx watch src/index.ts`, i.e. the **Discord bot**, not
-Next.js. The reference editor starts PostgreSQL only, then expects that bot
-command to be run manually. This monorepo separates web, gateway/action consumer,
-and scheduled-delivery worker. Its `npm run dev` is web-only; Lavalink connectivity
-cannot substitute for the bot.
+Rechecked the actual [`main@dc9726a`](https://github.com/dcizov/discordjs-starter/tree/dc9726a8aa039c31b5e5be33de738c8c95756710) Dockerfile, Compose file, package scripts and PostgreSQL init script on 2026-10-24. This comparison describes the configurations, not an unperformed fresh build of `main`.
 
-The reference's full-repository bind, shared Linux dependency volume,
-unprivileged dev tooling and persistent editor principle are retained/adapted.
-Its Node 24/PostgreSQL 18 layout, bot-only entrypoint and old dependency-reconcile
-hook are not copied over this working Node 22/PostgreSQL 17 stack. The current
-Dev Container starts web/infra, not duplicate bot/worker processes.
+**Neither Docker development workflow needs Node/npm installed on the host.** Docker installs/runs them in its images. This branch deliberately has no npm scripts wrapping Docker Compose; execute Compose directly from the host. The `dev`, `dev:bot`, `dev:worker` and database npm scripts are application commands **inside** the containers (also usable in the separate optional host-Node workflow).
 
-From the **Docker host** with the existing live `.env` configured:
+| Area                        | `main`                                                                                                                                                                                      | This branch                                                                                                                                                                                                                                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Application                 | Standalone Discord bot (`src/index.ts`); no dashboard, scheduled-delivery worker, Redis or Lavalink services                                                                                | Monorepo: `web`, `bot`, `worker`, one-shot `migrate`, PostgreSQL, Redis and optional Lavalink                                                                                                                                                                                    |
+| Dev startup                 | `docker compose --profile dev up dev` starts the hot-reloading bot and PostgreSQL                                                                                                           | Combine the base and development override with `--profile live --profile music` for the full stack; see the exact commands below                                                                                                                                                 |
+| Meaning of `dev`            | The `dev` service itself runs `npm run dev` → `tsx watch src/index.ts` (the bot)                                                                                                            | The `dev` service is an idle editor/toolbox (`sleep infinity`), not another bot. Hot-reloading apps run in `web`/`bot`/`worker`; `npm run dev` means Next.js                                                                                                                     |
+| Node/image                  | Declares Node `24.21.0`, Debian trixie-slim                                                                                                                                                 | Node `22` image, Debian bookworm-slim; no version upgrade is part of this change                                                                                                                                                                                                 |
+| Hot reload                  | Bind-mounts only `./src:/app/src`; `tsx watch` watches the bot                                                                                                                              | Bind-mounts the full checkout at `/app`; Next watches web code, `tsx watch` watches bot/worker                                                                                                                                                                                   |
+| Dependencies/config changes | Dependencies and TypeScript config are copied into the image. `develop.watch` declares package/lockfile rebuilds, but that requires Compose watch mode; plain `up dev` does not activate it | Linux `node_modules` lives in a shared named volume; Next has a separate cache volume. Source/config edits are visible, but dependency changes still require the documented **container-side** `npm ci` refresh; rebuilding alone does not replace a populated dependency volume |
+| File watching               | `CHOKIDAR_USEPOLLING=false`                                                                                                                                                                 | Polling defaults on for Next and bot/worker, configurable for bind mounts across Docker Desktop/remote filesystems                                                                                                                                                               |
+| Database/data               | PostgreSQL `18-alpine`, database `bot` plus first-init `bot_test`; `pgdata:/var/lib/postgresql`                                                                                             | PostgreSQL `17-alpine`, database `orbit`; separate `orbit_pgdata_v17:/var/lib/postgresql/data`. Old data is not imported or reused automatically                                                                                                                                 |
+| Readiness/migrations        | PostgreSQL `pg_isready`; no Compose migration service/gate. README documents a separate schema migration step                                                                               | Authenticated TCP `SELECT 1`; migration service waits for PostgreSQL, and dev apps wait for successful migrations and Redis readiness                                                                                                                                            |
+| Host ports                  | Publishes database port `5432` on all host interfaces by default; no web service/port                                                                                                       | Dashboard publishes `3000`; PostgreSQL `5432`, Redis `6379` and Lavalink `2333` are bound only to host loopback                                                                                                                                                                  |
+| Dev Container               | Not provided on `main`                                                                                                                                                                      | Persistent unprivileged editor workspace; starts web/infra without logging in a duplicate bot/worker                                                                                                                                                                             |
+| Default/base Compose        | Runs the production bot and PostgreSQL; `.env` is required for the runtime bot                                                                                                              | Default is isolated demo web/infra; live bot/worker and music are explicit profiles. The dev override selects source/hot-reload commands instead of runtime bundles                                                                                                              |
+
+The main branch's `docker compose --profile dev up dev` is therefore **not equivalent** here: this branch's `dev` is a toolbox, not the gateway bot or dashboard. Use the actual application services/full-stack command:
 
 ```sh
-npm run dev:stack
-npm run dev:stack:logs
+# Docker host; existing live .env configured. No host npm invocation.
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 ```
 
-These are shortcuts for the existing full-stack Compose development command;
-they preserve database/Redis volumes and never seed/register/reset on startup.
-Do not run them inside the editor container (no Docker socket is mounted), and
-do not also run a host/editor `dev:bot` while Compose's bot is Up. Check `ps -a`
-for a stopped `bot` after exit 143 before investigating audio providers. See
-[the music guide](MUSIC.md#start-the-bot-not-only-the-dashboard) for actual
-consumer readiness, pending/failure receipts and read-only source diagnostics.
+Compose/image commands such as `command: ["npm", "run", "dev:bot"]` or `docker compose ... run --rm --no-deps bot npm run commands:register` execute npm **inside Node containers**, not on the host. Node, Git and developer tools used in the editor also come from its dev image. No Docker socket/CLI is required inside the application containers.
+
+**Do not switch the PostgreSQL tag or reuse `pgdata` to make the branches match.** PostgreSQL 18 → 17 is not an in-place downgrade, the volume layouts differ, and Orbit's application schema differs too. Keep old volumes/backups and plan an explicit import if needed; this change does not touch Dockerfiles, Compose services, database versions or volumes.
+
+The previously reviewed [`arena/752cdf1a-discordjs-starter@2ed0fec`](https://github.com/dcizov/discordjs-starter/tree/2ed0fecbe66a33228a10d1e2acbc7e5d7b6e8615) has a separate editor setup. Its persistent-workspace/shared-Linux-dependency ideas informed this branch, but it should not be confused with the `main` configuration compared above.
+
+Sources on the pinned main revision: [Compose](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/docker-compose.yml), [Dockerfile](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/Dockerfile), [package scripts](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/package.json), [database init](https://github.com/dcizov/discordjs-starter/blob/dc9726a8aa039c31b5e5be33de738c8c95756710/docker/postgres/init.d/01-databases.sql).
