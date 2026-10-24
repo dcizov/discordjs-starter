@@ -138,6 +138,21 @@ Docker images run as the unprivileged `node` user. Compose uses an init process 
 
 The schema is a new baseline for this expanded application, not an in-place migration of a previously deployed standalone starter. Back up an existing installation and plan data import before replacing it.
 
+## Developer utility: export channels and permissions
+
+Export live Discord channel/category structure, role base permissions, and role/member permission overwrites as readable JSON:
+
+```sh
+npm run channels:export -- --guild YOUR_SERVER_ID
+
+# Optional: select one channel (includes its parent category).
+npm run channels:export -- --guild YOUR_SERVER_ID --channel YOUR_CHANNEL_ID
+```
+
+Use the server ID from your dashboard URL. This read-only utility uses `DISCORD_TOKEN` with `DEMO_MODE=false`; no database, Redis, gateway login, or bot restart is required. Output goes to the ignored `.exports/` directory with overwrite protection. Masks are exact decimal strings with decoded permission names; this is configured permission data, not calculated effective permissions for each member.
+
+See [channel export options, format, and privacy](docs/CHANNEL_EXPORT.md) for `--out`, JSON piping, limits, and the compiled CLI. Export files can contain private channel names and member IDs—keep them private.
+
 ## Verification
 
 ```sh

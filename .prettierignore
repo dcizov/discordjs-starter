@@ -9,3 +9,6 @@ package-lock.json
 drizzle/meta
 next-env.d.ts
 **/next-env.d.ts
+
+# Private, generated Discord configuration exports.
+.exports/

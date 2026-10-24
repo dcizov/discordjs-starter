@@ -27,3 +27,6 @@ test-results/
 .artifacts/
 .cache-index.html
 **/next-env.d.ts
+
+# Private, generated Discord configuration exports.
+.exports/
