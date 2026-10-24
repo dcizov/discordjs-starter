@@ -111,7 +111,7 @@ Configuration is read on every bot action/message; feed schedules are reconciled
 
 ### 5. Configure optional integrations
 
-- **Deals:** set `ITAD_API_KEY`. See [integration guide](docs/INTEGRATIONS.md).
+- **Deals:** set `ITAD_API_KEY` on bot/web/worker, register the updated commands, then use `/deals feed channel:#game-deals` or **Game deals → Set up deal alerts**. Rich cards use real artwork/ratings/offers; automatic discovery requires measurable popularity/review evidence, not obscure high-discount listings. See [the deals guide](docs/DEALS.md).
 - **Music:** the supplied Lavalink image includes the nine requested plugins plus Soundy, with unique source ownership and adult adapters disabled. See the [music/startup guide](docs/MUSIC.md) and [plugin inventory/SFW boundaries](docs/MUSIC-PLUGINS.md). Public catalogs are not universally SFW-rated; curate clean recordings. Playback from arbitrary providers is not promised.
 - **RSS/Atom:** enter a verified publisher URL. The bot never guesses feed URLs or scrapes sites.
 - **Webhook:** create an incoming-webhook source, save it, then use **Webhook credentials** to generate a secret. See the signed request example in the integration guide.

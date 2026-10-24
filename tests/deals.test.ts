@@ -133,6 +133,12 @@ describe("documented public ITAD transport", () => {
     expect(filter).not.toHaveProperty("mature");
     expect(url.searchParams.get("mature")).toBe("false");
   });
+  it("rechecks demo isolation even if a live client was constructed before a mode change", async () => {
+    vi.stubEnv("DEMO_MODE", "false");
+    const api = new ITADClient("fixture-key-not-sent");
+    vi.stubEnv("DEMO_MODE", "true");
+    await expect(api.info(gameId)).rejects.toThrow("disabled in demo");
+  });
   it("requires explicit live mode and a key; demo never sends requests", () => {
     vi.stubEnv("DEMO_MODE", "true");
     vi.stubEnv("ITAD_API_KEY", "fixture");

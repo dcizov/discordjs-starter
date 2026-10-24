@@ -88,19 +88,33 @@ A 202 response reports accepted new destination reservations. `accepted: 0` can 
 
 ## IsThereAnyDeal
 
-Obtain an API key from `https://isthereanydeal.com/apps/` and set `ITAD_API_KEY` on the web and worker services. Follow the provider’s key restrictions, attribution, rate limits, and terms.
+See the [complete deals setup/command guide](DEALS.md) for rich cards, automatic
+posting, the actual public API schema and evidence-based popularity filters.
+Set `ITAD_API_KEY` **server-side on bot, web and worker**. Calls use the documented
+`ITAD-API-Key` header, not query-string credentials. Follow the provider's
+application-access rules, attribution, quota and terms.
 
-Implemented API adapters:
+Implemented public adapters: `GET /games/search/v1`, `GET /games/info/v2`,
+`POST /games/prices/v3`, `GET /stats/most-popular/v1`, and `GET /deals/v2`.
+Game artwork/ratings/players/links come from those responses; no internal
+endpoints or scraping are used, and affiliate links are retained unchanged.
 
-- `GET https://api.isthereanydeal.com/games/search/v1`
-- `GET https://api.isthereanydeal.com/deals/v2`
-- `POST https://api.isthereanydeal.com/games/prices/v3`
+A general feed requires top-500 ITAD popularity membership **and** at least
+10,000 Steam reviews / 70% positive by default. Thresholds/player floors are
+configurable; missing evidence, mature/unknown games, DLC/packages and expired
+or wrong-currency prices are excluded. There is no arbitrary-discount fallback.
+Explicit single-game watches are deliberate choices rather than discovery.
 
-A general subscription checks the deal feed. Selecting a game creates a shared server watchlist that checks current prices for its IsThereAnyDeal game UUID. The dashboard and `/deals search` provide these IDs. `/deals watch` requires Manage Server.
+Managers can use `/deals feed channel:#game-deals` or **Game deals → Set up deal
+alerts**, choose a destination and leave game search unselected. The existing
+worker/outbox delivers actual rich cards with a cap on **new** posts per check.
+`/deals now` is an ephemeral preview, not a channel delivery. Save/preview success
+is not a claim a scheduled post completed; inspect delivery history.
 
-Filters include country, returned currency, supported store IDs, minimum discount, maximum price, historical-low data when available, destination, and an optional notification role. Historical-low-only subscriptions require a usable historical price in the response; missing data does **not** count as a historical low. There is no scraping or promise of all regional stores. The API determines regional availability and quote currency; Orbit does not perform currency conversion. Verify that the selected country and currency agree with upstream quotes.
-
-Stable upstream deal/price event identities are deduplicated. Retries back off through BullMQ. Upstream HTTP 429 and Retry-After information are surfaced; the job does not busy-loop. Keep polling intervals conservative and comply with your provider quota. Increase intervals if your quota is lower than the supplied defaults.
+Caches, bounded concurrency, provider Retry-After handling, stable offer IDs,
+fresh routing/quality checks and delivery nonces protect quota and duplicate
+posts. No currency conversion occurs; final prices/terms must be checked at the
+store. Demo persists configuration but never calls ITAD or posts to Discord.
 
 ## Notification roles and Discord permissions
 

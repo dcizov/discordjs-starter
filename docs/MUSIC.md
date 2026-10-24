@@ -196,6 +196,60 @@ For a compiled runtime container: `docker compose --profile live --profile music
 
 Only `GET /v4/info` and, with a query, `GET /v4/loadtracks` are used. There is no gateway login, voice join, database/Redis access, queue mutation, playback, or fallback. The doctor shares the player's source/input policy. JSON goes to stdout and failures return exit status 1; use `npm run --silent music:doctor ...` for clean piping. Encoded tracks and signed source URLs are not printed. A successful lookup proves metadata loading, **not** stream decoding or voice.
 
+## Voice handshake: `not established in 15 seconds`
+
+The newer supplied logs are a **different stage** from the earlier stopped-bot
+or unsupported-format failures: the gateway/action consumer is ready and
+Lavalink logs a successfully loaded YouTube track, but there is no player voice
+PATCH before the 15-second error. That identifies the **Discord gateway voice
+handshake**, not a failed YouTube search, proof of a broken decoder, or a need to
+publish a Docker UDP port. Audio playback has not started at that point.
+
+Orbit now uses `MusicDiscordConnector` / `joinMusicVoice` to:
+
+- Fail explicitly if the guild's gateway shard is missing, rather than silently
+  dropping the voice request.
+- Accept either order of the bot's `VOICE_STATE_UPDATE` and `VOICE_SERVER_UPDATE`.
+  Shoukaku 4.3 otherwise assumes the state/session event arrives first.
+- Leave and await the bot's own leave acknowledgement before retrying an orphaned
+  same-channel connection. Shoukaku's failed initial join removes its connection
+  map entry without sending a voice leave; a same-channel retry can receive no
+  fresh server event/token. This failure loop is reproduced in offline tests.
+- Send a voice leave on a failed join **even when no player was ever created**.
+  `/stop` can also clear a pending/orphaned same-room connection without a player.
+- Reject full channels without the relevant Move Members bypass permission, and
+  report unsupported Stage channels explicitly. Do not grant Administrator just
+  to work around a voice-channel user limit.
+
+The error now reports **booleans only**: join requested, own voice state received,
+voice server received, endpoint present and whether cleanup was sent. It does
+not dump voice tokens, session IDs, raw packets or endpoints. Raw Shoukaku debug
+logging stays off.
+
+If a fresh request still fails after updating:
+
+1. Check the new sanitized error in **Audit** or the bot logs. Both gateway events
+   missing points to request/shard/gateway handling; state present but server
+   missing identifies a different case from both present and backend player
+   setup failing. These flags narrow the issue; the supplied old error alone
+   cannot prove which packet was missing.
+2. Verify exactly **one** host/editor/Compose bot process uses the token. The
+   running code already requests `GuildVoiceStates`; it is not a separate
+   privileged-intent switch to invent in the Developer Portal.
+3. Try a normal, non-NSFW, non-full voice channel with Connect/Speak permissions.
+   If needed, manually disconnect only the bot from a stranded voice session,
+   then submit one fresh request. Do not clear database/Redis volumes.
+4. Read Lavalink logs **after a player voice PATCH** for any later backend voice,
+   UDP, encryption or decoding failure. Those are later stages, not what the
+   pre-player gateway timeout establishes. The music doctor is read-only source
+   diagnostics; it deliberately does not join voice.
+
+The default handshake timeout was not merely increased to hide the problem.
+Tests use the real pinned Shoukaku implementation and a simulated gateway/REST
+transport to verify event ordering, the orphan retry, cleanup, missing-shard
+errors and secret-free diagnostics. They are not a live Discord voice test and
+do not prove that every external server/network problem is resolved.
+
 ## Other failures and diagnostics
 
 - **Backend HTTP 401/403:** match bot/backend passwords. This differs from provider HTTP 401/403 inside a source exception.

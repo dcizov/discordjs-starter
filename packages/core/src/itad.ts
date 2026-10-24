@@ -155,6 +155,10 @@ export class ITADClient {
     ttlMs: number,
     body?: string
   ): Promise<any> {
+    if (isDemo() && this.transport === officialJson)
+      return Promise.reject(
+        new Error("Live IsThereAnyDeal requests are disabled in demo mode")
+      );
     const query = new URLSearchParams(params);
     query.sort();
     const url = `https://api.isthereanydeal.com${path}${query.size ? `?${query}` : ""}`;
