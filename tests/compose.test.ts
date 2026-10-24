@@ -52,6 +52,55 @@ describe("Compose startup and upgrade safety", () => {
     );
   });
 
+  it("builds the canonical commit-pinned AAC/fMP4 adapter and never registers the broken builtin alongside it", () => {
+    expect(compose.services.lavalink.build).toEqual({
+      context: ".",
+      dockerfile: "docker/lavalink/Dockerfile",
+    });
+    expect(compose.services.lavalink.image).toBe("orbit-lavalink:local");
+    const dockerfile = readFileSync(
+      new URL("../docker/lavalink/Dockerfile", import.meta.url),
+      "utf8"
+    );
+    expect(dockerfile).toContain("FROM ghcr.io/lavalink-devs/lavalink:4.2.2");
+    expect(dockerfile).toContain(
+      "https://codeload.github.com/lowkwrs/soundy/tar.gz/e2c5da8e96661d2a9eb96ee53e3d5b95903bc194"
+    );
+    expect(dockerfile).toContain(
+      "--checksum=sha256:67c3ef77f9792605263be47825373a35f30f7b77ba6bd048e38274ea6cba22f0"
+    );
+    expect(dockerfile).toContain("ENV SOUNDY_IT=0");
+    expect(dockerfile).toContain(":source:test :plugin:build");
+    expect(dockerfile).toContain("chown -R gradle:gradle /soundy");
+    expect(dockerfile).toContain("USER gradle");
+    expect(dockerfile).toContain(
+      "cat /tmp/soundy-plugin.gradle.kts >> plugin/build.gradle.kts"
+    );
+    const metadata = readFileSync(
+      new URL("../docker/lavalink/soundy-plugin.gradle.kts", import.meta.url),
+      "utf8"
+    );
+    expect(metadata).toContain('apiVersion.set("4.2.2")');
+    expect(metadata).toContain('name.set("soundy")');
+    expect(metadata).toContain('path.set("com.waris4ly.soundy")');
+    expect(dockerfile).toContain(
+      "/opt/Lavalink/plugins/soundy-plugin-1.1.0.jar"
+    );
+    expect(dockerfile).toContain("/opt/Lavalink/licenses/soundy-LICENSE");
+    const config = parseDocument(
+      readFileSync(
+        new URL("../docker/lavalink/application.yml", import.meta.url),
+        "utf8"
+      )
+    ).toJS();
+    expect(config.plugins.soundy.enabled).toBe(true);
+    expect(config.lavalink.server.sources.soundcloud).toBe(false);
+    expect(config.lavalink.server.sources.bandcamp).toBe(true);
+    for (const source of ["youtube", "http", "local"])
+      expect(config.lavalink.server.sources[source]).toBe(false);
+    expect(config.lavalink.plugins).toBeUndefined(); // No unversioned startup download.
+  });
+
   it("keeps shared music connections disabled in Compose when no password is configured", () => {
     for (const service of ["web", "bot", "worker", "migrate"]) {
       const env = compose.services[service].environment;

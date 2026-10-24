@@ -25,6 +25,16 @@ import { logCase, moderate } from "./moderation";
 import type { MusicService } from "./music";
 import { handleRoleInteraction, publishPanel } from "./roles";
 import { claimShopRole } from "./shop";
+import {
+  balanceCard,
+  commandErrorReply,
+  commandReply,
+  dailyCard,
+  leaderboardCard,
+  musicActionCard,
+  queueCard,
+  type ReplyCard,
+} from "./replies";
 export async function onInteraction(
   client: Client,
   music: MusicService,
@@ -62,11 +72,8 @@ export async function onInteraction(
       throw new Error(
         "Orbit is still syncing this community. Please try again in a moment."
       );
-    const reply = (content: string) =>
-      i.editReply({
-        content: safeText(content, 1950),
-        allowedMentions: { parse: [] },
-      });
+    const reply = (content: string | ReplyCard) =>
+      i.editReply(commandReply(i.commandName, content));
     const key = `interaction-${i.id}`;
     if (["warn", "timeout", "kick", "ban"].includes(i.commandName)) {
       const user = i.options.getUser("member", true);
@@ -209,7 +216,11 @@ export async function onInteraction(
         const id = i.options.getUser("member")?.id ?? member.id;
         const account = await getAccount(guild.id, id);
         await reply(
-          `${account?.name ?? (id === member.id ? member.displayName : id)} has ${stored.config.economy.symbol} ${(account?.balance ?? 0).toLocaleString()} ${stored.config.economy.currency}.`
+          balanceCard(
+            account?.name ?? (id === member.id ? member.displayName : id),
+            account?.balance ?? 0,
+            stored.config.economy
+          )
         );
         break;
       }
@@ -221,9 +232,7 @@ export async function onInteraction(
           type: "daily",
           key,
         });
-        await reply(
-          `A little reward for showing up: +${r.amount} ${stored.config.economy.currency}. Balance: ${r.balance}. Come back in 24 hours. ✦`
-        );
+        await reply(dailyCard(r, stored.config.economy));
         break;
       }
       case "transfer": {
@@ -249,17 +258,7 @@ export async function onInteraction(
       }
       case "leaderboard": {
         const d = await getDashboardData(guild.id);
-        await reply(
-          d.accounts.length
-            ? d.accounts
-                .slice(0, 10)
-                .map(
-                  (a, n) =>
-                    `${n + 1}. ${a.name} — ${stored.config.economy.symbol} ${a.balance.toLocaleString()}`
-                )
-                .join("\n")
-            : "Every constellation starts with one star. Claim your first /daily reward."
-        );
+        await reply(leaderboardCard(d.accounts, stored.config.economy));
         break;
       }
       case "shop": {
@@ -335,14 +334,7 @@ export async function onInteraction(
       }
       case "queue": {
         const state = music.state(guild.id);
-        await reply(
-          `Now playing: ${state.current ? `${state.current.title} — ${state.current.author}` : "A little quiet."}\n\n${
-            state.tracks
-              .slice(0, 15)
-              .map((t, n) => `${n + 1}. ${t.title} — ${t.author}`)
-              .join("\n") || "Add a little music with /play."
-          }`
-        );
+        await reply(queueCard(state));
         break;
       }
       case "play":
@@ -360,7 +352,7 @@ export async function onInteraction(
           repeat: (i.options.getString("mode") ?? undefined) as
             "off" | "track" | "queue" | undefined,
         });
-        await reply("Your listening room is right on track.");
+        await reply(musicActionCard(i.commandName, music.state(guild.id)));
         break;
       }
       case "deals": {
@@ -482,10 +474,10 @@ export async function onInteraction(
       return;
     }
     if (i.isRepliable()) {
-      const text = {
-        content: safeText(`A small bump in the orbit: ${detail}`, 1900),
-        allowedMentions: { parse: [] as never[] },
-      };
+      const text = commandErrorReply(
+        i.isChatInputCommand() ? i.commandName : "roles",
+        detail
+      );
       if (i.deferred || i.replied) await i.editReply(text).catch(() => {});
       else
         await i

@@ -128,7 +128,7 @@ describe("read-only music doctor", () => {
     );
     expect(report.ok).toBe(false);
     expect(report.warnings.join(" ")).toContain("soundcloud");
-    expect(report.error).toContain("sources.soundcloud");
+    expect(report.error).toContain("plugins.soundy.enabled");
     expect(request).toHaveBeenCalledOnce();
   });
   it("distinguishes backend authentication failure without echoing arbitrary HTTP response bodies", async () => {

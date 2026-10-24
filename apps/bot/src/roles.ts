@@ -27,6 +27,7 @@ import {
   PermissionFlagsBits,
   StringSelectMenuBuilder,
 } from "discord.js";
+import { commandReply } from "./replies";
 export const roleView = (g: Guild): GuildRole[] =>
   g.roles.cache.map((r) => ({
     id: r.id,
@@ -253,7 +254,7 @@ export async function handleRoleInteraction(
         ? [id]
         : [...selected, id];
   });
-  await i.editReply({ content: text, allowedMentions: { parse: [] } });
+  await i.editReply(commandReply("roles", text));
 }
 export async function handleReaction(
   reaction: MessageReaction | PartialMessageReaction,

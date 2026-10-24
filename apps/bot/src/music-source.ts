@@ -15,6 +15,7 @@ export type MusicSourceSettings = {
 };
 export type MusicNodeInfo = Pick<NodeInfo, "lavaplayer" | "sourceManagers"> & {
   version: Pick<NodeInfo["version"], "semver">;
+  plugins?: NodeInfo["plugins"];
 };
 export type MusicResolver = {
   resolve(identifier: string): Promise<LavalinkResponse | undefined>;
@@ -41,9 +42,37 @@ const providerLabel = (source: string | null) =>
       ? "Bandcamp"
       : "Configured source";
 export function musicNodeDescription(info?: MusicNodeInfo | null) {
-  return info
-    ? `Lavalink ${info.version?.semver ?? "unknown"}; Lavaplayer ${info.lavaplayer ?? "unknown"}`
-    : "Backend version unavailable";
+  if (!info) return "Backend version unavailable";
+  const soundy = info.plugins?.find(
+    (plugin) => plugin.name.toLowerCase() === "soundy"
+  );
+  return diagnosticText(
+    `Lavalink ${info.version?.semver ?? "unknown"}; Lavaplayer ${info.lavaplayer ?? "unknown"}${soundy ? `; Soundy ${soundy.version}` : ""}`
+  );
+}
+function sourceFailureHint(cause: string, source: string | null) {
+  if (/\bdrm\b|encrypted|protected content/i.test(cause))
+    return "Protected/encrypted tracks are not supported. Choose an authorized public, unencrypted track; do not bypass provider restrictions.";
+  if (
+    source === "soundcloud" &&
+    /did not detect any supported formats/i.test(cause)
+  )
+    return "The SoundCloud adapter found no usable stream. The built-in loader does not support AAC/fMP4 HLS. Rebuild the pinned Soundy-enabled backend in docs/MUSIC.md; protected or unavailable tracks remain unsupported.";
+  if (/no playable stream|no transcodings/i.test(cause))
+    return "The provider supplied no usable public stream. Choose another authorized, unencrypted track and inspect provider restrictions; no fallback source is used.";
+  if (/\b429\b|rate.?limit|too many requests/i.test(cause))
+    return "The provider reports rate limiting. Wait before retrying and check provider restrictions; do not bypass its access controls.";
+  if (/\b40[13]\b|unauthori[sz]ed|forbidden|access denied/i.test(cause))
+    return "The provider refused the request. Check backend logs, provider availability, and the installed source adapter; Discord voice permissions do not repair source access.";
+  if (
+    /timed?\s*out|timeout|unknownhost|connectexception|sslhandshake|dns|certificate/i.test(
+      cause
+    )
+  )
+    return "Check the Lavalink container’s DNS, outbound HTTPS access, TLS certificates, and provider reachability.";
+  return source === "soundcloud"
+    ? "Check the Lavalink root exception. If it says 'Did not detect any supported formats', use the pinned Soundy AAC/fMP4 backend in docs/MUSIC.md. Pulling Lavalink 4.2.2 alone does not add that support."
+    : "Check Lavalink logs immediately after this failure and the installed source adapter; also try an authorized public track URL to separate search from URL loading.";
 }
 export function musicSourceFailure(
   exception: Partial<Exception>,
@@ -57,15 +86,7 @@ export function musicSourceFailure(
     exception.cause ||
     "Not supplied by Lavalink. Inspect the backend logs for the full Java exception.";
   const searchable = `${exception.message ?? ""} ${cause}`;
-  const hint = /\b429\b|rate.?limit|too many requests/i.test(searchable)
-    ? "The provider reports rate limiting. Wait before retrying and check provider restrictions; do not bypass its access controls."
-    : /\b40[13]\b|unauthori[sz]ed|forbidden|access denied/i.test(searchable)
-      ? "The provider refused the request. Check backend logs, provider availability, and the installed source adapter; Discord voice permissions do not repair source access."
-      : /timed?\s*out|timeout|unknownhost|connectexception|sslhandshake|dns|certificate/i.test(
-            searchable
-          )
-        ? "Check the Lavalink container’s DNS, outbound HTTPS access, TLS certificates, and provider reachability."
-        : "Check Lavalink logs immediately after this failure. If its source adapter is outdated, update a compatible v4 backend; also try an authorized public track URL to separate search from URL loading.";
+  const hint = sourceFailureHint(searchable, context.source);
   return diagnosticText(
     [
       `${providerLabel(context.source)} track ${context.stage} failed.`,
@@ -161,7 +182,7 @@ export async function resolveMusicQuery(
     !managers.some((name) => name.toLowerCase() === prepared.source)
   )
     throw new Error(
-      `${providerLabel(prepared.source)} is not enabled on this Lavalink node. Enable lavalink.server.sources.${prepared.source}, restart Lavalink, then run npm run music:doctor. A connected backend does not guarantee an enabled source.`
+      `${providerLabel(prepared.source)} is not enabled on this Lavalink node. ${prepared.source === "soundcloud" ? "Enable plugins.soundy.enabled in the Soundy-enabled backend (keep the built-in sources.soundcloud disabled)." : `Enable lavalink.server.sources.${prepared.source}.`} Restart Lavalink, then run npm run music:doctor. See docs/MUSIC.md. A connected backend does not guarantee an enabled source.`
     );
   let result: LavalinkResponse | undefined;
   try {

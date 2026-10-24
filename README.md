@@ -127,7 +127,13 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 
 Open **http://localhost:3000**. This uses the **dev image**: Next hot reload, `tsx watch` for the bot/worker, source bind mounts, container-only dependencies, and a separate Next development cache. PostgreSQL, Redis, and Lavalink run alongside them; migrations run before app services. No host Node/npm installation is required. Module/integration setup and source availability still apply; development is **not** credential-free demo mode.
 
-See [the Docker development guide](docs/DEVELOPMENT.md) for exact environment prerequisites, logs, read-only music diagnostics, dependency updates, and data-safe stopping.
+The **main bot is the `bot` service**. To run only it, its dependencies, and music (not the dashboard/scheduled worker):
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build bot lavalink
+```
+
+See [the Docker development guide](docs/DEVELOPMENT.md#run-just-the-main-bot) for prerequisites, logs, registration, dependency updates, and data-safe stopping. The music image builds the pinned Soundy AAC/fMP4 adapter instead of using Lavaplayer's legacy SoundCloud loader; see [the unsupported-formats diagnosis](docs/MUSIC.md#soundcloud-did-not-detect-any-supported-formats).
 
 ### Runtime images / demo
 
@@ -144,7 +150,7 @@ docker compose --profile live up -d --build
 docker compose --profile live run --rm bot node dist/register.js
 
 # Optional music server, after setting LAVALINK_PASSWORD in .env:
-docker compose --profile music up -d lavalink
+docker compose --profile music up -d --build lavalink
 
 docker compose logs -f web bot worker
 ```

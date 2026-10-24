@@ -135,7 +135,7 @@ describe("music source resolution", () => {
         info: { ...info, sourceManagers: ["bandcamp"] },
         settings,
       })
-    ).rejects.toThrow("sources.soundcloud");
+    ).rejects.toThrow("plugins.soundy.enabled");
     expect(resolve).not.toHaveBeenCalled();
   });
   it("returns a single track, the first search hit, or a playlist without changing selection", async () => {
@@ -260,6 +260,57 @@ describe("music source resolution", () => {
     expect(
       musicSourceFailure({ cause }, { stage: "lookup", source: "soundcloud" })
     ).toContain(hint);
+  });
+  it("identifies the observed unsupported-format root cause without promising protected tracks will work", () => {
+    const message = musicSourceFailure(
+      {
+        message: "Something went wrong while looking up the track.",
+        severity: "fault",
+        cause:
+          "java.lang.RuntimeException: Did not detect any supported formats",
+      },
+      {
+        stage: "lookup",
+        source: "soundcloud",
+        info: { ...info, lavaplayer: "2.2.6" },
+      }
+    );
+    expect(message).toContain("AAC/fMP4 HLS");
+    expect(message).toContain("pinned Soundy-enabled backend");
+    expect(message).toContain(
+      "protected or unavailable tracks remain unsupported"
+    );
+    expect(message).toContain("Lavaplayer 2.2.6");
+    expect(message).toContain("not a Discord voice-connection failure");
+  });
+  it.each([
+    "DRM protected track",
+    "encrypted stream",
+    "No playable stream found",
+    "No transcodings found",
+  ])("does not suggest rebuilding as a bypass for %s", (cause) => {
+    const message = musicSourceFailure(
+      { cause },
+      { stage: "playback", source: "soundcloud", info }
+    );
+    expect(message).not.toContain("Rebuild");
+    expect(message).toMatch(/not supported|no usable public stream/);
+    expect(message).toMatch(/restriction/);
+  });
+  it("keeps generic Java causes honest and points to the exact backend log check", () => {
+    const message = musicSourceFailure(
+      {
+        cause:
+          "com.sedmelluq.discord.lavaplayer.tools.FriendlyException: Something went wrong while looking up the track.",
+      },
+      { stage: "lookup", source: "soundcloud", info }
+    );
+    expect(message).toContain(
+      "If it says 'Did not detect any supported formats'"
+    );
+    expect(message).toContain(
+      "Pulling Lavalink 4.2.2 alone does not add that support"
+    );
   });
   it("labels asynchronous playback failures separately from track lookup", () => {
     const message = musicSourceFailure(

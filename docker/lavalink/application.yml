@@ -7,13 +7,13 @@ lavalink:
     sources:
       youtube: false
       bandcamp: true
-      soundcloud: true
+      # Soundy handles current AAC/fMP4 streams. Never register both loaders.
+      soundcloud: false
       twitch: false
       vimeo: false
       nico: false
       http: false
       local: false
-    soundcloudSearchEnabled: true
     bufferDurationMs: 400
     frameBufferDurationMs: 5000
     opusEncodingQuality: 10
@@ -23,3 +23,8 @@ logging:
   level:
     root: INFO
     lavalink: INFO
+
+# Built into the pinned local image; no plugin download at startup.
+plugins:
+  soundy:
+    enabled: true

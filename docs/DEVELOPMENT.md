@@ -70,6 +70,27 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 ```
 
+## Run just the main bot
+
+**`bot` is the main Discord gateway process.** With this override it runs `npm run dev:bot` (`tsx watch apps/bot/src/index.ts`), not the compiled production entrypoint. You do not need Node/npm on the host and must not start a second host bot with the same token.
+
+After the `.env` setup above (`DEMO_MODE=false` and the Discord credentials), start only the bot and audio backend:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build bot lavalink
+```
+
+Compose starts the bot's PostgreSQL/migration/Redis dependencies too. The explicit service list **does not start `web` or `worker`**; already-running services are not stopped. Scheduled news/deals jobs need `worker`, and the dashboard needs `web`—use the full-stack command above when you want those too. Without music, leave both Lavalink variables empty and omit `lavalink`/`--profile music`.
+
+Register commands and follow the main bot's logs:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music run --rm --no-deps bot npm run commands:register
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 bot lavalink
+```
+
+Save a TypeScript source file on the host to restart the bot watcher. No rebuild is needed for ordinary app edits; environment/dependency changes follow the lifecycle below. A restart interrupts in-memory voice sessions. The audio image includes the pinned Soundy AAC/fMP4 fix; first build needs internet access for its Java dependencies. See [the exact SoundCloud diagnosis and adapter change](MUSIC.md#soundcloud-did-not-detect-any-supported-formats). Start a fresh `/play` session after replacing a source adapter.
+
 ## 3. Enable/configure the features
 
 - **Self roles:** create a panel, choose assignable roles, and publish it. Role hierarchy and Manage Roles checks still apply.
@@ -77,10 +98,10 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 - **Economy:** configure currency, rewards, transfers, and shop items. There is no real-money payment or gambling feature.
 - **Deals:** provide a valid `ITAD_API_KEY`, configure watchlists/regions/stores/destinations, and allow the worker's reconciliation cycle to run (approximately once a minute).
 - **News:** configure an authorized Steam source, verified RSS/Atom URL, or signed webhook and its destination. Setup-required source starters remain unavailable until configured; no feed URLs are guessed.
-- **Music:** enable the module, join a voice channel, and give the bot Connect/Speak access. The supplied backend enables SoundCloud/Bandcamp, not arbitrary YouTube/Spotify playback. Loaded sources, provider restrictions, and current source/voice compatibility still determine whether playback succeeds. Starting the stack does not resolve an upstream source failure.
+- **Music:** enable the module, join a voice channel, and give the bot Connect/Speak access. The supplied backend enables SoundCloud through the pinned Soundy AAC/fMP4 adapter and built-in Bandcamp, not arbitrary YouTube/Spotify playback. Loaded sources, provider restrictions, and current source/voice compatibility still determine whether playback succeeds. Starting the stack does not resolve an upstream source failure.
 - **Commands/audit:** use the Commands reference and the audit detail copy controls in the dashboard. The reference is not live registration verification.
 
-For the pending music-source investigation, repeat the failing lookup without playing audio or changing the queue:
+To check the configured music adapter or repeat a failed lookup without playing audio or changing the queue:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music run --rm --no-deps bot npm run music:doctor -- --query "the same failing search text"

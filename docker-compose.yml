@@ -122,7 +122,10 @@ services:
     restart: unless-stopped
 
   lavalink:
-    image: ghcr.io/lavalink-devs/lavalink:4
+    build:
+      context: .
+      dockerfile: docker/lavalink/Dockerfile
+    image: orbit-lavalink:local
     profiles: [music]
     environment:
       _JAVA_OPTIONS: -Xmx512M

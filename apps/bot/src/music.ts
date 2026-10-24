@@ -17,12 +17,18 @@ import {
   type Track as LavalinkTrack,
   type Player,
 } from "shoukaku";
-import { musicSourceFailure, resolveMusicQuery } from "./music-source";
+import { MusicNodeMetadata } from "./music-node";
+import {
+  musicNodeDescription,
+  musicSourceFailure,
+  resolveMusicQuery,
+} from "./music-source";
 export class MusicService {
   readonly backend: Shoukaku | null;
   private sessions = new Map<string, MusicState>();
   private locks = new Map<string, Promise<unknown>>();
   private lastSave = new Map<string, number>();
+  private metadata = new MusicNodeMetadata();
   constructor(private client: Client) {
     this.backend =
       process.env.LAVALINK_URL && process.env.LAVALINK_PASSWORD
@@ -44,9 +50,25 @@ export class MusicService {
             }
           )
         : null;
-    this.backend?.on("ready", () => {
+    this.backend?.on("ready", (name) => {
       void setHealth("Music backend", "healthy", 0, "Lavalink connected");
       logger.info("Lavalink connected");
+      const node = this.backend?.nodes.get(name);
+      if (node)
+        void this.metadata
+          .read(node, true)
+          .then((info) => {
+            logger.info(
+              { backend: musicNodeDescription(info) },
+              "Lavalink metadata loaded"
+            );
+          })
+          .catch((error) => {
+            logger.warn(
+              { error: errorDiagnostic(error) },
+              "Lavalink metadata unavailable; will retry on lookup"
+            );
+          });
     });
     this.backend?.on("error", (_name, error) => {
       logger.warn(
@@ -164,9 +186,14 @@ export class MusicService {
       throw new Error(
         "The music backend is unavailable. Ask an administrator to configure Lavalink."
       );
-    const result = await resolveMusicQuery(node.rest, query, {
-      info: node.info,
+    const info = await this.metadata.read(node).catch((error) => {
+      logger.warn(
+        { error: errorDiagnostic(error) },
+        "Lavalink metadata unavailable for lookup"
+      );
+      return null;
     });
+    const result = await resolveMusicQuery(node.rest, query, { info });
     return result.tracks;
   }
 

@@ -59,3 +59,38 @@ jobs:
             npm run roles:export -- --help &&
             npm run music:doctor -- --help
           '
+      - name: Build pinned SoundCloud AAC/fMP4 backend and run its offline unit tests
+        run: docker build -f docker/lavalink/Dockerfile -t orbit:lavalink-ci .
+      - name: Verify plugin registration without Discord or provider network access
+        run: |
+          trap 'docker logs orbit-lavalink-ci; docker rm -f orbit-lavalink-ci' EXIT
+          docker run -d --name orbit-lavalink-ci --network none --memory 768m \
+            -e _JAVA_OPTIONS=-Xmx512M -e LAVALINK_SERVER_PASSWORD=ci-only-lavalink-password \
+            -v "$PWD/docker/lavalink/application.yml:/opt/Lavalink/application.yml:ro" orbit:lavalink-ci
+          docker run --rm --network container:orbit-lavalink-ci --entrypoint node orbit:ci-dev --input-type=module -e '
+            import assert from "node:assert/strict";
+            import { setTimeout } from "node:timers/promises";
+            let info, lastError;
+            for (let attempt = 0; attempt < 90; attempt++) {
+              try {
+                const response = await fetch("http://127.0.0.1:2333/v4/info", {
+                  headers: { Authorization: "ci-only-lavalink-password" },
+                  signal: AbortSignal.timeout(2000),
+                });
+                if (!response.ok) throw Error(`Backend HTTP ${response.status}`);
+                info = await response.json();
+                break;
+              } catch (error) {
+                lastError = error;
+                await setTimeout(1000);
+              }
+            }
+            assert.ok(info, `Backend failed to start: ${lastError?.message}`);
+            assert.equal(info.version.semver, "4.2.2");
+            assert.equal(info.lavaplayer, "2.2.6");
+            assert.equal(info.plugins.find(plugin => plugin.name === "soundy")?.version, "1.1.0");
+            assert.equal(info.sourceManagers.filter(source => source === "soundcloud").length, 1);
+            assert.ok(info.sourceManagers.includes("bandcamp"));
+            for (const source of ["youtube", "http", "local"]) assert.ok(!info.sourceManagers.includes(source));
+            console.log("Pinned Soundy plugin and allowed source managers registered successfully.");
+          '
