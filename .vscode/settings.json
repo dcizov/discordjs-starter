@@ -27,7 +27,10 @@
   },
   "eslint.useFlatConfig": true,
   "eslint.format.enable": false,
-  "eslint.validate": ["typescript"],
+  "eslint.validate": [
+    "typescript",
+    "typescriptreact"
+  ],
   "eslint.workingDirectories": [
     {
       "mode": "auto"

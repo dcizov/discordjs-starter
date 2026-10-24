@@ -19,3 +19,11 @@ Thumbs.db
 *.swp
 *.swo
 *~
+.next/
+.data/
+*.tsbuildinfo
+playwright-report/
+test-results/
+.artifacts/
+.cache-index.html
+**/next-env.d.ts

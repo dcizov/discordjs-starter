@@ -1,24 +1,27 @@
 import { defineConfig } from "vitest/config";
-
+const path = (p: string) => new URL(p, import.meta.url).pathname;
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
-    env: {
-      DATABASE_URL:
-        process.env.DATABASE_URL ??
-        "postgres://postgres:postgres@localhost:5432/bot_test",
-    },
-    coverage: {
-      provider: "v8",
-      include: ["src/**/*.ts"],
-      exclude: [
-        "src/index.ts",
-        "src/deploy-commands.ts",
-        "src/db/seed.ts",
-        "src/**/*.test.ts",
-        "src/types/**",
-      ],
-    },
+    include: ["tests/**/*.test.ts"],
+    testTimeout: 20000,
+    hookTimeout: 30000,
+  },
+  resolve: {
+    alias: [
+      {
+        find: /^@orbit\/core$/,
+        replacement: path("./packages/core/src/index.ts"),
+      },
+      {
+        find: /^@orbit\/core\/(.+)$/,
+        replacement: path("./packages/core/src/") + "$1.ts",
+      },
+      { find: /^@orbit\/db$/, replacement: path("./packages/db/src/index.ts") },
+      {
+        find: /^@orbit\/db\/src\/(.+)$/,
+        replacement: path("./packages/db/src/") + "$1.ts",
+      },
+    ],
   },
 });

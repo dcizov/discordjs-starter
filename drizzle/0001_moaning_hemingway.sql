@@ -1,0 +1,1 @@
+ALTER TABLE "deliveries" ADD COLUMN "payload" jsonb DEFAULT '{}'::jsonb NOT NULL;

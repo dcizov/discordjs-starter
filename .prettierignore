@@ -1,5 +1,11 @@
-dist/
-coverage/
-drizzle/
-node_modules/
+node_modules
+.next
+**/.next
+dist
+coverage
+.data
+.artifacts
 package-lock.json
+drizzle/meta
+next-env.d.ts
+**/next-env.d.ts

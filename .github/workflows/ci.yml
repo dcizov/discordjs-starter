@@ -1,65 +1,51 @@
-name: CI
+name: Orbit CI
 on:
   push:
-    branches:
-      - main
+    branches: [main, "arena/**"]
   pull_request:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: orbit-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  ci:
-    name: Typecheck, lint, test, and build
+  verify:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:17-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: bot_test
-        ports:
-          - 5432:5432
+          POSTGRES_USER: orbit
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: orbit_test
+        ports: ["5432:5432"]
         options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd "pg_isready -U orbit -d orbit_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/bot_test
+      DEMO_MODE: "true"
+      TEST_DATABASE_URL: postgres://orbit:test_password@localhost:5432/orbit_test
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
         with:
-          node-version-file: .nvmrc
+          node-version: 22
           cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Lint
-        run: npx eslint src
-      - name: Check formatting
-        run: npm run format:check
-      - name: Run migrations
-        run: npm run db:migrate
-      - name: Test
-        run: npm test
-      - name: Build
-        run: npm run build
-  docker:
-    name: Build the images
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=moderate
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results
+          path: test-results/
+  containers:
     runs-on: ubuntu-latest
-    env:
-      DOCKER_BUILDKIT: 1
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-      - name: Build production image
-        run: docker build --target runtime -t discordjs-starter:ci .
-      - name: Build dev image
-        run: docker build --target dev -t discordjs-starter:dev-ci .
+      - uses: actions/checkout@v5
+      - run: docker build --target runtime -t orbit:ci .

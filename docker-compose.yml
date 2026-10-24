@@ -1,70 +1,129 @@
-services:
-  bot:
-    image: discordjs-starter
-    build:
-      context: .
-      target: runtime
-    container_name: discordjs-starter
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/bot
-    depends_on:
-      postgres:
-        condition: service_healthy
-    stop_grace_period: 20s
-    mem_limit: 512m
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+x-app: &app
+  build:
+    context: .
+    target: runtime
+  image: orbit-community:local
+  env_file:
+    - path: .env
+      required: false
+  environment: &app-env
+    NODE_ENV: production
+    DEMO_MODE: ${DEMO_MODE:-true}
+    DATABASE_URL: postgres://orbit:${POSTGRES_PASSWORD:-orbit_dev_password}@postgres:5432/orbit
+    REDIS_URL: redis://redis:6379
+    APP_URL: ${APP_URL:-http://localhost:3000}
+    LAVALINK_URL: lavalink:2333
+    DEMO_DATA_PATH: /app/.data/demo.json
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
 
-  dev:
-    profiles: [dev]
-    image: discordjs-starter:dev
-    build:
-      context: .
-      target: dev
+services:
+  web:
+    <<: *app
+    ports:
+      - "3000:3000"
     volumes:
-      - ./src:/app/src
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      NODE_ENV: development
-      CHOKIDAR_USEPOLLING: "false"
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/bot
+      - demo_data:/app/.data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  migrate:
+    <<: *app
+    profiles: [live]
+    command: ["node", "dist/migrate.js"]
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
-    init: true
-    stop_grace_period: 10s
-    develop:
-      watch:
-        - action: rebuild
-          path: ./package.json
-        - action: rebuild
-          path: ./package-lock.json
+
+  bot:
+    <<: *app
+    profiles: [live]
+    command: ["node", "dist/bot.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *app
+    profiles: [live]
+    command: ["node", "dist/worker.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
 
   postgres:
-    image: postgres:18-alpine
-    restart: unless-stopped
+    image: postgres:17-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: bot
+      POSTGRES_USER: orbit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orbit_dev_password}
+      POSTGRES_DB: orbit
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql
-      - ./docker/postgres/init.d:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command:
+      [
+        "redis-server",
+        "--appendonly",
+        "yes",
+        "--maxmemory-policy",
+        "noeviction",
+      ]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    profiles: [music]
+    environment:
+      _JAVA_OPTIONS: -Xmx512M
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-change-this-lavalink-password}
+    volumes:
+      - ./docker/lavalink/application.yml:/opt/Lavalink/application.yml:ro
+    expose:
+      - "2333"
+    restart: unless-stopped
+    mem_limit: 768m
 
 volumes:
   pgdata:
+  redisdata:
+  demo_data:

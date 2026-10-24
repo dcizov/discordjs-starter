@@ -1,0 +1,208 @@
+"use client";
+import { createContext, useContext, useId } from "react";
+import { cn } from "@/lib/utils";
+import { Inbox, Loader2, Search } from "lucide-react";
+export function Card({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-card shadow-panel",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+export function Badge({
+  children,
+  tone = "neutral",
+  className,
+}: {
+  children: React.ReactNode;
+  tone?: "green" | "purple" | "amber" | "red" | "blue" | "neutral";
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium leading-none",
+        {
+          "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400":
+            tone === "green",
+          "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300":
+            tone === "purple",
+          "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400":
+            tone === "amber",
+          "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400":
+            tone === "red",
+          "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400":
+            tone === "blue",
+          "bg-muted text-muted-foreground": tone === "neutral",
+        },
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+const FieldContext = createContext<{
+  label: string;
+  id: string;
+  hintId?: string;
+} | null>(null);
+export function Input({
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>) {
+  const field = useContext(FieldContext);
+  return (
+    <input
+      id={field?.id}
+      aria-label={field?.label}
+      aria-describedby={field?.hintId}
+      className={cn(
+        "flex h-10 w-full rounded-lg border border-border bg-card px-3 text-xs transition placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-violet-400/40 disabled:opacity-60",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+export function Select({
+  className,
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const field = useContext(FieldContext);
+  return (
+    <select
+      id={field?.id}
+      aria-label={field?.label}
+      aria-describedby={field?.hintId}
+      className={cn(
+        "h-10 w-full rounded-lg border border-border bg-card px-3 pr-7 text-xs outline-none focus:ring-2 focus:ring-violet-400/40",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </select>
+  );
+}
+export function Textarea({
+  className,
+  ...props
+}: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const field = useContext(FieldContext);
+  return (
+    <textarea
+      id={field?.id}
+      aria-label={field?.label}
+      aria-describedby={field?.hintId}
+      className={cn(
+        "min-h-24 w-full resize-y rounded-lg border border-border bg-card p-3 text-xs outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-violet-400/40",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+export function Field({
+  label,
+  hint,
+  children,
+  required,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+  required?: boolean;
+}) {
+  const id = useId();
+  return (
+    <FieldContext.Provider
+      value={{ label, id, hintId: hint ? `${id}-hint` : undefined }}
+    >
+      <div className="block space-y-2">
+        <label htmlFor={id} className="text-xs font-medium">
+          {label}
+          {required && (
+            <span className="ml-1 text-primary" aria-hidden="true">
+              *
+            </span>
+          )}
+        </label>
+        {children}
+        {hint && (
+          <span
+            id={`${id}-hint`}
+            className="block text-[11px] leading-relaxed text-muted-foreground"
+          >
+            {hint}
+          </span>
+        )}
+      </div>
+    </FieldContext.Provider>
+  );
+}
+export function EmptyState({
+  title,
+  description,
+  action,
+  icon: Icon = Inbox,
+}: {
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+  icon?: React.ElementType;
+}) {
+  return (
+    <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-violet-100 bg-violet-50 text-violet-500 dark:border-violet-500/20 dark:bg-violet-500/10">
+        <Icon size={22} />
+      </div>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      <p className="mt-2 max-w-sm text-xs leading-relaxed text-muted-foreground">
+        {description}
+      </p>
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  );
+}
+export function Spinner() {
+  return <Loader2 size={15} className="animate-spin" />;
+}
+export function SearchInput({
+  value,
+  onChange,
+  placeholder = "Search…",
+}: {
+  value: string;
+  onChange: (s: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="relative max-w-xs flex-1">
+      <Search
+        className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+        size={14}
+      />
+      <Input
+        className="h-9 pl-9"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn("animate-pulse rounded-lg bg-muted", className)} />;
+}

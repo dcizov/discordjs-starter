@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@layer base {
+  :root {
+    --background: 230 25% 98%;
+    --foreground: 237 17% 20%;
+    --card: 0 0% 100%;
+    --muted: 230 20% 96%;
+    --muted-foreground: 232 9% 48%;
+    --border: 233 18% 92%;
+    --primary: 258 64% 60%;
+    --primary-foreground: 0 0% 100%;
+  }
+  .dark {
+    --background: 235 22% 9%;
+    --foreground: 230 20% 91%;
+    --card: 235 20% 12%;
+    --muted: 235 18% 17%;
+    --muted-foreground: 232 12% 62%;
+    --border: 235 16% 21%;
+    --primary: 258 78% 70%;
+    --primary-foreground: 252 35% 13%;
+  }
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Inter Variable", "Inter", sans-serif;
+    letter-spacing: -0.015em;
+  }
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  a {
+    touch-action: manipulation;
+  }
+  button:not(:disabled),
+  select {
+    cursor: pointer;
+  }
+  ::selection {
+    background: #e4d9fb;
+    color: #5b3b9f;
+  }
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #dcdbe4;
+    border-radius: 6px;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #383345;
+  }
+  input[type="range"] {
+    accent-color: hsl(var(--primary));
+  }
+  input[type="checkbox"] {
+    accent-color: hsl(var(--primary));
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.03em;
+  }
+}
+@layer utilities {
+  .animate-in {
+    animation: fade-in 0.18s ease-out;
+  }
+  .page-enter {
+    animation: page-in 0.35s ease-out;
+  }
+  .subtle-grid {
+    background-image: radial-gradient(#c7b9e6 0.65px, transparent 0.65px);
+    background-size: 14px 14px;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+.orbit-float {
+  animation: float 7s ease-in-out infinite;
+}

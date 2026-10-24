@@ -1,0 +1,34 @@
+import {
+  Hash,
+  LayoutGrid,
+  Music2,
+  Rss,
+  ScrollText,
+  Settings2,
+  ShieldCheck,
+  Tags,
+  UsersRound,
+  Wallet,
+} from "lucide-react";
+export const navigation = [
+  { id: "overview", label: "Overview", icon: LayoutGrid, group: "workspace" },
+  { id: "roles", label: "Self roles", icon: UsersRound, group: "workspace" },
+  {
+    id: "moderation",
+    label: "Moderation",
+    icon: ShieldCheck,
+    group: "workspace",
+  },
+  { id: "economy", label: "Economy", icon: Wallet, group: "workspace" },
+  { id: "music", label: "Music", icon: Music2, group: "workspace" },
+  { id: "deals", label: "Game deals", icon: Tags, group: "workspace" },
+  { id: "news", label: "News & feeds", icon: Rss, group: "workspace" },
+  { id: "channels", label: "Channels & roles", icon: Hash, group: "server" },
+  { id: "audit", label: "Audit log", icon: ScrollText, group: "server" },
+  {
+    id: "settings",
+    label: "Server settings",
+    icon: Settings2,
+    group: "server",
+  },
+];

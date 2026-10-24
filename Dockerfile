@@ -1,44 +1,47 @@
-ARG NODE_VERSION=24.21.0
-
-FROM node:${NODE_VERSION}-trixie-slim AS base
+# syntax=docker/dockerfile:1
+FROM node:22-bookworm-slim AS base
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 
-ENV HUSKY=0
-
+FROM base AS manifests
 COPY package.json package-lock.json ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY apps/bot/package.json ./apps/bot/package.json
+COPY apps/worker/package.json ./apps/worker/package.json
+COPY packages/core/package.json ./packages/core/package.json
+COPY packages/db/package.json ./packages/db/package.json
 
-FROM base AS deps
-RUN npm ci
+FROM manifests AS deps
+RUN npm ci --no-audit --no-fund
 
 FROM deps AS dev
+COPY . .
+RUN mkdir -p .data && chown -R node:node /app
+USER node
 ENV NODE_ENV=development
+EXPOSE 3000
+CMD ["npm","run","dev"]
 
-COPY tsconfig.json ./
-COPY src ./src
+FROM deps AS builder
+COPY . .
+ENV DEMO_MODE=true
+RUN npm run build
 
-USER node
-CMD ["npm", "run", "dev"]
+FROM manifests AS production-deps
+RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM deps AS build
-
-COPY tsconfig.json ./
-COPY src ./src
-
-RUN npm run build && npm prune --omit=dev
-
-FROM node:${NODE_VERSION}-trixie-slim AS runtime
+FROM base AS runtime
 ENV NODE_ENV=production
-
-RUN apt-get update \
-  && apt-get install -y --no-install-recommends dumb-init \
-  && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-COPY package.json ./
-COPY --from=build --chown=node:node /app/node_modules ./node_modules
-COPY --from=build --chown=node:node /app/dist ./dist
-
+COPY --from=production-deps --chown=node:node /app/node_modules ./node_modules
+COPY --from=manifests --chown=node:node /app/package.json /app/package-lock.json ./
+COPY --from=manifests --chown=node:node /app/apps ./apps
+COPY --from=manifests --chown=node:node /app/packages ./packages
+COPY --from=builder --chown=node:node /app/apps/web/.next ./apps/web/.next
+COPY --from=builder --chown=node:node /app/apps/web/public ./apps/web/public
+COPY --from=builder --chown=node:node /app/apps/web/next.config.mjs ./apps/web/next.config.mjs
+COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/drizzle ./drizzle
+RUN mkdir -p /app/.data && chown node:node /app/.data
 USER node
-
-CMD ["dumb-init", "node", "dist/index.js"]
+EXPOSE 3000
+CMD ["npm","start"]

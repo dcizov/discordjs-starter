@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 230" fill="none">
+<defs><radialGradient id="p" cx=".3" cy=".2" r=".85"><stop stop-color="#C8B4FA"/><stop offset=".5" stop-color="#AC89EC"/><stop offset="1" stop-color="#7F53CB"/></radialGradient><radialGradient id="s" cx=".3" cy=".2" r=".9"><stop stop-color="#FFE6CE"/><stop offset=".55" stop-color="#EDC7AE"/><stop offset="1" stop-color="#D4A2AD"/></radialGradient><linearGradient id="ring" x1="120" y1="50" x2="380" y2="180" gradientUnits="userSpaceOnUse"><stop stop-color="#C3A8E9" stop-opacity=".15"/><stop offset=".55" stop-color="#C3A8E9"/><stop offset="1" stop-color="#FFF"/></linearGradient><filter id="shadow"><feGaussianBlur stdDeviation="8"/></filter><filter id="card"><feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#7F53CB" flood-opacity=".10"/></filter></defs>
+<ellipse cx="286" cy="194" rx="108" ry="9" fill="#A38ACF" opacity=".1" filter="url(#shadow)"/>
+<ellipse cx="285" cy="112" rx="139" ry="58" transform="rotate(-23 285 112)" stroke="#D4C4EB" stroke-opacity=".65" stroke-dasharray="3 5"/>
+<ellipse cx="285" cy="112" rx="174" ry="80" transform="rotate(-23 285 112)" stroke="#DED2EF" stroke-opacity=".4"/>
+<circle cx="283" cy="111" r="64" fill="url(#p)"/>
+<ellipse cx="283" cy="111" rx="126" ry="36" transform="rotate(-27 283 111)" stroke="url(#ring)" stroke-width="13"/>
+<path d="M228 78A64 64 0 0 1 343 132C319 134 253 111 228 78Z" fill="url(#p)"/>
+<circle cx="388" cy="54" r="22" fill="url(#s)"/>
+<circle cx="153" cy="152" r="12" fill="#B9C5E6"/>
+<circle cx="419" cy="147" r="5" fill="#C5B3E4"/>
+<circle cx="191" cy="38" r="3" fill="#C0AEDC"/>
+<circle cx="343" cy="205" r="3" fill="#D9C8ED"/>
+<path d="M432 76v10m-5-5h10M172 88v8m-4-4h8M351 17v8m-4-4h8M215 194v8m-4-4h8" stroke="#BAA7D7" stroke-width="1.5" stroke-linecap="round"/>
+<g filter="url(#card)" transform="translate(127 57) rotate(-10)"><rect width="47" height="47" rx="13" fill="white"/><rect x=".5" y=".5" width="46" height="46" rx="12.5" stroke="#EAE2F4"/><path d="M24 13l10 5v7c0 7-10 11-10 11s-10-4-10-11v-7l10-5Z" fill="#F0EAFB" stroke="#A687D8" stroke-width="1.5"/><path d="m19 24 4 4 6-7" stroke="#A687D8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g filter="url(#card)" transform="translate(358 155) rotate(9)"><rect width="47" height="47" rx="13" fill="white"/><rect x=".5" y=".5" width="46" height="46" rx="12.5" stroke="#EAE2F4"/><circle cx="21" cy="20" r="5" fill="#E8EDF6" stroke="#94A6C6" stroke-width="1.5"/><path d="M12 34v-3a9 9 0 0 1 18 0v3M30 15a5 5 0 0 1 0 10m3 3a7 7 0 0 1 3 6" stroke="#94A6C6" stroke-width="1.5" stroke-linecap="round"/></g>
+<rect x="80" y="181" width="127" height="25" rx="12.5" fill="white" fill-opacity=".8"/><circle cx="94" cy="193.5" r="3" fill="#81BA9C"/><text x="104" y="197" font-family="Arial,sans-serif" font-size="8" fill="#8D829D">Everything, connected.</text>
+</svg>

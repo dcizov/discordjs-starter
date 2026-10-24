@@ -1,1 +1,1 @@
-npm exec --no -- lint-staged
+npm run lint && npm run typecheck
