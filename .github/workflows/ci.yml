@@ -53,9 +53,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - name: Review pinned plugin artifacts (no provider requests)
-        timeout-minutes: 6
-        run: python3 docker/lavalink/install-plugins.py --output "$RUNNER_TEMP/reviewed-plugins" --review-unpinned
+      - name: Test plugin artifact integrity/packaging installer offline
+        run: python3 -m unittest discover -s docker/lavalink -p 'test_*.py'
       - name: Validate full-stack development Compose override
         run: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music config --quiet
       - run: docker build --target runtime -t orbit:ci .
@@ -67,7 +66,7 @@ jobs:
             npm run roles:export -- --help &&
             npm run music:doctor -- --help
           '
-      - name: Build pinned SoundCloud AAC/fMP4 backend and run its offline unit tests
+      - name: Build all pinned music plugins and run offline Soundy unit tests
         run: |
           set -o pipefail
           if docker build --progress=plain -f docker/lavalink/Dockerfile -t orbit:lavalink-ci . 2>&1 | tee "$RUNNER_TEMP/lavalink-build.log"; then
@@ -80,18 +79,38 @@ jobs:
           from pathlib import Path
           text = Path(os.environ["RUNNER_TEMP"], "lavalink-build.log").read_text(errors="replace")
           tail = "\n".join(text.splitlines()[-80:])[-16000:]
-          escaped = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-          print(f"::error title=Pinned SoundCloud backend build failed::{escaped}")
+          for index, offset in enumerate(range(0, len(tail), 3000), 1):
+              escaped = tail[offset:offset + 3000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=Pinned music backend build failed {index}::{escaped}")
           PYTHON
           exit 1
       - name: Verify plugin registration without Discord or provider network access
         run: |
-          trap 'docker logs orbit-lavalink-ci; docker rm -f orbit-lavalink-ci' EXIT
+          cleanup_backend() {
+            status=$?
+            trap - EXIT
+            docker logs orbit-lavalink-ci > "$RUNNER_TEMP/lavalink-startup.log" 2>&1 || true
+            cat "$RUNNER_TEMP/lavalink-startup.log"
+            if [ "$status" != 0 ]; then
+              python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+          text = Path(os.environ["RUNNER_TEMP"], "lavalink-startup.log").read_text(errors="replace")[-18000:]
+          for index, offset in enumerate(range(0, len(text), 3000), 1):
+              escaped = text[offset:offset + 3000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print(f"::error title=Music startup log {index}::{escaped}")
+          PYTHON
+            fi
+            docker rm -f orbit-lavalink-ci || true
+            exit "$status"
+          }
+          trap cleanup_backend EXIT
           docker run -d --name orbit-lavalink-ci --network none --memory 768m \
             -e _JAVA_OPTIONS=-Xmx512M -e LAVALINK_SERVER_PASSWORD=ci-only-lavalink-password \
             -v "$PWD/docker/lavalink/application.yml:/opt/Lavalink/application.yml:ro" orbit:lavalink-ci
           docker run --rm --network container:orbit-lavalink-ci --entrypoint node orbit:ci-dev --input-type=module -e '
             import assert from "node:assert/strict";
+            import fs from "node:fs";
             import { setTimeout } from "node:timers/promises";
             process.on("uncaughtException", error => {
               const detail = String(error.stack ?? error).replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
@@ -118,9 +137,14 @@ jobs:
             assert.equal(info.lavaplayer, "2.2.6");
             assert.equal(info.plugins.find(plugin => plugin.name === "soundy")?.version, "1.1.0");
             assert.equal(info.sourceManagers.filter(source => source === "soundcloud").length, 1);
-            assert.ok(info.sourceManagers.includes("bandcamp"));
-            for (const source of ["youtube", "http", "local"]) assert.ok(!info.sourceManagers.includes(source));
-            console.log("Pinned Soundy plugin and allowed source managers registered successfully.");
+            const expected = JSON.parse(fs.readFileSync("/app/docker/lavalink/plugins.lock.json", "utf8")).plugins;
+            assert.equal(info.plugins.length, expected.length + 1);
+            assert.equal(new Set(info.plugins.map(plugin => plugin.name)).size, info.plugins.length);
+            for (const plugin of expected) assert.equal(info.plugins.find(actual => actual.name === plugin.id)?.version, plugin.version, plugin.id);
+            assert.deepEqual([...info.sourceManagers].sort(), ["bandcamp", "ocremix", "soundcloud", "youtube"]);
+            for (const filter of ["high-pass", "low-pass", "normalization", "echo"]) assert.ok(info.filters.includes(filter), filter);
+            assert.ok(!info.filters.includes("lowPass"), "No duplicate built-in low-pass filter");
+            console.log("All nine pinned plugins + Soundy registered; only approved, unique sources/filters are active.");
           '
       - name: Open the real Dev Container and verify dashboard HTTP without a second bot
         timeout-minutes: 10

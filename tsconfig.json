@@ -14,7 +14,8 @@
     "paths": {
       "@orbit/core": ["packages/core/src/index.ts"],
       "@orbit/db": ["packages/db/src/index.ts"],
-      "@orbit/core/*": ["packages/core/src/*.ts"]
+      "@orbit/core/*": ["packages/core/src/*.ts"],
+      "@/*": ["apps/web/*"]
     }
   },
   "include": [

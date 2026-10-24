@@ -5,15 +5,19 @@ lavalink:
   server:
     password: ${LAVALINK_SERVER_PASSWORD}
     sources:
+      # Exactly one owner for each source: youtube-plugin / Soundy / built-in Bandcamp.
       youtube: false
       bandcamp: true
-      # Soundy handles current AAC/fMP4 streams. Never register both loaders.
       soundcloud: false
       twitch: false
       vimeo: false
       nico: false
       http: false
       local: false
+    filters:
+      # Use LavaDSPX's low-pass extension, not two low-pass implementations.
+      lowPass: false
+    youtubePlaylistLoadLimit: 1
     bufferDurationMs: 400
     frameBufferDurationMs: 5000
     opusEncodingQuality: 10
@@ -24,7 +28,77 @@ logging:
     root: INFO
     lavalink: INFO
 
-# Built into the pinned local image; no plugin download at startup.
+# All artifacts are pinned/baked into the image. No downloads at startup.
+# These are real upstream switches, not guessed enabled/SFW flags.
 plugins:
   soundy:
     enabled: true
+  youtube:
+    enabled: true
+    allowSearch: true
+    allowDirectVideoIds: false
+    allowDirectPlaylistIds: false
+    # No age-restriction-capable embedded/TV clients, login or bypass tokens.
+    clients: [MUSIC, ANDROID_VR, WEB]
+    oauth:
+      enabled: false
+  lavasrc:
+    # No mirrored Spotify/Apple/etc. recordings or silent provider fallback.
+    providers: []
+    sources:
+      spotify: false
+      applemusic: false
+      deezer: false
+      yandexmusic: false
+      flowerytts: false
+      # Extended search wrapper for youtube-plugin, NOT a second audio loader.
+      youtube: true
+      vkmusic: false
+      tidal: false
+      qobuz: false
+      ytdlp: false
+      jiosaavn: false
+    lyrics-sources:
+      spotify: false
+      deezer: false
+      # lyrics.kt owns YouTube lyrics; do not register it twice via LavaSrc.
+      youtube: false
+      yandexmusic: false
+      vkmusic: false
+      lrcLib: true
+    youtube:
+      countryCode: DE
+      language: en
+  lavalyrics:
+    # This is an ordering list, NOT an enable/disable list. Only LRCLIB is
+    # registered above. Its upstream 4.8.3 source name is empty; no fake key.
+    sources: []
+  lyrics:
+    countryCode: DE
+  xm:
+    ampFactor: 1
+    interpolation: 1
+    vblank: false
+    fx9Bug: false
+    fixSampleLoop: false
+    amigaMixer: false
+    defaultPan: 50
+  dunctebot:
+    sources:
+      # OC ReMix is the only enabled Skybot adapter. No arbitrary uploads/TTS,
+      # social-media or adult adapters. All 1.7.2 switches are explicit.
+      ocremix: true
+      getyarn: false
+      clypit: false
+      tts: false
+      pornhub: false
+      reddit: false
+      tiktok: false
+      mixcloud: false
+      soundgasm: false
+      elgato: false
+      pixeldrain: false
+      tumblr: false
+# SponsorBlock categories are configured PER PLAYER by the bot, not with a
+# nonexistent YAML switch. DSPX extensions are registered but opt-in per player;
+# no echo/normalization/boost is forced on every track. See docs/MUSIC-PLUGINS.md.

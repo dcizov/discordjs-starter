@@ -80,6 +80,8 @@ JS
 project="$(docker inspect --format '{{ index .Config.Labels "com.docker.compose.project" }}' "$container_id")"
 test "$project" = "$COMPOSE_PROJECT_NAME"
 "${cli[@]}" exec --workspace-folder . node .devcontainer/check-workspace.mjs
+# Real BullMQ/Redis bridge, but a deterministic stub consumer (no Discord I/O).
+docker exec --env GITHUB_ACTIONS=true --env ORBIT_ACTION_QUEUE_SMOKE=true "$container_id" node --import tsx tests/integration/action-queue-smoke.ts
 
 # Verify the exact failure from the user report: a real host HTTP mapping on web,
 # and no implicit bot/worker logins when opening the editor.

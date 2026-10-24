@@ -9,6 +9,7 @@ export default defineConfig({
   },
   resolve: {
     alias: [
+      { find: /^@\/(.+)$/, replacement: path("./apps/web/") + "$1" },
       {
         find: /^@orbit\/core$/,
         replacement: path("./packages/core/src/index.ts"),

@@ -28,19 +28,36 @@ export function musicSourceSettings(): MusicSourceSettings {
   return {
     searchPrefix: process.env.MUSIC_SEARCH_PREFIX ?? "scsearch",
     allowedHosts: (
-      process.env.MUSIC_ALLOWED_HOSTS ?? "soundcloud.com,bandcamp.com"
+      process.env.MUSIC_ALLOWED_HOSTS ??
+      "soundcloud.com,bandcamp.com,youtube.com,youtu.be,ocremix.org"
     )
       .split(",")
       .map((host) => host.trim().toLowerCase())
       .filter(Boolean),
   };
 }
+const SEARCH_SOURCES: Record<string, string> = {
+  scsearch: "soundcloud",
+  bcsearch: "bandcamp",
+  ytsearch: "youtube",
+  ytmsearch: "youtube",
+};
+const SOURCE_HOSTS: Record<string, string[]> = {
+  soundcloud: ["soundcloud.com"],
+  bandcamp: ["bandcamp.com"],
+  youtube: ["youtube.com", "youtu.be"],
+  ocremix: ["ocremix.org"],
+};
+const matchesHost = (hostname: string, host: string) =>
+  hostname === host || hostname.endsWith(`.${host}`);
+const PROVIDER_LABELS: Record<string, string> = {
+  soundcloud: "SoundCloud",
+  bandcamp: "Bandcamp",
+  youtube: "YouTube",
+  ocremix: "OC ReMix",
+};
 const providerLabel = (source: string | null) =>
-  source === "soundcloud"
-    ? "SoundCloud"
-    : source === "bandcamp"
-      ? "Bandcamp"
-      : "Configured source";
+  PROVIDER_LABELS[source ?? ""] ?? "Configured source";
 export function musicNodeDescription(info?: MusicNodeInfo | null) {
   if (!info) return "Backend version unavailable";
   const soundy = info.plugins?.find(
@@ -125,7 +142,11 @@ export async function prepareMusicQuery(
         "Audio source URLs must use public HTTPS on port 443 without credentials."
       );
     }
+    const source = Object.entries(SOURCE_HOSTS).find(([, hosts]) =>
+      hosts.some((host) => matchesHost(url.hostname, host))
+    )?.[0];
     if (
+      !source ||
       !settings.allowedHosts.some(
         (host) => url.hostname === host || url.hostname.endsWith(`.${host}`)
       )
@@ -139,17 +160,11 @@ export async function prepareMusicQuery(
       addresses.some((ip) => !isPublicAddress(ip.address))
     )
       throw new Error("Private audio-source addresses are not allowed.");
-    const source =
-      ["soundcloud", "bandcamp"].find(
-        (name) =>
-          url.hostname === `${name}.com` ||
-          url.hostname.endsWith(`.${name}.com`)
-      ) ?? null;
     return { identifier: url.toString(), source, kind: "url" as const };
   }
-  if (!["scsearch", "bcsearch"].includes(settings.searchPrefix))
+  if (!Object.hasOwn(SEARCH_SOURCES, settings.searchPrefix))
     throw new Error(
-      "Configure a supported MUSIC_SEARCH_PREFIX: scsearch or bcsearch."
+      "Configure a supported MUSIC_SEARCH_PREFIX: scsearch, bcsearch, ytsearch or ytmsearch."
     );
   if (/^[a-z]+search:/i.test(value))
     throw new Error(
@@ -157,7 +172,7 @@ export async function prepareMusicQuery(
     );
   return {
     identifier: `${settings.searchPrefix}:${value}`,
-    source: settings.searchPrefix === "scsearch" ? "soundcloud" : "bandcamp",
+    source: SEARCH_SOURCES[settings.searchPrefix],
     kind: "search" as const,
   };
 }
@@ -182,7 +197,7 @@ export async function resolveMusicQuery(
     !managers.some((name) => name.toLowerCase() === prepared.source)
   )
     throw new Error(
-      `${providerLabel(prepared.source)} is not enabled on this Lavalink node. ${prepared.source === "soundcloud" ? "Enable plugins.soundy.enabled in the Soundy-enabled backend (keep the built-in sources.soundcloud disabled)." : `Enable lavalink.server.sources.${prepared.source}.`} Restart Lavalink, then run npm run music:doctor. See docs/MUSIC.md. A connected backend does not guarantee an enabled source.`
+      `${providerLabel(prepared.source)} is not enabled on this Lavalink node. ${prepared.source === "soundcloud" ? "Enable plugins.soundy.enabled in the Soundy-enabled backend (keep the built-in sources.soundcloud disabled)." : prepared.source === "youtube" ? "Enable plugins.youtube.enabled; leave the built-in youtube loader disabled." : prepared.source === "ocremix" ? "Enable plugins.dunctebot.sources.ocremix." : `Enable lavalink.server.sources.${prepared.source}.`} Restart Lavalink, then run npm run music:doctor. See docs/MUSIC.md. A connected backend does not guarantee an enabled source.`
     );
   let result: LavalinkResponse | undefined;
   try {
@@ -217,6 +232,31 @@ export async function resolveMusicQuery(
   if (!tracks.length)
     throw new Error(
       `${providerLabel(prepared.source)} returned no playable tracks for this ${prepared.kind}. Try an authorized public track URL or another query. Search availability depends on the installed backend and provider; a connection alone is not sufficient.`
+    );
+  // Optional defensive metadata check; most adapters provide no content rating.
+  // This is not a claim that unrated recordings/lyrics are automatically SFW.
+  if (
+    tracks.some((track) => {
+      const flags = (track.pluginInfo ?? {}) as Record<string, unknown>;
+      return (
+        flags.isExplicit === true ||
+        flags.explicit === true ||
+        flags.isAgeRestricted === true
+      );
+    })
+  )
+    throw new Error(
+      "This request contains explicitly marked or age-restricted content. Choose a clean, public recording."
+    );
+  if (
+    tracks.some(
+      (track) =>
+        !Object.hasOwn(SOURCE_HOSTS, track.info.sourceName) ||
+        track.info.sourceName !== prepared.source
+    )
+  )
+    throw new Error(
+      "The backend returned a source outside the approved music-source policy. No audio was started."
     );
   return { tracks, source: prepared.source, kind: prepared.kind };
 }

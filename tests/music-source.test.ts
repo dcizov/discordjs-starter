@@ -103,6 +103,70 @@ describe("music source resolution", () => {
       expect(publicDns).not.toHaveBeenCalled();
     }
   );
+  it.each(["ytsearch", "ytmsearch"])(
+    "maps %s to the single YouTube audio manager",
+    async (searchPrefix) => {
+      expect(
+        await prepareMusicQuery("Clean public recording", {
+          ...settings,
+          searchPrefix,
+        })
+      ).toMatchObject({
+        identifier: `${searchPrefix}:Clean public recording`,
+        source: "youtube",
+      });
+    }
+  );
+  it.each([
+    ["https://www.youtube.com/watch?v=public", "youtube"],
+    ["https://youtu.be/public", "youtube"],
+    ["https://ocremix.org/remix/OCR00001", "ocremix"],
+  ])("recognizes the approved plugin URL %s", async (url, source) => {
+    expect(
+      await prepareMusicQuery(
+        url,
+        {
+          ...settings,
+          allowedHosts: ["youtube.com", "youtu.be", "ocremix.org"],
+        },
+        publicDns
+      )
+    ).toMatchObject({ source, kind: "url" });
+  });
+  it.each(["pornhub.com", "soundgasm.net", "reddit.com", "example.com"])(
+    "does not turn an environment allowlist into arbitrary source permission (%s)",
+    async (host) => {
+      await expect(
+        prepareMusicQuery(
+          `https://${host}/track`,
+          { ...settings, allowedHosts: [host] },
+          publicDns
+        )
+      ).rejects.toThrow("not enabled");
+      expect(publicDns).not.toHaveBeenCalled();
+    }
+  );
+  it("rejects a marked-explicit playlist as a whole and never substitutes another source", async () => {
+    const first = track();
+    first.pluginInfo = { isExplicit: true };
+    await expect(
+      resolveMusicQuery(
+        { resolve: async () => ({ loadType: LoadType.TRACK, data: first }) },
+        "Title",
+        { info, settings }
+      )
+    ).rejects.toThrow("clean, public recording");
+    first.pluginInfo = {};
+    first.info.sourceName = "youtube";
+    await expect(
+      resolveMusicQuery(
+        { resolve: async () => ({ loadType: LoadType.TRACK, data: first }) },
+        "Title",
+        { info, settings }
+      )
+    ).rejects.toThrow("approved music-source policy");
+  });
+
   it("rejects private or mixed DNS results, including an allowed hostname", async () => {
     const resolve = vi.fn();
     const resolveHost = vi.fn(async () => [
@@ -124,7 +188,7 @@ describe("music source resolution", () => {
     await expect(
       prepareMusicQuery("Valid title", {
         ...settings,
-        searchPrefix: "ytsearch",
+        searchPrefix: "phsearch",
       })
     ).rejects.toThrow("MUSIC_SEARCH_PREFIX");
   });

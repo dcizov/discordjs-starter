@@ -18,6 +18,7 @@ import {
   type Player,
 } from "shoukaku";
 import { MusicNodeMetadata } from "./music-node";
+import { MusicPluginRest, sponsorBlockCategories } from "./music-plugins";
 import {
   musicNodeDescription,
   musicSourceFailure,
@@ -47,6 +48,7 @@ export class MusicService {
               resumeTimeout: 60,
               reconnectTries: 10,
               reconnectInterval: 5,
+              structures: { rest: MusicPluginRest },
             }
           )
         : null;
@@ -222,6 +224,10 @@ export class MusicService {
         throw new Error("The DJ role is required to control music.");
       const voice = member.voice.channel;
       if (!voice) throw new Error("Join a voice channel first.");
+      if ("nsfw" in voice && voice.nsfw)
+        throw new Error(
+          "Music is restricted to non-NSFW voice channels. Choose a clean recording in an appropriate channel."
+        );
       const me = await guild.members.fetchMe();
       if (me.voice.channelId && me.voice.channelId !== voice.id)
         throw new Error("Join Orbit’s voice channel to control playback.");
@@ -251,6 +257,30 @@ export class MusicService {
           state.volume = stored.config.music.defaultVolume;
           await player.setGlobalVolume(state.volume);
           this.wire(player);
+          const categories = sponsorBlockCategories();
+          if (
+            categories.length &&
+            player.node.info?.plugins.some(
+              (plugin) => plugin.name === "sponsorblock-plugin"
+            )
+          ) {
+            await (player.node.rest as MusicPluginRest)
+              .setSponsorBlock(guild.id, categories)
+              .catch(async (error) => {
+                const detail = `SponsorBlock setup failed; playback may proceed without sponsor skipping.\n${errorDiagnostic(error)}`;
+                logger.warn(
+                  { guildId: guild.id, error: detail },
+                  "Optional music plugin unavailable"
+                );
+                await audit(
+                  guild.id,
+                  { id: member.id, name: member.displayName },
+                  "failed",
+                  "SponsorBlock setup",
+                  detail
+                ).catch(() => {});
+              });
+          }
         }
         state.tracks.push(
           ...tracks.map((t: LavalinkTrack): Track => ({
