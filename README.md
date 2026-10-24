@@ -137,7 +137,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 web bot worker lavalink
 ```
 
-Open **http://localhost:3000**. This uses the **dev image**: Next hot reload, `tsx watch` for the bot/worker, source bind mounts, container-only dependencies, and a separate Next development cache. PostgreSQL, Redis, and Lavalink run alongside them; migrations run before app services. No host Node/npm installation is required. Module/integration setup and source availability still apply; development is **not** credential-free demo mode.
+Open **http://localhost:3000**. This uses the **dev image**: Next hot reload, `tsx watch` for the bot/worker, source bind mounts, container-only dependencies, and a separate Next development cache. PostgreSQL, Redis, and Lavalink run alongside them; migrations run before app services. With music enabled, bot startup checks authenticated Lavalink readiness; the bot also recovers automatically from later backend outages. No host Node/npm installation is required. Module/integration setup and source availability still apply; development is **not** credential-free demo mode.
 
 **Dashboard connection refused?** Check that `web` is running. A bot-only startup does not start a web server, and `3000/tcp` on `bot` is not a published host port. To add the missing dashboard/worker:
 

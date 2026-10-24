@@ -1,75 +1,218 @@
 import { describe, expect, it } from "vitest";
-import { dealEmbed, dealLinkRow } from "../packages/core/src/deal-presentation";
+import {
+  dealEmbed,
+  dealLinkRow,
+  dealMoney,
+} from "../packages/core/src/deal-presentation";
 import { gameDealReply } from "../apps/bot/src/deal-replies";
 import { deal } from "./fixtures/deals";
+import { EmbedBuilder, ButtonBuilder, type APIEmbed } from "discord.js";
 
-describe("rich Discord game cards shared with automatic delivery", () => {
-  it("uses actual artwork, Steam ratings/counts, offers and retained purchase links", () => {
-    const value = deal(),
-      embed = dealEmbed(value);
-    expect(embed.image?.url).toBe(value.game.image);
-    expect(embed.thumbnail?.url).toBe(value.game.boxart);
-    expect(embed.fields).toContainEqual(
-      expect.objectContaining({
-        name: "Steam reviews",
-        value: "90% positive · 50,000 reviews",
-      })
-    );
-    expect(embed.fields).toContainEqual(
-      expect.objectContaining({
-        name: "Save 75%",
-        value: expect.stringContaining("10 EUR"),
-      })
-    );
-    expect(embed.footer?.text).toContain("IsThereAnyDeal");
-    expect(dealLinkRow(value)!.components[0].url).toBe(value.offer!.url);
-  });
-  it("stays under Discord's aggregate/per-field limits with three large metadata cards", () => {
-    const value = deal();
-    value.game.title = "X".repeat(500);
-    value.game.tags = Array(100).fill("**<@&123456789012345678>**".repeat(20));
-    const reply = gameDealReply([value, value, value, value]);
-    expect(reply.embeds).toHaveLength(3);
-    expect(reply.components).toHaveLength(3);
-    expect(reply.allowedMentions).toEqual({ parse: [] });
-    let total = 0;
-    for (const embed of reply.embeds) {
-      expect(embed.title!.length).toBeLessThanOrEqual(256);
-      expect(embed.description!.length).toBeLessThanOrEqual(4096);
-      total +=
-        embed.title!.length +
-        embed.description!.length +
-        embed.footer!.text.length;
-      for (const field of embed.fields!) {
-        expect(field.value.length).toBeLessThanOrEqual(1024);
-        total += field.name.length + field.value.length;
-      }
+function card(n: number) {
+  const value = deal(`12000000-0000-4000-8000-${String(n).padStart(12, "0")}`);
+  value.game.title += ` ${n}`;
+  value.game.url = `https://isthereanydeal.com/game/test-game-${n}/`;
+  value.offer!.url = `https://itad.link/test-${n}?affiliate=retained&tag=a%2Fb`;
+  return value;
+}
+function links(embeds: APIEmbed[]) {
+  return embeds.flatMap((embed) => [
+    ...(embed.url ? [embed.url] : []),
+    ...(embed.fields ?? []).flatMap((field) =>
+      [...field.value.matchAll(/\]\(<([^<>]+)>\)/g)].map((match) => match[1])
+    ),
+  ]);
+}
+function withinLimits(embeds: APIEmbed[]) {
+  let total = 0;
+  for (const embed of embeds) {
+    expect(() => new EmbedBuilder(embed).toJSON()).not.toThrow();
+    expect(embed.title!.length).toBeLessThanOrEqual(256);
+    expect(embed.description!.length).toBeLessThanOrEqual(4096);
+    total +=
+      embed.title!.length +
+      embed.description!.length +
+      embed.footer!.text.length +
+      (embed.author?.name.length ?? 0);
+    for (const field of embed.fields!) {
+      expect(field.name.length).toBeLessThanOrEqual(256);
+      expect(field.value.length).toBeLessThanOrEqual(1024);
+      expect(field.value).not.toBe("");
+      total += field.name.length + field.value.length;
     }
-    expect(total).toBeLessThanOrEqual(6000);
+  }
+  expect(total).toBeLessThanOrEqual(6000);
+}
+
+describe("readable Discord deal cards shared with automatic delivery", () => {
+  it("groups price/history/code/expiry in a full-width offer and uses actual ratings/artwork", () => {
+    const value = card(1);
+    value.offer!.voucher = "SAVE_10";
+    value.offer!.expiry = "2026-10-26T12:00:00Z";
+    const embed = dealEmbed(value);
+    expect(embed.image?.url).toBe(value.game.image);
+    expect(embed).not.toHaveProperty("thumbnail"); // no duplicate poster + banner
+    expect(embed.url).toBe(value.game.url);
+    expect(embed.description).toContain("Released **1 Jan 2020**");
+    expect(embed.description).not.toContain(value.game.id);
+    const offer = embed.fields!.find(
+      (field) => field.name === "Current offer"
+    )!;
+    expect(offer.inline).toBe(false);
+    expect(offer.value).toContain("**€10.00**  ~~€40.00~~  ·  **75% off**");
+    expect(offer.value).toContain(
+      "Recorded low: **€10.00** · **low-price match**"
+    );
+    expect(offer.value).toContain("**Code required:** SAVE\\_10");
+    expect(offer.value).toContain(
+      `<t:${Date.parse(value.offer!.expiry!) / 1000}:R>`
+    );
+    const community = embed.fields!.find(
+      (field) => field.name === "Steam community"
+    )!;
+    expect(community.value).toContain("**90% positive** · 50,000 reviews");
+    expect(community.value).toContain(
+      "**1,200** recent Steam players · ITAD snapshot"
+    );
+    expect(community.value).not.toContain("currently playing");
+    expect(embed.fields!.every((field) => field.inline === false)).toBe(true);
+    expect(embed.fields!.at(-1)!.value).toBe(`\`${value.game.id}\``);
+    expect(embed.footer?.text).toContain("IsThereAnyDeal");
+    const row = dealLinkRow(value)!;
+    expect(row.components).toHaveLength(1);
+    expect(() => new ButtonBuilder(row.components[0]).toJSON()).not.toThrow();
+    expect(row.components[0]).toMatchObject({
+      label: "Shop at Test shop",
+      url: value.offer!.url,
+    });
+    withinLimits([embed]);
   });
-  it("leaves missing artwork out and states missing prices/ratings instead of inventing them", () => {
-    const value = deal();
+
+  it("keeps each search result's original affiliate link inside its own compact card, without detached button rows", () => {
+    const values = [card(1), card(2), card(3)];
+    const reply = gameDealReply(values);
+    expect(reply.embeds).toHaveLength(3);
+    expect(reply.components).toEqual([]);
+    expect(reply.allowedMentions).toEqual({ parse: [] });
+    reply.embeds.forEach((embed, index) => {
+      const value = values[index];
+      expect(embed.author.name).toBe(`Game deals · ${index + 1} / 3`);
+      expect(embed.thumbnail?.url).toBe(value.game.boxart);
+      expect(embed).not.toHaveProperty("image");
+      expect(embed.url).toBe(value.game.url);
+      expect(
+        embed.fields!.find((field) => field.name === "Current offer")!.value
+      ).toContain(`[Shop at Test shop ↗](<${value.offer!.url}>)`);
+      for (const other of values.filter((other) => other !== value))
+        expect(JSON.stringify(embed)).not.toContain(other.offer!.url);
+    });
+    expect(new Set(links(reply.embeds)).size).toBe(6);
+    withinLimits(reply.embeds);
+  });
+
+  it("removes repeated game IDs and exact repeated destinations across different cards", () => {
+    const a = card(1),
+      b = card(2);
+    b.game.url = a.game.url;
+    b.offer!.url = a.offer!.url;
+    const reply = gameDealReply([a, a, b]);
+    expect(reply.embeds).toHaveLength(2);
+    expect(links(reply.embeds)).toEqual([a.game.url, a.offer!.url]);
+    expect(reply.components).toEqual([]);
+  });
+
+  it("does not duplicate the clickable comparison title in a button or repeat an identical offer URL", () => {
+    const value = card(1);
+    const detailed = gameDealReply([value], true);
+    expect(detailed.components).toHaveLength(1);
+    expect(detailed.components[0].components).toHaveLength(1);
+    expect(JSON.stringify(detailed.components)).not.toContain(value.game.url);
+    expect(detailed.components[0].components[0].url).toBe(value.offer!.url);
+    value.offer!.url = value.game.url;
+    expect(dealLinkRow(value)).toBeNull();
+    expect(gameDealReply([value], true).components).toEqual([]);
+    expect(links(gameDealReply([value]).embeds)).toEqual([value.game.url]);
+  });
+
+  it("retains valid long links verbatim in a field, and omits rather than truncates URLs that cannot fit", () => {
+    const value = card(1);
+    value.offer!.url = `https://itad.link/test?affiliate=${"x".repeat(550)}&tag=a%2Fb`;
+    expect(dealLinkRow(value)).toBeNull(); // Discord link-button limit is 512
+    const reply = gameDealReply([value], true);
+    expect(links(reply.embeds)).toContain(value.offer!.url);
+    expect(reply.components).toEqual([]);
+    value.offer!.url += "x".repeat(800);
+    const long = gameDealReply([value]);
+    expect(links(long.embeds)).not.toContain(value.offer!.url);
+    expect(JSON.stringify(long)).toContain("Offer URL too long to display");
+    withinLimits(long.embeds);
+  });
+
+  it("stays within Discord limits with three cards, long hostile metadata and required coupons", () => {
+    const values = [card(1), card(2), card(3), card(4)];
+    for (const value of values) {
+      value.game.title = "X".repeat(500);
+      value.game.tags = Array(100).fill(
+        "**<@&123456789012345678>**".repeat(20)
+      );
+      value.offer!.voucher = "*_".repeat(128);
+      value.game.developers = Array(100).fill("Long studio".repeat(50));
+    }
+    const reply = gameDealReply(values);
+    expect(reply.embeds).toHaveLength(3);
+    expect(reply.allowedMentions).toEqual({ parse: [] });
+    expect(JSON.stringify(reply)).not.toContain("<@&123456789012345678>");
+    withinLimits(reply.embeds);
+    const detailed = gameDealReply(values, true);
+    expect(detailed.embeds).toHaveLength(1);
+    withinLimits(detailed.embeds);
+  });
+
+  it("uses explicit unavailable states instead of inventing prices, ratings, players or artwork", () => {
+    const value = card(1);
     value.game.image = "";
     value.game.boxart = "";
     value.game.reviews = [];
     value.game.players = null;
+    delete value.game.popularRank;
+    value.game.releaseDate = "not-a-date";
     value.offer = null;
     const embed = dealEmbed(value);
     expect(embed).not.toHaveProperty("image");
     expect(embed).not.toHaveProperty("thumbnail");
+    expect(embed.description).not.toContain("Released");
     expect(embed.fields).toContainEqual(
       expect.objectContaining({ name: "Price unavailable" })
     );
     expect(embed.fields).toContainEqual(
       expect.objectContaining({
-        name: "Steam reviews",
+        name: "Steam community",
         value: "Rating unavailable",
       })
     );
-    expect(dealLinkRow(value)!.components).toHaveLength(1);
+    expect(dealLinkRow(value)).toBeNull();
+    expect(embed.url).toBe(value.game.url); // comparison still available
+    expect(dealMoney({ amount: 0, amountInt: 0, currency: "EUR" })).toBe(
+      "€0.00"
+    );
   });
-  it("does not show artwork for mature/unknown content even if a caller bypassed discovery", () => {
-    const value = deal();
+
+  it("can show a shop link without an ITAD comparison URL and filters unsafe artwork/links", () => {
+    const value = card(1);
+    value.game.url = "";
+    expect(dealLinkRow(value)!.components[0].url).toBe(value.offer!.url);
+    expect(links(gameDealReply([value]).embeds)).toEqual([value.offer!.url]);
+    value.offer!.url = "javascript:alert(1)";
+    value.game.image = "http://localhost/private.jpg";
+    value.game.boxart = "https://127.0.0.1/private.jpg";
+    const embed = dealEmbed(value);
+    expect(embed).not.toHaveProperty("image");
+    expect(embed).not.toHaveProperty("thumbnail");
+    expect(dealLinkRow(value)).toBeNull();
+  });
+
+  it("does not show mature/unknown artwork even if a caller bypassed discovery", () => {
+    const value = card(1);
     value.game.mature = true;
     expect(() => dealEmbed(value)).toThrow("non-mature");
     value.game.mature = null;

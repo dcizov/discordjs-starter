@@ -52,6 +52,37 @@ describe("Compose startup and upgrade safety", () => {
     );
   });
 
+  it("gates only the optional music dependency on authenticated backend readiness", () => {
+    expect(compose.services.bot.depends_on.lavalink).toEqual({
+      condition: "service_healthy",
+      required: false,
+    });
+    expect(compose.services.lavalink.profiles).toEqual(["music"]);
+    for (const name of ["web", "worker", "migrate", "dev"])
+      expect(compose.services[name].depends_on ?? {}).not.toHaveProperty(
+        "lavalink"
+      );
+    const health = compose.services.lavalink.healthcheck;
+    expect(health.test[0]).toBe("CMD-SHELL");
+    expect(health.test[1]).toContain("unset _JAVA_OPTIONS");
+    expect(health.test[1]).toContain("/opt/Lavalink/healthcheck Healthcheck");
+    expect(health.test[1]).not.toMatch(/curl|wget|node|password/i);
+    const source = readFileSync(
+      new URL("../docker/lavalink/Healthcheck.java", import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain("http://127.0.0.1:2333/v4/info");
+    expect(source).toContain('System.getenv("LAVALINK_SERVER_PASSWORD")');
+    expect(source).toContain('setRequestProperty("Authorization", password)');
+    expect(source).toContain("getResponseCode() == 200");
+    const docker = readFileSync(
+      new URL("../docker/lavalink/Dockerfile", import.meta.url),
+      "utf8"
+    );
+    expect(docker).toContain("javac --release 17");
+    expect(docker).toContain("/tmp/healthcheck/ /opt/Lavalink/healthcheck/");
+  });
+
   it("builds the canonical commit-pinned AAC/fMP4 adapter and never registers the broken builtin alongside it", () => {
     expect(compose.services.lavalink.build).toEqual({
       context: ".",

@@ -85,10 +85,28 @@ describe("implemented deals command dispatch (no live Discord/ITAD)", () => {
     await t.run();
     expect(api.searchGameDeals).toHaveBeenCalledWith("Test title", "DE", 3);
     const reply = t.i.editReply.mock.calls[0][0] as any;
-    expect(reply.embeds[0].image.url).toBe(deal().game.image);
-    expect(reply.components[0].components[0].url).toBe(deal().offer!.url);
+    expect(reply.embeds[0].thumbnail.url).toBe(deal().game.boxart);
+    expect(reply.embeds[0].image).toBeUndefined();
+    expect(reply.components).toEqual([]);
+    expect(
+      reply.embeds[0].fields.find(
+        (field: any) => field.name === "Current offer"
+      ).value
+    ).toContain(deal().offer!.url);
     expect(db.saveResource).not.toHaveBeenCalled();
   });
+  it("uses a single shop button for detailed info; the title is already the comparison link", async () => {
+    const t = setup("info", { game: gameId });
+    await t.run();
+    const reply = t.i.editReply.mock.calls[0][0] as any;
+    expect(reply.embeds).toHaveLength(1);
+    expect(reply.embeds[0].image.url).toBe(deal().game.image);
+    expect(reply.embeds[0].url).toBe(deal().game.url);
+    expect(reply.components).toHaveLength(1);
+    expect(reply.components[0].components).toHaveLength(1);
+    expect(reply.components[0].components[0].url).toBe(deal().offer!.url);
+  });
+
   it.each(["feed", "pause", "watch"])(
     "enforces Manage Server before %s can mutate/post",
     async (sub) => {

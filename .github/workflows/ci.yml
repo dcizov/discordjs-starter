@@ -55,8 +55,10 @@ jobs:
           node-version: 22
       - name: Test plugin artifact integrity/packaging installer offline
         run: python3 -m unittest discover -s docker/lavalink -p 'test_*.py'
-      - name: Validate full-stack development Compose override
-        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music config --quiet
+      - name: Validate full-stack and headless development Compose profiles
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live config --quiet
       - run: docker build --target runtime -t orbit:ci .
       - run: docker build --target dev -t orbit:ci-dev .
       - name: Smoke-test unprivileged development image without network access
@@ -84,7 +86,7 @@ jobs:
               print(f"::error title=Pinned music backend build failed {index}::{escaped}")
           PYTHON
           exit 1
-      - name: Verify plugin registration without Discord or provider network access
+      - name: Verify plugins, backend WebSocket and readiness without Discord/provider access
         run: |
           cleanup_backend() {
             status=$?
@@ -108,15 +110,30 @@ jobs:
           docker run -d --name orbit-lavalink-ci --network none --memory 768m \
             -e _JAVA_OPTIONS=-Xmx512M -e LAVALINK_SERVER_PASSWORD=ci-only-lavalink-password \
             -v "$PWD/docker/lavalink/application.yml:/opt/Lavalink/application.yml:ro" orbit:lavalink-ci
-          docker run --rm --network container:orbit-lavalink-ci --entrypoint node orbit:ci-dev --input-type=module -e '
+          docker run --rm --network container:orbit-lavalink-ci --entrypoint node orbit:ci-dev --import tsx --input-type=module -e '
             import assert from "node:assert/strict";
             import fs from "node:fs";
             import { setTimeout } from "node:timers/promises";
+            import { Connector } from "shoukaku";
+            import { MusicBackend } from "/app/apps/bot/src/music-backend.ts";
             process.on("uncaughtException", error => {
               const detail = String(error.stack ?? error).replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
               console.error(`::error title=Music backend smoke test failed::${detail}`);
               process.exit(1);
             });
+            // Start the actual application connection controller while Java may
+            // still be booting. This transport has NO Discord login/gateway.
+            class OfflineConnector extends Connector {
+              listen(nodes) { queueMicrotask(() => this.ready(nodes)); }
+              getId() { return "120000000000000001"; }
+              sendPacket() { throw Error("CI must never send Discord voice packets"); }
+            }
+            const backend = new MusicBackend(new OfflineConnector(null), [{
+              name: "main", url: "127.0.0.1:2333", auth: "ci-only-lavalink-password",
+            }], { resume: true, restTimeout: 5 }, { retryDelayMs: 250, maxRetryDelayMs: 1000 });
+            let lastSocketError;
+            backend.on("error", (_name, error) => { lastSocketError = error.message; });
+            const connected = new Promise(resolve => backend.once("ready", resolve));
             let info, lastError;
             for (let attempt = 0; attempt < 90; attempt++) {
               try {
@@ -144,8 +161,23 @@ jobs:
             assert.deepEqual([...info.sourceManagers].sort(), ["bandcamp", "ocremix", "soundcloud", "youtube"]);
             for (const filter of ["high-pass", "low-pass", "normalization", "echo"]) assert.ok(info.filters.includes(filter), filter);
             assert.ok(!info.filters.includes("lowPass"), "No duplicate built-in low-pass filter");
-            console.log("All nine pinned plugins + Soundy registered; only approved, unique sources/filters are active.");
+            await Promise.race([
+              connected,
+              setTimeout(10000, undefined, { ref: false }).then(() => { throw Error(`Backend WebSocket not ready: ${lastSocketError}`); }),
+            ]);
+            assert.ok(backend.getIdealNode(), "Application connection controller must retain the connected node");
+            assert.equal((await backend.getIdealNode().rest.getLavalinkInfo()).version.semver, "4.2.2");
+            await setTimeout(300);
+            assert.ok(backend.getIdealNode(), "Successful WebSocket must not immediately close after a retry");
+            backend.stop();
+            console.log("All nine pinned plugins + Soundy registered; supervised WebSocket/REST connected; only approved unique sources/filters active.");
           '
+          # Exercise the exact image-side readiness probe, including bad auth.
+          docker exec orbit-lavalink-ci sh -c 'unset _JAVA_OPTIONS; exec java -Xms8m -Xmx32m -XX:+UseSerialGC -cp /opt/Lavalink/healthcheck Healthcheck'
+          if docker exec -e LAVALINK_SERVER_PASSWORD=ci-only-wrong-password orbit-lavalink-ci sh -c 'unset _JAVA_OPTIONS; exec java -Xms8m -Xmx32m -XX:+UseSerialGC -cp /opt/Lavalink/healthcheck Healthcheck'; then
+            echo 'Readiness must fail with an incorrect password.' >&2
+            exit 1
+          fi
       - name: Open the real Dev Container and verify dashboard HTTP without a second bot
         timeout-minutes: 10
         run: bash .devcontainer/ci-smoke.sh

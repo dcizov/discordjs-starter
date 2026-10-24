@@ -26,8 +26,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 The bot now distinguishes **gateway connected / initializing** from
 **Orbit is ready; dashboard action consumer is listening**. It also rejects a
 `DISCORD_CLIENT_ID` that does not belong to the logged-in bot token. Keep
-credentials server-side; do not paste them into chat/logs. Register commands
-with `npm run commands:register` in the intended guild/application if needed.
+credentials server-side; do not paste them into chat/logs. If registration is
+needed, use the container-side REST-only command in [the development guide](DEVELOPMENT.md#2-start-every-service) for the intended guild/application.
 This is a gateway-based bot: leave Discord's **Interactions Endpoint URL**
 empty rather than pointing it at an old/unimplemented HTTP endpoint.
 
@@ -84,13 +84,55 @@ member fetch. No code can acknowledge a gateway command while its bot is stopped
    docker compose logs --tail=100 lavalink
    ```
 
-   The first build downloads checksum-pinned plugin artifacts and the pinned Soundy source/Gradle dependencies, runs Soundy's offline unit tests, and packages the JARs into the official Lavalink image. Nothing downloads plugins at runtime. See [the plugin inventory/configuration](MUSIC-PLUGINS.md). Java/Gradle are not required on your host. No provider/Discord integration test runs during the build. The service publishes only `127.0.0.1:2333:2333`; allow the Java service to finish starting before testing music.
+   The first build downloads checksum-pinned plugin artifacts and the pinned Soundy source/Gradle dependencies, runs Soundy's offline unit tests, and packages the JARs into the official Lavalink image. Nothing downloads plugins at runtime. See [the plugin inventory/configuration](MUSIC-PLUGINS.md). Java/Gradle are not required on your host. No provider/Discord integration test runs during the build. The service publishes only `127.0.0.1:2333:2333`; its local authenticated `/v4/info` probe reports readiness. The probe is a tiny standard-library Java class compiled in the existing build stage, not a requirement for host Java/curl/Node.
 
 3. Restart `npm run dev:bot` after `.env` changes. `Lavalink connected` verifies the WebSocket connection. The bot also explicitly requests `/v4/info` to populate backend/plugin versions; Shoukaku 4.3.0 does not populate `node.info` automatically. Metadata failures are logged and retried on the next lookup, without inventing a backend version.
 4. When the bot runs **inside Compose**, the supplied environment selects `lavalink:2333` automatically when `LAVALINK_PASSWORD` is nonempty. `localhost` would refer to the bot container itself. The backend receives the same password. For the main bot with hot reload, see [Docker development](DEVELOPMENT.md#run-just-the-main-bot).
 5. Give the bot **Connect** and **Speak** in a normal server voice channel, and **Embed Links** for rich command replies. Join the voice channel and use `/play`. Stage-channel speaker promotion is not automated.
 
 `ECONNREFUSED` means there is no reachable listener; check startup, address, and ports. An authentication failure means the bot/backend passwords need to match. Neither is the same as a provider's error after a successful connection.
+
+## Backend availability is not a Discord Portal permission
+
+The bot can be gateway-ready and handle `/deals` while its independent Lavalink connection is down. An error **before track lookup/voice join**, especially `ECONNREFUSED`, is not repaired by enabling another Discord privileged intent, granting Administrator, changing the Interactions Endpoint URL, or publishing extra audio ports.
+
+The reported cold-start sequence exposed a reproducible **Shoukaku 4.3.0 retry bug**: its `Node.connect()` saves a failed attempt in `connectError`, later successfully opens a WebSocket, but never clears that old error. It then closes the newly working socket (often close code 1000), removes the node from its pool and stops reconnecting. A normal-looking "connection successfully established" in Lavalink's log alone was therefore not enough. Offline tests reproduce the defect using the actual installed library and real loopback WebSockets.
+
+Orbit now uses one connection attempt per Shoukaku call and supervises calls with a **5 → 10 → 20 → 30 second capped backoff**, continuing after extended downtime. It retains the node/REST identity and resumable session, refreshes metadata on ready, and cancels retries/sockets on shutdown. A configured-but-disconnected backend is labeled **retrying**, not "configure Lavalink". Music control jobs are still **not retried**. If a restarted backend cannot resume its previous session, stale local players/queue snapshots are cleared instead of pretending they are playing or automatically replaying tracks.
+
+Compose also waits for Lavalink's authenticated readiness when the music profile is active. The dependency is optional: a missing/failed music service does not permanently block the non-music bot features. Recovery still matters for later backend restarts and host/editor-run bots; readiness ordering alone does not fix a retry bug.
+
+### Recover an existing Docker development stack
+
+Keep your existing `.env` and data. Pull the updated working branch, then run from the **Docker host**:
+
+```sh
+# Stop the old gateway process, not the database/worker. No volume reset.
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music stop bot
+# No service list: bring up/rebuild the whole enabled stack, including bot/Lavalink.
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music ps -a bot lavalink
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music logs -f --tail=100 bot lavalink
+```
+
+**`up ... web worker` only targets web/worker and their dependencies.** Merely passing `--profile music` enables that profile; it does not start every service when an explicit service list is supplied, and it does not restart an already-stuck bot. Expect Lavalink **healthy**, then bot **Lavalink connected** and **Lavalink metadata loaded**. No schema migration, volume deletion, new credentials or command re-registration is required for this fix.
+
+For a read-only authenticated REST check from the bot's Docker network (npm runs **inside** the one-off container; no second Discord login):
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music run --rm --no-deps bot npm run music:doctor
+```
+
+`music:doctor` success verifies REST/metadata, not the running bot's WebSocket or audible voice playback. Check both doctor output and the bot's connection logs. HTTP 401 means password mismatch; do not paste credentials or raw voice/session logs.
+
+### Discord permissions that actually apply to voice
+
+- **Guild Voice States** is a normal, non-privileged gateway intent, already requested in code; it has no privileged-intent switch to enable in the Developer Portal.
+- The invited bot needs **View Channel, Connect and Speak** in the chosen ordinary voice channel, including its channel overrides. Choose a non-full/non-NSFW channel. Administrator is not necessary.
+- **Embed Links** is needed in text destinations for rich replies. `bot` and `applications.commands` are the invite scopes.
+- This bot also requests **Server Members** and **Message Content** for its other modules. Their Portal toggles are still required by that overall bot configuration; missing privileged intents cause a gateway login/disconnect error, not a localhost/Lavalink connection refusal.
+
+The connection/retry and permission tests do not log in to Discord or prove live provider playback. Voice-handshake failures after the backend is ready remain a separate stage described below.
 
 ### Run without music
 

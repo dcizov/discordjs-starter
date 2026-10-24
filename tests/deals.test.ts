@@ -112,6 +112,33 @@ describe("documented public ITAD transport", () => {
     ]);
     expect(await api.search("test game")).toHaveLength(1);
   });
+  it("deduplicates provider search IDs before the result limit, enrichment and price request", async () => {
+    const transport = vi.fn(async (input: string, _init?: RequestInit) => {
+      if (input.includes("/games/search/"))
+        return [rawGame(), rawGame(), rawGame(otherId)];
+      if (input.includes("/games/info/"))
+        return rawInfo(new URL(input).searchParams.get("id")!);
+      return [
+        { id: gameId, deals: [rawOffer()] },
+        { id: otherId, deals: [rawOffer()] },
+      ];
+    });
+    const results = await new ITADClient("fixture", transport).searchDeals(
+      "test game",
+      "DE",
+      "EUR",
+      2
+    );
+    expect(results.map((result) => result.game.id)).toEqual([gameId, otherId]);
+    expect(
+      transport.mock.calls.filter(([url]) => url.includes("/games/info/"))
+    ).toHaveLength(2);
+    const prices = transport.mock.calls.find(([url]) =>
+      url.includes("/games/prices/")
+    )!;
+    expect(JSON.parse(prices[1]!.body as string)).toEqual([gameId, otherId]);
+  });
+
   it("uses the documented FLAT filters and top-level mature=false (not an invented false-only filter)", async () => {
     const transport = vi.fn(async (_input: string, _init?: RequestInit) => ({
       list: [],

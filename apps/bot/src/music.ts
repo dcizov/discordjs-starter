@@ -16,7 +16,8 @@ import {
   type GuildMember,
 } from "discord.js";
 import { randomUUID } from "node:crypto";
-import { Shoukaku, type Track as LavalinkTrack, type Player } from "shoukaku";
+import { type Track as LavalinkTrack, type Player } from "shoukaku";
+import { MusicBackend } from "./music-backend";
 import { MusicNodeMetadata } from "./music-node";
 import { joinMusicVoice, MusicDiscordConnector } from "./music-voice";
 import { MusicPluginRest, sponsorBlockCategories } from "./music-plugins";
@@ -26,7 +27,7 @@ import {
   resolveMusicQuery,
 } from "./music-source";
 export class MusicService {
-  readonly backend: Shoukaku | null;
+  readonly backend: MusicBackend | null;
   private sessions = new Map<string, MusicState>();
   private locks = new Map<string, Promise<unknown>>();
   private lastSave = new Map<string, number>();
@@ -36,7 +37,7 @@ export class MusicService {
     this.voiceConnector = new MusicDiscordConnector(client);
     this.backend =
       process.env.LAVALINK_URL && process.env.LAVALINK_PASSWORD
-        ? new Shoukaku(
+        ? new MusicBackend(
             this.voiceConnector,
             [
               {
@@ -49,15 +50,35 @@ export class MusicService {
             {
               resume: true,
               resumeTimeout: 60,
-              reconnectTries: 10,
-              reconnectInterval: 5,
+              restTimeout: 15,
               structures: { rest: MusicPluginRest },
             }
           )
         : null;
-    this.backend?.on("ready", (name) => {
+    this.backend?.on("ready", (name, resumed, resumedByLibrary) => {
       void setHealth("Music backend", "healthy", 0, "Lavalink connected");
-      logger.info("Lavalink connected");
+      logger.info({ resumed, resumedByLibrary }, "Lavalink connected");
+      // A restarted server may accept a new session without any old players.
+      // Do not leave a phantom now-playing state, or replay queued music/jobs.
+      if (!resumed && !resumedByLibrary)
+        for (const [id, player] of this.backend?.players ?? []) {
+          if (player.node.name !== name) continue;
+          void this.locked(id, async () => {
+            if (this.backend?.players.get(id) !== player) return;
+            await this.backend.leaveVoiceChannel(id);
+            this.sessions.set(id, emptyMusic());
+            await this.persist(id);
+            logger.info(
+              { guildId: id },
+              "Cleared stale music session after backend restart; no tracks replayed"
+            );
+          }).catch((error) =>
+            logger.warn(
+              { error: errorDiagnostic(error), guildId: id },
+              "Could not clear restarted music session"
+            )
+          );
+        }
       const node = this.backend?.nodes.get(name);
       if (node)
         void this.metadata
@@ -87,10 +108,21 @@ export class MusicService {
         "Lavalink connection error"
       );
     });
+    this.backend?.on("reconnecting", (_name, _tries, seconds) => {
+      logger.warn(
+        { retryInSeconds: seconds },
+        "Lavalink disconnected; automatic retry scheduled"
+      );
+    });
     this.backend?.on(
       "disconnect",
       () =>
-        void setHealth("Music backend", "offline", 0, "Lavalink disconnected")
+        void setHealth(
+          "Music backend",
+          "degraded",
+          0,
+          "Lavalink disconnected; retrying automatically"
+        )
     );
   }
   private async locked<T>(id: string, fn: () => Promise<T>): Promise<T> {
@@ -189,7 +221,7 @@ export class MusicService {
     const node = this.backend?.getIdealNode();
     if (!node)
       throw new Error(
-        "The music backend is unavailable. Ask an administrator to configure Lavalink."
+        "Lavalink is configured but not connected. Orbit is retrying automatically. Wait for 'Lavalink connected' in the bot logs; check that both bot and lavalink services are running. This is not a Discord voice-permission error."
       );
     const info = await this.metadata.read(node).catch((error) => {
       logger.warn(
@@ -383,13 +415,18 @@ export class MusicService {
     const node = this.backend?.getIdealNode();
     await setHealth(
       "Music backend",
-      node ? "healthy" : "offline",
+      node ? "healthy" : this.backend ? "degraded" : "offline",
       0,
-      node ? "Lavalink connected" : "Configure Lavalink to enable music"
+      node
+        ? "Lavalink connected"
+        : this.backend
+          ? "Lavalink configured but disconnected; retrying automatically"
+          : "Music disabled: configure LAVALINK_URL and LAVALINK_PASSWORD"
     );
   }
   async shutdown() {
     if (!this.backend) return;
+    this.backend.stop();
     for (const id of this.backend.players.keys()) {
       await this.backend.leaveVoiceChannel(id).catch(() => {});
       await putMusicState(id, emptyMusic());

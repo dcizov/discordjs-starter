@@ -29,9 +29,18 @@ For host/editor development use `npm run commands:register` with the same applic
 | `/deals list`                                              | Show this server's general feeds, destinations, intervals and popularity/review thresholds.                                                                                                                                                            |
 | `/deals watch game:<UUID-from-search> channel:#game-deals` | **Manage Server:** deliberately watch one verified non-mature base game, even if it falls outside discovery's popularity thresholds. The title is loaded from ITAD rather than trusted from user input.                                                |
 
-Search/info/now replies remain ephemeral and do not ping anyone. Their offer/compare buttons use ITAD-provided links, retaining affiliate parameters. A missing price is labeled **unavailable**, never silently `0` or "free"; missing artwork/ratings/players are not invented. Provider-reported zero prices are valid when actually supplied. Numbers for players are **ITAD snapshots**, not a live Steam API guarantee.
+Search/info/now replies remain ephemeral and do not ping anyone. Their shop links and clickable game titles use ITAD-provided URLs, retaining affiliate parameters. A missing price is labeled **unavailable**, never silently `0` or "free"; missing artwork/ratings/players are not invented. Provider-reported zero prices are valid when actually supplied. Numbers for players are **ITAD snapshots**, not a live Steam API guarantee.
 
 The default country is Germany/EUR. Slash choices also cover US/USD, GB/GBP, CA/CAD and AU/AUD. The dashboard supports additional configured country/currency pairs. Orbit never converts currencies: only quotes in the chosen currency qualify.
+
+## Card layout and why the old links repeated
+
+Discord renders **all message action rows after all embeds**, not underneath each individual game. The old search reply added two generic buttons per result, producing a detached pile of similar-looking shop/compare rows. The comparison button also duplicated the already-clickable game title. Identical labels across different games did not necessarily mean identical URLs.
+
+- **Search/preview:** numbered compact cards, a small provider cover, human-readable release/tags, full-width **Current offer** and **Steam community** sections. No cramped three-column price/review grid or three giant banners. Prices have currency-aware formatting, original-price strikethrough and a clear discount; recorded low, required coupon and known expiry stay with their offer.
+- **Links stay with their game:** each compact card contains its own **Shop at …** link. Click the **game title** for the ITAD comparison page. There are no detached search button rows. Exact repeated destination URLs and duplicate game IDs are suppressed; different game pages remain distinct, even at the same shop.
+- **Detailed info / automatic channel post:** one landscape banner (or a cover fallback), extra supplied critic/developer/platform details, and at most **one distinct shop button**. The title already serves as the comparison link, so no duplicate Compare button is added. The copyable game ID is below the useful data for info/watch commands, not in the opening paragraph.
+- **No rewritten purchase links:** affiliate parameters are retained verbatim, including escaping/encoded values. A URL longer than Discord's 512-character button limit can use an in-card link if it fits. A URL that cannot fit is explicitly omitted, never silently truncated into another destination. Repeated platform/DRM tags are deduplicated too.
 
 ## Configure a channel for automatic posting
 
@@ -70,7 +79,7 @@ Managers can change the cutoffs (review minimum at least 1,000; popularity pool 
 ## Useful extra details and safeguards
 
 - **Real data:** cards use provider-returned artwork, rating source/count, prices, voucher, historical-low amount/currency and expiry. Prices/links are not rewritten and affiliate tags are retained. No absence is fabricated into a score/price of zero. Historical-low-only filters require comparable price data; a missing or different-currency low does not count.
-- **Same presentation:** command cards and automatic channel posts use the shared deal presenter; scheduled posts include artwork/ratings and offer/compare buttons too.
+- **Same presentation:** command cards and automatic channel posts use the shared deal presenter; scheduled posts include artwork/ratings, a comparison title and one distinct shop button.
 - **Deduplication:** an offer identity uses game/shop/currency/price/coupon/known expiry, not ITAD's changing refresh timestamp. Unchanged offers are not reposted every poll. A lower price/new coupon/known new campaign expiry can produce a new event; when expiry is unknown, an identical returning offer remains suppressed. Existing transactional outbox reservations and Discord nonces protect retries.
 - **Posting cap:** default **three new posts per check**, configurable 1–5, applied **after deduplication** so already-seen top results cannot starve later qualifying games. Discovery is bounded to two 200-item API pages and at most 40 metadata candidates per check.
 - **Fresh authorization/configuration:** dispatch reloads the current server/module/resource/destination. Delivery rechecks the current thresholds, country, channel, pause/module state, quote age and expiry. Old queued records without verified metadata, quotes older than 24 hours, or records for a changed channel fail rather than posting outdated/unverified offers. No database/Redis reset is used.
@@ -101,4 +110,4 @@ Both contain the original `guild`/`ping` starter commands and database scaffoldi
 
 ## Verification boundary
 
-Offline fixtures test endpoint versions/schema handling, header-only secrets, exact links, null data, popularity/review/type/maturity/region filtering, stable identities, posting caps after deduplication, current routing and permission guards. Browser tests exercise persistent channel/threshold configuration in demo; no real posts are claimed by those tests. Live prices/ratings/artwork/availability and actual Discord delivery still depend on your API credentials, regional offers, running worker and channel permissions.
+Offline fixtures test endpoint versions/schema handling, header-only secrets, exact links, in-card link association/deduplication, compact/detailed artwork, full-width fields, Discord limits, null data, popularity/review/type/maturity/region filtering, stable identities, posting caps after deduplication, current routing and permission guards. Browser tests exercise persistent channel/threshold configuration in demo; no real posts are claimed by those tests. Live prices/ratings/artwork/availability and actual Discord delivery still depend on your API credentials, regional offers, running worker and channel permissions.

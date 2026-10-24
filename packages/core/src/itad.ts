@@ -351,10 +351,14 @@ export class ITADClient {
     currency: string,
     limit = 3
   ): Promise<GameDeal[]> {
-    const found = (await this.search(query)).slice(
-      0,
-      Math.min(5, Math.max(1, limit))
-    );
+    const ids = new Set<string>();
+    const found = (await this.search(query))
+      .filter((game) => {
+        if (ids.has(game.id)) return false;
+        ids.add(game.id);
+        return true;
+      })
+      .slice(0, Math.min(5, Math.max(1, limit)));
     const [games, prices] = await Promise.all([
       Promise.all(found.map((game) => this.info(game.id))),
       this.prices(
