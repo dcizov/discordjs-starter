@@ -1,0 +1,54 @@
+# Full-stack hot reload. Combine with the base file; keep DEMO_MODE=false in .env
+# for a real test-server bot. Production Compose remains unchanged.
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
+x-dev-app: &dev-app
+  build:
+    context: .
+    target: dev
+  image: orbit-community:dev
+  environment: &dev-env
+    NODE_ENV: development
+  volumes:
+    - .:/app
+    # Linux container dependencies must not be replaced by host node_modules.
+    - dev_node_modules:/app/node_modules
+
+services:
+  web:
+    <<: *dev-app
+    command: ["npm", "run", "dev"]
+    environment:
+      <<: *dev-env
+      WATCHPACK_POLLING: "${WATCHPACK_POLLING:-true}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - dev_node_modules:/app/node_modules
+      # Keep Next's Linux development cache out of host/runtime build artifacts.
+      - dev_next:/app/apps/web/.next
+
+  migrate:
+    <<: *dev-app
+    command: ["npm", "run", "db:migrate"]
+
+  bot:
+    <<: *dev-app
+    command: ["npm", "run", "dev:bot"]
+    environment:
+      <<: *dev-env
+      CHOKIDAR_USEPOLLING: "${CHOKIDAR_USEPOLLING:-true}"
+
+  worker:
+    <<: *dev-app
+    command: ["npm", "run", "dev:worker"]
+    environment:
+      <<: *dev-env
+      CHOKIDAR_USEPOLLING: "${CHOKIDAR_USEPOLLING:-true}"
+
+volumes:
+  dev_node_modules:
+  dev_next:

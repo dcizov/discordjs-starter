@@ -116,6 +116,23 @@ Configuration is read on every bot action/message; feed schedules are reconciled
 
 ## Docker Compose
 
+### Full-stack development with hot reload
+
+Keep your existing `.env`, set `DEMO_MODE=false`, and configure Discord/OAuth, your deals API key, and a strong Lavalink password. Stop any host-run bot/worker and web process on port 3000, then run:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music run --rm --no-deps bot npm run commands:register
+```
+
+Open **http://localhost:3000**. This uses the **dev image**: Next hot reload, `tsx watch` for the bot/worker, source bind mounts, container-only dependencies, and a separate Next development cache. PostgreSQL, Redis, and Lavalink run alongside them; migrations run before app services. No host Node/npm installation is required. Module/integration setup and source availability still apply; development is **not** credential-free demo mode.
+
+See [the Docker development guide](docs/DEVELOPMENT.md) for exact environment prerequisites, logs, read-only music diagnostics, dependency updates, and data-safe stopping.
+
+### Runtime images / demo
+
+The base Compose file below uses production builds, not hot reload.
+
 ```sh
 # Demo web + local data services; no live bot or worker is started.
 docker compose up -d --build

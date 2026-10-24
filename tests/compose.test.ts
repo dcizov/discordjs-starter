@@ -60,3 +60,110 @@ describe("Compose startup and upgrade safety", () => {
     }
   });
 });
+
+const devDocument = parseDocument(
+  readFileSync(new URL("../docker-compose.dev.yml", import.meta.url), "utf8"),
+  { merge: true }
+);
+const development = devDocument.toJS();
+const applicationServices = ["web", "bot", "worker", "migrate"] as const;
+describe("full-stack Docker development override", () => {
+  it("is valid YAML and overrides only the four application services", () => {
+    expect(devDocument.errors).toEqual([]);
+    expect(Object.keys(development.services).sort()).toEqual(
+      [...applicationServices].sort()
+    );
+    // Database, Redis, Lavalink, their credentials and their persistent volumes
+    // remain defined exclusively by the base Compose file.
+    expect(Object.keys(development.volumes).sort()).toEqual([
+      "dev_next",
+      "dev_node_modules",
+    ]);
+  });
+
+  it("uses the actual dev build and development environment for every app", () => {
+    for (const name of applicationServices) {
+      const service = development.services[name];
+      expect(service.build).toEqual({ context: ".", target: "dev" });
+      expect(service.image).toBe("orbit-community:dev");
+      expect(service.environment.NODE_ENV).toBe("development");
+      expect(compose.services[name].build.target).toBe("runtime");
+      expect(compose.services[name].environment.NODE_ENV).toBe("production");
+    }
+  });
+
+  it("preserves demo gating and internal connection URLs rather than forcing live credentials or localhost", () => {
+    for (const name of applicationServices) {
+      const overrides = development.services[name].environment;
+      for (const key of [
+        "DEMO_MODE",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "LAVALINK_URL",
+        "LAVALINK_PASSWORD",
+        "DISCORD_TOKEN",
+      ])
+        expect(overrides).not.toHaveProperty(key);
+      expect(compose.services[name].environment.DATABASE_URL).toContain(
+        "@postgres:5432/"
+      );
+      expect(compose.services[name].environment.REDIS_URL).toBe(
+        "redis://redis:6379"
+      );
+      expect(compose.services[name].environment.LAVALINK_URL).toBe(
+        "${LAVALINK_PASSWORD:+lavalink:2333}"
+      );
+    }
+  });
+
+  it("runs source commands with hot reload and migrations without requiring dist bundles", () => {
+    expect(development.services.web.command).toEqual(["npm", "run", "dev"]);
+    expect(development.services.bot.command).toEqual(["npm", "run", "dev:bot"]);
+    expect(development.services.worker.command).toEqual([
+      "npm",
+      "run",
+      "dev:worker",
+    ]);
+    expect(development.services.migrate.command).toEqual([
+      "npm",
+      "run",
+      "db:migrate",
+    ]);
+  });
+
+  it("binds source while isolating Linux dependencies and the web development cache", () => {
+    for (const name of applicationServices) {
+      expect(development.services[name].volumes).toContain(".:/app");
+      expect(development.services[name].volumes).toContain(
+        "dev_node_modules:/app/node_modules"
+      );
+    }
+    expect(development.services.web.volumes).toContain(
+      "dev_next:/app/apps/web/.next"
+    );
+    const dockerfile = readFileSync(
+      new URL("../Dockerfile", import.meta.url),
+      "utf8"
+    );
+    const devStage = dockerfile
+      .split("FROM deps AS dev\n")[1]
+      .split("FROM deps AS builder")[0];
+    expect(devStage).toContain("mkdir -p .data apps/web/.next");
+    expect(devStage).toContain("chown -R node:node /app");
+    expect(devStage).toContain("USER node");
+  });
+
+  it("waits for migrations/Redis before serving live dashboard requests", () => {
+    expect(development.services.web.depends_on).toEqual({
+      migrate: { condition: "service_completed_successfully" },
+      redis: { condition: "service_healthy" },
+    });
+    expect(development.services.web.environment.WATCHPACK_POLLING).toBe(
+      "${WATCHPACK_POLLING:-true}"
+    );
+    for (const name of ["bot", "worker"])
+      expect(development.services[name].environment.CHOKIDAR_USEPOLLING).toBe(
+        "${CHOKIDAR_USEPOLLING:-true}"
+      );
+  });
+});

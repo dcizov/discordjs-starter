@@ -16,7 +16,8 @@ RUN npm ci --no-audit --no-fund
 
 FROM deps AS dev
 COPY . .
-RUN mkdir -p .data && chown -R node:node /app
+# Seed writable named volumes before the development bind mount hides /app.
+RUN mkdir -p .data apps/web/.next && chown -R node:node /app
 USER node
 ENV NODE_ENV=development
 EXPOSE 3000

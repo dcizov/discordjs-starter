@@ -48,4 +48,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Validate full-stack development Compose override
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music config --quiet
       - run: docker build --target runtime -t orbit:ci .
+      - run: docker build --target dev -t orbit:ci-dev .
+      - name: Smoke-test unprivileged development image without network access
+        run: |
+          docker run --rm --network none --entrypoint sh orbit:ci-dev -c '
+            node -e "const fs=require(\"node:fs\"); if(process.getuid()===0) throw Error(\"Development must not run as root\"); for(const p of [\"/app/.data\",\"/app/apps/web/.next\",\"/app/node_modules\"]) fs.accessSync(p,fs.constants.W_OK)" &&
+            npm run roles:export -- --help &&
+            npm run music:doctor -- --help
+          '
