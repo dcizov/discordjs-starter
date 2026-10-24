@@ -60,7 +60,22 @@ jobs:
             npm run music:doctor -- --help
           '
       - name: Build pinned SoundCloud AAC/fMP4 backend and run its offline unit tests
-        run: docker build -f docker/lavalink/Dockerfile -t orbit:lavalink-ci .
+        run: |
+          set -o pipefail
+          if docker build --progress=plain -f docker/lavalink/Dockerfile -t orbit:lavalink-ci . 2>&1 | tee "$RUNNER_TEMP/lavalink-build.log"; then
+            exit 0
+          fi
+          # Keep the failure readable through the Checks API when the Actions
+          # log-download CDN is unavailable. Only this credential-free build.
+          python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+          text = Path(os.environ["RUNNER_TEMP"], "lavalink-build.log").read_text(errors="replace")
+          tail = "\n".join(text.splitlines()[-80:])[-16000:]
+          escaped = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+          print(f"::error title=Pinned SoundCloud backend build failed::{escaped}")
+          PYTHON
+          exit 1
       - name: Verify plugin registration without Discord or provider network access
         run: |
           trap 'docker logs orbit-lavalink-ci; docker rm -f orbit-lavalink-ci' EXIT
