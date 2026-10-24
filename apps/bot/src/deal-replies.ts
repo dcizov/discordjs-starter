@@ -20,6 +20,12 @@ export function gameDealReply(results: GameDeal[], detailed = false) {
           : "Game deals",
     },
   }));
+  if (detailed && games[0])
+    embeds[0].fields!.push({
+      name: "Game ID · advanced reference",
+      value: `\`${games[0].game.id}\``,
+      inline: false,
+    });
   // Discord positions ALL action rows after ALL embeds, not beneath each card.
   // Search/preview links live in the corresponding card. Only a single detailed
   // result gets a shop button; its title already links to the comparison page.

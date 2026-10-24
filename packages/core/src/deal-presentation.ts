@@ -153,13 +153,8 @@ export function dealEmbed(
         inline: false,
       });
   }
-  // Keep the copyable identifier useful for /deals info and /deals watch, but
-  // below the actual offer/community data rather than in the opening paragraph.
-  fields.push({
-    name: "Game ID · for info / watch",
-    value: `\`${game.id}\``,
-    inline: false,
-  });
+  // Public cards do not need technical IDs. The explicit /deals info reply
+  // can expose its advanced reference separately; workers use this clean default.
   const released = releaseDate(game.releaseDate);
   const image = providerUrl(game.image, true),
     boxart = providerUrl(game.boxart, true);

@@ -62,6 +62,8 @@ describe("implemented command catalog", () => {
     });
     expect(find("role-panel").arguments[0].autocomplete).toBe(true);
     expect(find("shop claim").arguments[0].autocomplete).toBe(true);
+    expect(find("deals info").arguments[0].autocomplete).toBe(true);
+    expect(find("deals watch").arguments[0].autocomplete).toBe(true);
     expect(find("repeat").arguments[0].choices).toEqual([
       { name: "Off", value: "off" },
       { name: "Current track", value: "track" },

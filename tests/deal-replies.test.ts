@@ -76,7 +76,7 @@ describe("readable Discord deal cards shared with automatic delivery", () => {
     );
     expect(community.value).not.toContain("currently playing");
     expect(embed.fields!.every((field) => field.inline === false)).toBe(true);
-    expect(embed.fields!.at(-1)!.value).toBe(`\`${value.game.id}\``);
+    expect(JSON.stringify(embed.fields)).not.toContain(value.game.id);
     expect(embed.footer?.text).toContain("IsThereAnyDeal");
     const row = dealLinkRow(value)!;
     expect(row.components).toHaveLength(1);
@@ -108,6 +108,27 @@ describe("readable Discord deal cards shared with automatic delivery", () => {
     });
     expect(new Set(links(reply.embeds)).size).toBe(6);
     withinLimits(reply.embeds);
+  });
+
+  it("keeps IDs out of routine search/preview/channel cards and exposes them only in explicit detailed info", () => {
+    const value = card(1);
+    for (const embed of [...gameDealReply([value]).embeds, dealEmbed(value)]) {
+      const visible = JSON.stringify({
+        title: embed.title,
+        description: embed.description,
+        fields: embed.fields,
+        footer: embed.footer,
+      });
+      expect(visible).not.toContain(value.game.id);
+      expect(visible).not.toContain("Game ID");
+    }
+    const detailed = gameDealReply([value], true);
+    expect(detailed.embeds[0].fields).toContainEqual({
+      name: "Game ID · advanced reference",
+      value: `\`${value.game.id}\``,
+      inline: false,
+    });
+    expect(value.game.id).toBe(card(1).game.id); // internal identities/delivery dedup remain unchanged
   });
 
   it("removes repeated game IDs and exact repeated destinations across different cards", () => {

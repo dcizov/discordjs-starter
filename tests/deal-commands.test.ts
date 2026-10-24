@@ -107,6 +107,27 @@ describe("implemented deals command dispatch (no live Discord/ITAD)", () => {
     expect(reply.components[0].components[0].url).toBe(deal().offer!.url);
   });
 
+  it("resolves a recently searched title for info and watch without making the user copy an ID", async () => {
+    await setup("search", { query: "Fictional" }).run();
+    await setup("info", { game: deal().game.title }).run();
+    expect(api.gameDealInfo).toHaveBeenLastCalledWith(gameId, "DE");
+    await setup("watch", { game: deal().game.title }).run();
+    expect(api.gameDealInfo).toHaveBeenLastCalledWith(gameId, "DE");
+    expect(db.saveResource).toHaveBeenCalledWith(
+      guildId,
+      "deal",
+      expect.objectContaining({ data: expect.objectContaining({ gameId }) }),
+      expect.anything()
+    );
+  });
+  it("rejects an unselected/unknown title before calling the provider or changing a watch", async () => {
+    await expect(
+      setup("info", { game: "a never-searched unknown title" }).run()
+    ).rejects.toThrow("Run /deals search first");
+    expect(api.gameDealInfo).not.toHaveBeenCalled();
+    expect(db.saveResource).not.toHaveBeenCalled();
+  });
+
   it.each(["feed", "pause", "watch"])(
     "enforces Manage Server before %s can mutate/post",
     async (sub) => {

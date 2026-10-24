@@ -1,5 +1,11 @@
 import { EventEmitter } from "node:events";
-import { ChannelType, type Client, type GuildMember } from "discord.js";
+import {
+  ChannelType,
+  PermissionFlagsBits,
+  PermissionsBitField,
+  type Client,
+  type GuildMember,
+} from "discord.js";
 import type { Player } from "shoukaku";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultConfig } from "../packages/core/src/config";
@@ -95,6 +101,45 @@ describe("music configuration, availability and session truthfulness", () => {
     ).rejects.toThrow("not a Discord voice-permission error");
     expect(db.putMusicState).not.toHaveBeenCalled();
   });
+  it.each([
+    PermissionFlagsBits.ViewChannel,
+    PermissionFlagsBits.Connect,
+    PermissionFlagsBits.Speak,
+  ])(
+    "rejects missing voice permission %s before source lookup or join, with refreshed bot roles",
+    async (denied) => {
+      const music = service();
+      const required = [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.Speak,
+      ];
+      const permissions = new PermissionsBitField(
+        required.filter((permission) => permission !== denied)
+      );
+      const fetchMe = vi.fn(async () => ({ voice: { channelId: null } }));
+      const member = {
+        guild: { id: "120000000000000002", members: { fetchMe } },
+        voice: {
+          channel: {
+            id: "120000000000000010",
+            type: ChannelType.GuildVoice,
+            full: false,
+            permissionsFor: () => permissions,
+          },
+        },
+      } as unknown as GuildMember;
+      const lookup = vi.spyOn(music.backend!, "getIdealNode");
+      const join = vi.spyOn(music.backend!, "joinVoiceChannel");
+      await expect(
+        music.action(member, { action: "play", query: "test" })
+      ).rejects.toThrow("View Channel, Connect and Speak");
+      expect(fetchMe).toHaveBeenCalledWith({ force: true });
+      expect(lookup).not.toHaveBeenCalled();
+      expect(join).not.toHaveBeenCalled();
+    }
+  );
+
   it("clears orphan players/queue state after a new server session without replaying a request", async () => {
     const music = service(),
       backend = music.backend!;

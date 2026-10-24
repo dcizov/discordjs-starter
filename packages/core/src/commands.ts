@@ -201,8 +201,11 @@ export const commandDefinitions = [
         .addStringOption((o) =>
           o
             .setName("game")
-            .setDescription("IsThereAnyDeal UUID from /deals search")
+            .setDescription(
+              "Choose by title after /deals search, or enter an ITAD game ID"
+            )
             .setRequired(true)
+            .setAutocomplete(true)
         )
         .addStringOption(dealCountry)
     )
@@ -221,8 +224,11 @@ export const commandDefinitions = [
         .addStringOption((o) =>
           o
             .setName("game")
-            .setDescription("IsThereAnyDeal game UUID from /deals search")
+            .setDescription(
+              "Choose by title after /deals search, or enter an ITAD game ID"
+            )
             .setRequired(true)
+            .setAutocomplete(true)
         )
         .addChannelOption((o) =>
           o

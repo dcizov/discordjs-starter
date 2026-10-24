@@ -292,6 +292,25 @@ transport to verify event ordering, the orphan retry, cleanup, missing-shard
 errors and secret-free diagnostics. They are not a live Discord voice test and
 do not prove that every external server/network problem is resolved.
 
+### Reading the latest zero-event trace and detecting an old checkout
+
+`Lavalink connected` + `/v4/info` + a successfully loaded track establishes that backend authentication and track lookup work. If the next error says **own voice state received: false; voice server received: false**, no Discord voice handshake completed, and no Lavalink player was created. This is a different failure from an unavailable backend, a failed YouTube lookup, or a later UDP/decoder problem. "Join sent" means the connector submitted the request to the local gateway shard; it is not a Discord acknowledgement or packet-capture proof that the request reached the server.
+
+Both missing events alone do **not** identify the exact cause. Verify View Channel/Connect/Speak including per-channel overrides, a connected correct gateway shard, the requested GuildVoiceStates intent and exactly one gateway process for the token. The permission preflight now explicitly includes View Channel and refreshes the bot's member roles. It fails before track lookup/join if a required permission is missing. The connector also fails immediately for a non-ready target shard or a running client missing GuildVoiceStates, instead of silently queueing a join for later. Timeout diagnostics include only gateway/shard-ready and intent booleans; these narrow the failure without exposing raw gateway payloads. Do not grant Administrator, enable a nonexistent privileged voice intent, or replace audio plugins to diagnose missing gateway acknowledgements.
+
+Also verify the code actually deployed. The reported build still showed the older Lavalink Dockerfile **without the `Healthcheck.java` compile/copy stages**, the older unqualified `Lavalink connected` log (the newer one includes resume booleans), and the old inline deal layout. Those are evidence of an older/mixed checkout, not evidence that a fresh build of the newest code was used. Old startup lines are also retained in `docker compose logs` when a container is not recreated.
+
+**`docker compose up --build` builds your local files; it never fetches newer Git commits.** `--no-cache` cannot update an old checkout either, and dev bind mounts override image source with the local checkout. From the intended working branch:
+
+```sh
+git status --short --branch
+git log -1 --oneline
+# Preserve local edits; this safely refuses divergent/unmergeable updates.
+git pull --ff-only origin arena/e2b42b08-discordjs-starter
+```
+
+Then use the [Docker-only recovery commands](#recover-an-existing-docker-development-stack), including the bot and Lavalink. Use `logs --since=5m --tail=100 bot lavalink` to distinguish new attempts from retained startup output. Keep `.env`, database and Redis volumes; do not hard-reset local edits or run `down -v`. No live Discord/voice test is claimed by the offline regression tests.
+
 ## Other failures and diagnostics
 
 - **Backend HTTP 401/403:** match bot/backend passwords. This differs from provider HTTP 401/403 inside a source exception.

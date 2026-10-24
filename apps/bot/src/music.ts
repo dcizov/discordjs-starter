@@ -267,16 +267,20 @@ export class MusicService {
         throw new Error(
           "Music is restricted to non-NSFW voice channels. Choose a clean recording in an appropriate channel."
         );
-      const me = await guild.members.fetchMe();
+      const me = await guild.members.fetchMe({ force: true });
       if (me.voice.channelId && me.voice.channelId !== voice.id)
         throw new Error("Join Orbit’s voice channel to control playback.");
       if (
         !voice
           .permissionsFor(me)
-          ?.has([PermissionFlagsBits.Connect, PermissionFlagsBits.Speak])
+          ?.has([
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+          ])
       )
         throw new Error(
-          "Orbit needs Connect and Speak permissions in your voice channel."
+          "Orbit needs View Channel, Connect and Speak permissions in your voice channel, including its channel overrides."
         );
       if (
         me.voice.channelId !== voice.id &&

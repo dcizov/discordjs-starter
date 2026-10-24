@@ -15,6 +15,7 @@ import {
 } from "discord.js";
 import type { Resource } from "@orbit/core";
 import { gameDealReply } from "./deal-replies";
+import { dealGameSelection } from "./deal-game-selection";
 import { commandReply, replyLabel } from "./replies";
 
 export async function handleDeals(
@@ -35,6 +36,7 @@ export async function handleDeals(
       country,
       i.options.getInteger("results") ?? 3
     );
+    dealGameSelection.remember(guild.id, member.id, results);
     await (results.length
       ? i.editReply(gameDealReply(results))
       : reply(
@@ -43,12 +45,14 @@ export async function handleDeals(
     return;
   }
   if (sub === "info") {
-    await i.editReply(
-      gameDealReply(
-        [await gameDealInfo(i.options.getString("game", true), country)],
-        true
-      )
+    const id = dealGameSelection.resolve(
+      guild.id,
+      member.id,
+      i.options.getString("game", true)
     );
+    const details = await gameDealInfo(id, country);
+    dealGameSelection.remember(guild.id, member.id, [details]);
+    await i.editReply(gameDealReply([details], true));
     return;
   }
   const resources = await listResources(guild.id, "deal");
@@ -91,6 +95,7 @@ export async function handleDeals(
     const results = items
       .flatMap((item) => (item.deal ? [item.deal] : []))
       .slice(0, 3);
+    dealGameSelection.remember(guild.id, member.id, results);
     await (results.length
       ? i.editReply(gameDealReply(results))
       : reply(
@@ -148,8 +153,13 @@ export async function handleDeals(
       "Orbit needs View Channel, Send Messages and Embed Links in the deals destination."
     );
   if (sub === "watch") {
-    const id = i.options.getString("game", true),
+    const id = dealGameSelection.resolve(
+        guild.id,
+        member.id,
+        i.options.getString("game", true)
+      ),
       details = await gameDealInfo(id, country);
+    dealGameSelection.remember(guild.id, member.id, [details]);
     await saveResource(
       guild.id,
       "deal",

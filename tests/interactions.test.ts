@@ -1,5 +1,12 @@
 import type { Client, Interaction } from "discord.js";
-import { EmbedBuilder, MessageFlags } from "discord.js";
+import {
+  EmbedBuilder,
+  MessageFlags,
+  PermissionsBitField,
+  PermissionFlagsBits,
+} from "discord.js";
+import { dealGameSelection } from "../apps/bot/src/deal-game-selection";
+import { deal } from "./fixtures/deals";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MusicService } from "../apps/bot/src/music";
 
@@ -100,6 +107,62 @@ beforeEach(() => {
   });
   db.audit.mockResolvedValue(undefined);
   music.action.mockResolvedValue({ queued: 0 });
+});
+
+describe("deal title autocomplete routing (no provider calls)", () => {
+  function autocomplete(sub = "info", manager = true) {
+    const base = interaction("deals");
+    return {
+      ...base,
+      isAutocomplete: () => true,
+      isChatInputCommand: () => false,
+      memberPermissions: new PermissionsBitField(
+        manager ? PermissionFlagsBits.ManageGuild : 0n
+      ),
+      options: {
+        ...base.options,
+        getFocused: () => ({ name: "game", value: "popular" }),
+        getSubcommand: () => sub,
+      },
+      respond: vi.fn(async (_choices: unknown) => undefined),
+    };
+  }
+  it("returns the user's scoped recent game titles, not panel/resource IDs", async () => {
+    db.getGuild.mockResolvedValueOnce({ config: { modules: { deals: true } } });
+    dealGameSelection.remember(guildId, memberId, [deal()]);
+    const i = autocomplete();
+    await dispatch(i);
+    expect(i.respond).toHaveBeenCalledWith([
+      { name: `${deal().game.title} (2020)`, value: deal().game.id },
+    ]);
+    expect(db.listResources).not.toHaveBeenCalled();
+    expect(i.deferReply).not.toHaveBeenCalled();
+    expect(i.guild.members.fetch).not.toHaveBeenCalled();
+  });
+  it("hides suggestions when deals are paused", async () => {
+    db.getGuild.mockResolvedValueOnce({
+      config: { modules: { deals: false } },
+    });
+    dealGameSelection.remember(guildId, memberId, [deal()]);
+    const i = autocomplete();
+    await dispatch(i);
+    expect(i.respond).toHaveBeenCalledWith([]);
+  });
+  it("does not offer a manager-only watch action to members without Manage Server", async () => {
+    db.getGuild.mockResolvedValueOnce({ config: { modules: { deals: true } } });
+    dealGameSelection.remember(guildId, memberId, [deal()]);
+    const i = autocomplete("watch", false);
+    await dispatch(i);
+    expect(i.respond).toHaveBeenCalledWith([]);
+  });
+  it("does not expose someone else's title history in the same guild", async () => {
+    db.getGuild.mockResolvedValueOnce({ config: { modules: { deals: true } } });
+    dealGameSelection.remember(guildId, memberId, [deal()]);
+    const i = autocomplete();
+    i.user = { id: "120000000000000098", displayName: "Someone else" };
+    await dispatch(i);
+    expect(i.respond).toHaveBeenCalledWith([]);
+  });
 });
 
 describe("interaction reply wiring (no Discord login)", () => {

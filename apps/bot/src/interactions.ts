@@ -25,6 +25,7 @@ import type { MusicService } from "./music";
 import { handleRoleInteraction, publishPanel } from "./roles";
 import { claimShopRole } from "./shop";
 import { handleDeals } from "./deals";
+import { dealGameSelection } from "./deal-game-selection";
 import {
   balanceCard,
   commandErrorReply,
@@ -47,6 +48,29 @@ export async function onInteraction(
       return;
     }
     if (i.isAutocomplete()) {
+      if (i.commandName === "deals") {
+        const focused = i.options.getFocused(true);
+        const sub = i.options.getSubcommand(false);
+        if (focused.name !== "game" || !["info", "watch"].includes(sub ?? "")) {
+          await i.respond([]);
+          return;
+        }
+        const stored = await getGuild(i.guild.id);
+        const allowed =
+          stored?.config.modules.deals &&
+          (sub !== "watch" ||
+            i.memberPermissions?.has(PermissionFlagsBits.ManageGuild));
+        await i.respond(
+          allowed
+            ? dealGameSelection.choices(
+                i.guild.id,
+                i.user.id,
+                String(focused.value)
+              )
+            : []
+        );
+        return;
+      }
       const kind =
         i.commandName === "shop"
           ? "shop"

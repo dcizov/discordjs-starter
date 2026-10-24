@@ -1,4 +1,4 @@
-import type { Client } from "discord.js";
+import { GatewayIntentBits, Status, type Client } from "discord.js";
 import { Connectors, type Player, type Shoukaku } from "shoukaku";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 
@@ -7,6 +7,9 @@ export type VoiceHandshakeTrace = {
   guildId: string;
   shardId: number;
   joinSent: boolean;
+  clientReady: boolean;
+  shardReady: boolean;
+  voiceIntent: boolean;
   stateReceived: boolean;
   serverReceived: boolean;
   endpointPresent: boolean;
@@ -25,6 +28,11 @@ export class MusicDiscordConnector extends Connectors.DiscordJS {
       guildId,
       shardId,
       joinSent: false,
+      clientReady: this.discord.isReady(),
+      shardReady: this.discord.ws.shards.get(shardId)?.status === Status.Ready,
+      voiceIntent: this.discord.options.intents.has(
+        GatewayIntentBits.GuildVoiceStates
+      ),
       stateReceived: false,
       serverReceived: false,
       endpointPresent: false,
@@ -38,14 +46,32 @@ export class MusicDiscordConnector extends Connectors.DiscordJS {
   }
   sendPacket(shardId: number, payload: any, important: boolean) {
     const shard = this.discord.ws.shards.get(shardId);
+    const isJoin = payload?.op === 4 && !!payload.d?.channel_id;
+    const trace = this.traces.get(payload?.d?.guild_id);
+    if (trace && isJoin) {
+      trace.clientReady = this.discord.isReady();
+      trace.shardReady = shard?.status === Status.Ready;
+      trace.voiceIntent = this.discord.options.intents.has(
+        GatewayIntentBits.GuildVoiceStates
+      );
+    }
     if (!shard)
       throw new Error(
         `Discord gateway shard ${shardId} is unavailable; no voice request could be sent.`
       );
-    const trace = this.traces.get(payload?.d?.guild_id);
-    if (trace && payload?.op === 4 && payload.d.channel_id)
-      trace.joinSent = true;
+    if (shard.status !== Status.Ready)
+      throw new Error(
+        `Discord gateway shard ${shardId} is not ready; the voice request was not queued for later delivery. Wait for gateway recovery, then submit a fresh request.`
+      );
+    if (
+      isJoin &&
+      !this.discord.options.intents.has(GatewayIntentBits.GuildVoiceStates)
+    )
+      throw new Error(
+        "The running Discord client is missing GuildVoiceStates. Update/restart the intended bot process; this is a code intent, not a privileged Developer Portal toggle."
+      );
     shard.send(payload, important);
+    if (trace && isJoin) trace.joinSent = true;
   }
   raw(packet: VoicePacket) {
     if (!this.manager) return;
@@ -187,8 +213,9 @@ export async function joinMusicVoice(
           ? "Discord supplied both voice handshake events; Lavalink player setup failed."
           : "Discord voice handshake failed before a Lavalink audio player was created.",
         `Join sent: ${snapshot.joinSent}; own voice state received: ${snapshot.stateReceived}; voice server received: ${snapshot.serverReceived}; endpoint present: ${snapshot.endpointPresent}; voice-leave cleanup sent: ${leaveSent}.`,
+        `Gateway client ready: ${snapshot.clientReady}; target shard ready: ${snapshot.shardReady}; GuildVoiceStates intent enabled: ${snapshot.voiceIntent}.`,
         errorDiagnostic(error),
-        "Check channel capacity and Connect/Speak permissions, GuildVoiceStates intent, the gateway shard, and that only ONE host/editor/Compose bot uses this token. Try a normal, non-full voice channel. This is not a YouTube lookup/plugin or browser-audio failure; changing Docker's published audio ports does not repair missing gateway events.",
+        "Check channel capacity and View Channel/Connect/Speak permissions, GuildVoiceStates intent, the gateway shard, and that only ONE host/editor/Compose bot uses this token. Try a normal, non-full voice channel. This is not a YouTube lookup/plugin or browser-audio failure; changing Docker's published audio ports does not repair missing gateway events.",
       ].join("\n")
     );
   } finally {

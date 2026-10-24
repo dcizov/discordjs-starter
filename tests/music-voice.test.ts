@@ -1,5 +1,10 @@
 import { EventEmitter } from "node:events";
-import type { Client } from "discord.js";
+import {
+  GatewayIntentBits,
+  IntentsBitField,
+  Status,
+  type Client,
+} from "discord.js";
 import { Shoukaku, type Node } from "shoukaku";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -16,7 +21,16 @@ function setup(
 ) {
   const client = Object.assign(new EventEmitter(), {
     user: { id: botId },
-    ws: { shards: new Map<number, { send: ReturnType<typeof vi.fn> }>() },
+    ws: {
+      shards: new Map<
+        number,
+        { status: Status; send: ReturnType<typeof vi.fn> }
+      >(),
+    },
+    isReady: () => true,
+    options: {
+      intents: new IntentsBitField([GatewayIntentBits.GuildVoiceStates]),
+    },
   });
   let joined = initiallyJoined;
   const state = (id: string | null) =>
@@ -55,7 +69,7 @@ function setup(
       if (mode === "state-first" && !wasJoined) server();
     });
   });
-  client.ws.shards.set(0, { send });
+  client.ws.shards.set(0, { send, status: Status.Ready });
   const connector = new MusicDiscordConnector(client as unknown as Client);
   const backend = new Shoukaku(connector, [], {
     voiceConnectionTimeout: 0.025,
@@ -152,9 +166,35 @@ describe("real Shoukaku handshake with an offline gateway transport fixture", ()
     ).rejects.toThrow("gateway shard 0 is unavailable");
     expect(t.node.rest.updatePlayer).not.toHaveBeenCalled();
   });
+  it("does not silently enqueue a join on a reconnecting shard or later replay it", async () => {
+    const t = setup();
+    t.client.ws.shards.get(0)!.status = Status.Connecting;
+    const error = await joinMusicVoice(t.backend, t.connector, options).catch(
+      (error: Error) => error
+    );
+    expect(String(error)).toContain("is not ready");
+    expect(String(error)).toContain("target shard ready: false");
+    expect(String(error)).toContain("Join sent: false");
+    expect(t.send).not.toHaveBeenCalled();
+    t.client.ws.shards.get(0)!.status = Status.Ready;
+    expect(t.send).not.toHaveBeenCalled();
+    expect(t.backend.connections.size).toBe(0);
+  });
+  it("identifies a running client without the normal voice intent before joining", async () => {
+    const t = setup();
+    t.client.options.intents.remove(GatewayIntentBits.GuildVoiceStates);
+    await expect(
+      joinMusicVoice(t.backend, t.connector, options)
+    ).rejects.toThrow("GuildVoiceStates intent enabled: false");
+    expect(
+      t.send.mock.calls.every(([packet]) => packet.d.channel_id === null)
+    ).toBe(true); // cleanup only
+    expect(t.node.rest.updatePlayer).not.toHaveBeenCalled();
+  });
+
   it("does not mistake another member's voice event for the bot's leave acknowledgement", async () => {
     const t = setup();
-    t.client.ws.shards.set(0, { send: vi.fn() });
+    t.client.ws.shards.set(0, { send: vi.fn(), status: Status.Ready });
     const pending = t.connector.clearStaleVoice(guildId, 0, 10);
     t.client.emit("raw", {
       t: "VOICE_STATE_UPDATE",
