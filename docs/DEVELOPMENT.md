@@ -163,3 +163,35 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 Do **not** use `down -v` as a troubleshooting shortcut: PostgreSQL, Redis, and development dependency/cache volumes are persistent. The legacy starter's PostgreSQL volume is also not a migration source; see the [deployment guide](DEPLOYMENT.md#local-startup-troubleshooting).
 
 Containers run as the unprivileged `node` user (UID/GID 1000). The dependency and Next-cache volumes are initialized from node-owned image directories. On Linux, ensure that this UID can read the checkout and write generated, ignored web TypeScript metadata; resolve ownership/ACL issues for your development checkout rather than running all services as root or making the repository world-writable.
+
+## Why the earlier branches' dev command behaved differently
+
+Rechecked all other branches available on 2026-10-24, without switching this
+checkout: [`main@dc9726a`](https://github.com/dcizov/discordjs-starter/tree/dc9726a8aa039c31b5e5be33de738c8c95756710)
+and [`arena/752cdf1a-discordjs-starter@2ed0fec`](https://github.com/dcizov/discordjs-starter/tree/2ed0fecbe66a33228a10d1e2acbc7e5d7b6e8615).
+Both use `npm run dev` = `tsx watch src/index.ts`, i.e. the **Discord bot**, not
+Next.js. The reference editor starts PostgreSQL only, then expects that bot
+command to be run manually. This monorepo separates web, gateway/action consumer,
+and scheduled-delivery worker. Its `npm run dev` is web-only; Lavalink connectivity
+cannot substitute for the bot.
+
+The reference's full-repository bind, shared Linux dependency volume,
+unprivileged dev tooling and persistent editor principle are retained/adapted.
+Its Node 24/PostgreSQL 18 layout, bot-only entrypoint and old dependency-reconcile
+hook are not copied over this working Node 22/PostgreSQL 17 stack. The current
+Dev Container starts web/infra, not duplicate bot/worker processes.
+
+From the **Docker host** with the existing live `.env` configured:
+
+```sh
+npm run dev:stack
+npm run dev:stack:logs
+```
+
+These are shortcuts for the existing full-stack Compose development command;
+they preserve database/Redis volumes and never seed/register/reset on startup.
+Do not run them inside the editor container (no Docker socket is mounted), and
+do not also run a host/editor `dev:bot` while Compose's bot is Up. Check `ps -a`
+for a stopped `bot` after exit 143 before investigating audio providers. See
+[the music guide](MUSIC.md#start-the-bot-not-only-the-dashboard) for actual
+consumer readiness, pending/failure receipts and read-only source diagnostics.

@@ -11,6 +11,9 @@ export DEMO_MODE=true
 export APP_URL=http://localhost:3000
 export COMPOSE_ANSI=never
 export COMPOSE_PROGRESS=plain
+# Compose Bake rejects the CLI-generated Dockerfile outside the checkout on
+# recent Buildx versions. Use Compose's regular builder, not broad fs grants.
+export COMPOSE_BAKE=false
 export POSTGRES_PASSWORD=ci-only-database-password
 export LAVALINK_PASSWORD=ci-only-devcontainer-password
 # No command in this test needs live credentials.
@@ -33,10 +36,13 @@ import sys
 from pathlib import Path
 # Check annotations are capped at 4096 characters by GitHub. Keep each chunk
 # below that limit, and retain the CLI's final JSON report separately.
-for label, filename, budget in zip(
-    ("CLI output", "Recent startup output", "Service logs"), sys.argv[1:], (9000, 9000, 9000)
+# Snapshot all logs before emitting annotations: tee also writes stdout to log.
+# Reading it after emitting the first label would recursively quote annotations.
+documents = [Path(filename).read_text(errors="replace") for filename in sys.argv[1:]]
+for label, document, budget in zip(
+    ("CLI output", "Recent startup output", "Service logs"), documents, (9000, 9000, 9000)
 ):
-    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", Path(filename).read_text(errors="replace"))[-budget:]
+    text = re.sub(r"\x1b\[[0-?]*[ -/]*[@-~]", "", document)[-budget:]
     if not text.strip():
         continue
     chunks = [text[offset:offset + 3000] for offset in range(0, len(text), 3000)]

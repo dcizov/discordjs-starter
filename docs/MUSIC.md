@@ -2,6 +2,69 @@
 
 Orbit uses **Shoukaku** as the Discord.js-to-Lavalink client. Lavalink handles source loading, encoding, voice connectivity, and Discord voice encryption. The dashboard is a remote controller; it never streams audio in the browser.
 
+## Start the bot, not only the dashboard
+
+`npm run dev` starts **only Next.js**. It does not handle Discord commands or
+consume dashboard actions. Lavalink alone cannot do either. A `bot-1 exited
+with code 143` line means that bot process stopped (SIGTERM); it does not
+establish a provider failure or explain who stopped it. Both `/leaderboard`
+and `/play` timing out is consistent with no running gateway consumer.
+
+From the **Docker host**, with your existing live `.env` (`DEMO_MODE=false`,
+Discord credentials, database settings and music password) already configured:
+
+```sh
+# Starts/rebuilds web, bot, delivery worker and their infrastructure together.
+# Does not delete volumes, seed data, or register/replace Discord commands.
+npm run dev:stack
+npm run dev:stack:logs
+
+# Confirm the bot is Up, not Exited (143), and web actually publishes :3000.
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music ps -a
+```
+
+The bot now distinguishes **gateway connected / initializing** from
+**Orbit is ready; dashboard action consumer is listening**. It also rejects a
+`DISCORD_CLIENT_ID` that does not belong to the logged-in bot token. Keep
+credentials server-side; do not paste them into chat/logs. Register commands
+with `npm run commands:register` in the intended guild/application if needed.
+This is a gateway-based bot: leave Discord's **Interactions Endpoint URL**
+empty rather than pointing it at an old/unimplemented HTTP endpoint.
+
+For host development, run `npm run dev:bot` separately from `npm run dev` and
+`npm run dev:worker`. In the Dev Container, the web service is already running;
+start `npm run dev:bot` there **only if the Compose bot is stopped**. Never run
+both copies. Opening the editor intentionally does not log a second bot into
+Discord. See [development lifecycle](DEVELOPMENT.md) and [the editor guide](DEVCONTAINER.md).
+
+The earlier `main` and `arena/752cdf1a-discordjs-starter` branches used
+`npm run dev` for `tsx watch src/index.ts` — **the bot**. This monorepo deliberately
+split those roles. Reusing the old command starts a different service; copying
+their old PostgreSQL 18 volume layout would not fix that.
+
+### Truthful dashboard receipts
+
+- With no actual BullMQ `discord-actions` consumer, a live mutation returns
+  **503** and is **not enqueued**. Redis consumer detection is bounded and needs
+  Redis `CLIENT LIST` permission, not a recent-looking dashboard heartbeat.
+- An admitted music job returns **202 Accepted** with a guild/actor-scoped
+  receipt. HTTP 200 from a status poll does **not** mean the job completed.
+- The UI only reports processing success after `state=completed`. Failures
+  surface the sanitized worker error. After roughly 30 seconds without
+  completion it shows an **unconfirmed/pending warning**, preserves the input,
+  and does not display success. Do not blindly resubmit an active request.
+- Music jobs still have **one attempt**. A request that waited over 30 seconds
+  before execution expires before any voice/provider call, so restarting a
+  stopped bot does not unexpectedly replay old play/skip requests. Existing
+  old Redis jobs are rejected by the same execution-time check, not purged.
+- Completion means the bot processed the control request, **not proof of audible
+  sound**. Source playback exceptions are audited; inspect Now playing/queue,
+  voice membership and Lavalink logs. No browser audio is played.
+
+Both `/play` and `/leaderboard` defer an ephemeral Discord response **before**
+member/database/backend lookups. Regression tests cover a deliberately blocked
+member fetch. No code can acknowledge a gateway command while its bot is stopped.
+
 ## Start the optional backend
 
 1. For a bot started with `npm run dev:bot` **on your host**, set these in the root `.env`:
@@ -11,17 +74,17 @@ Orbit uses **Shoukaku** as the Discord.js-to-Lavalink client. Lavalink handles s
    LAVALINK_PASSWORD=<your strong generated password>
    LAVALINK_SECURE=false
    MUSIC_SEARCH_PREFIX=scsearch
-   MUSIC_ALLOWED_HOSTS=soundcloud.com,bandcamp.com
+   MUSIC_ALLOWED_HOSTS=soundcloud.com,bandcamp.com,youtube.com,youtu.be,ocremix.org
    ```
 
-2. Build/start the supplied **Lavalink 4.2.2 + Soundy AAC/fMP4** image:
+2. Build/start the supplied **Lavalink 4.2.2 + Soundy AAC/fMP4 + nine reviewed plugins** image:
 
    ```sh
    docker compose --profile music up -d --build lavalink
    docker compose logs --tail=100 lavalink
    ```
 
-   The first build downloads the pinned plugin source and Gradle dependencies, runs the plugin's offline unit tests, and packages its jar into the official Lavalink image. Java/Gradle are not required on your host. No provider/Discord integration test runs during the build. The service publishes only `127.0.0.1:2333:2333`; allow the Java service to finish starting before testing music.
+   The first build downloads checksum-pinned plugin artifacts and the pinned Soundy source/Gradle dependencies, runs Soundy's offline unit tests, and packages the JARs into the official Lavalink image. Nothing downloads plugins at runtime. See [the plugin inventory/configuration](MUSIC-PLUGINS.md). Java/Gradle are not required on your host. No provider/Discord integration test runs during the build. The service publishes only `127.0.0.1:2333:2333`; allow the Java service to finish starting before testing music.
 
 3. Restart `npm run dev:bot` after `.env` changes. `Lavalink connected` verifies the WebSocket connection. The bot also explicitly requests `/v4/info` to populate backend/plugin versions; Shoukaku 4.3.0 does not populate `node.info` automatically. Metadata failures are logged and retried on the next lookup, without inventing a backend version.
 4. When the bot runs **inside Compose**, the supplied environment selects `lavalink:2333` automatically when `LAVALINK_PASSWORD` is nonempty. `localhost` would refer to the bot container itself. The backend receives the same password. For the main bot with hot reload, see [Docker development](DEVELOPMENT.md#run-just-the-main-bot).
@@ -77,18 +140,35 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 
 For the compiled runtime, omit `-f docker-compose.dev.yml` and build/recreate the same services. Do not delete database/Redis volumes. Rebuilding only the web app does not replace Lavalink's source loader.
 
-Verify startup lists `registering SoundySourceManager`; then run the read-only check below. Its metadata should show `plugins: [{ name: "soundy", version: "1.1.0" }]` and source managers `soundcloud` and `bandcamp`. Metadata/lookup success still does **not** certify audible playback. Real provider availability, restrictions, and voice behavior must be checked in the test server. The network-isolated CI startup check verifies plugin/source registration, not provider access, decoding, or Discord voice playback.
+Verify startup lists `registering SoundySourceManager`; then run the read-only check below. Its metadata should include `{ name: "soundy", version: "1.1.0" }`, the nine pinned plugins (ten identities total), and source managers `soundcloud`, `bandcamp`, `youtube` and `ocremix`. Metadata/lookup success still does **not** certify audible playback. Real provider availability, restrictions, and voice behavior must be checked in the test server. The network-isolated CI startup check verifies plugin/source registration, not provider access, decoding, or Discord voice playback.
 
 ## Source policy
 
-The supplied backend uses **Soundy for SoundCloud**, and Lavalink's built-in **Bandcamp** loader. Search uses `scsearch`; set `MUSIC_SEARCH_PREFIX=bcsearch` for Bandcamp. Availability depends on provider restrictions, region, adapter support, and upstream changes.
+The supplied profile has **one audio-source owner per provider**: Soundy for
+SoundCloud, the built-in Bandcamp adapter, youtube-source for YouTube, and
+Skybot's OC ReMix adapter. All nine requested plugins, versions, exclusions,
+API responsibilities and licensing/integrity notes are documented in the
+[reviewed plugin profile](MUSIC-PLUGINS.md).
 
-- **YouTube is disabled.** No unsupported YouTube extractor or cookie setup is included.
-- **Spotify is not an audio source here.** Metadata access does not grant access to play recordings.
-- **Arbitrary HTTP and local-file loading are disabled** on the backend. The bot accepts only allowlisted public HTTPS source URLs; private DNS results, credentials, and nonstandard ports are rejected before lookup.
-- **No silent provider fallback.** Failures remain failures; unrelated recordings are not substituted.
-- **No protected, paid, snipped-preview, or unavailable stream bypass.** Use only content you are authorized to play, in accordance with provider terms. Full SoundCloud URLs are supported; short-link support is adapter-dependent.
-- Restrict backend egress to public destinations. Bot-side DNS validation cannot police every redirect/CDN hop inside a source plugin. Do not enable arbitrary HTTP/local sources to make a broken provider work.
+- Choose **one** default `MUSIC_SEARCH_PREFIX`: `scsearch`, `bcsearch`,
+  `ytsearch` or `ytmsearch`. OC ReMix is URL-only. No automatic provider fallback.
+- Update an **existing** `.env` host allowlist if you want YouTube/OC ReMix;
+  changing `.env.example` does not overwrite your settings. The allowlist can
+  restrict these supported providers, not add arbitrary/adult loaders.
+- Adult/social/upload adapters, arbitrary HTTP/local files, credential-dependent
+  premium sources, Spotify mirroring and yt-dlp are disabled. No cookies,
+  age-bypass clients, decryption keys or access-control workarounds are supplied.
+- NSFW voice channels and explicitly flagged/age-restricted results are rejected.
+  **Public catalogs/lyrics do not carry universal SFW ratings.** Use clean,
+  administrator-curated recordings; no plugin configuration can certify all
+  unrestricted search results as all-ages. SponsorBlock skips marked sponsor
+  segments, **not explicit content**. Lyrics are not automatically posted.
+- Public HTTPS URLs only: no credentials, nonstandard ports or private DNS.
+  Keep backend egress limited to public destinations; bot-side DNS checks cannot
+  inspect every redirect/CDN request made by a plugin.
+- Use only authorized, available, unencrypted recordings in accordance with
+  provider terms. Protected/paid/unavailable streams remain unsupported. Neither
+  a connected node nor an installed plugin guarantees provider playback.
 
 ## Read-only source check
 
@@ -134,6 +214,6 @@ Music slash/action/playback failures are also sent to the dashboard's **Audit** 
 
 `/play`, `/queue`, `/pause`, `/resume`, `/skip`, `/stop`, `/volume`, `/shuffle`, and `/repeat` are implemented; register them with Discord. Command replies remain **ephemeral**, including embeds. The dashboard's Commands reference is not live registration verification. Dashboard controls share the music service/action queue. Members must be in the bot's voice channel; configured DJ-role/Manage Server checks, module state, and bot channel permissions are enforced at execution time.
 
-Volume is bounded to 0–100%; queue limits are configurable. Unsupported sources produce an error, not fabricated success. Accepted play requests do not certify audible playback. Jobs wait briefly before remaining queued; failures are audited. Music actions are not automatically retried, since a repeated skip/play could alter the queue twice.
+Volume is bounded to 0–100%; queue limits are configurable. Unsupported sources produce an error, not fabricated success. Accepted play requests do not certify audible playback. The dashboard waits for actual job completion and warns rather than claiming success if completion remains unconfirmed; failures are audited. Requests older than 30 seconds at execution are rejected instead of replayed. Music actions are not automatically retried, since a repeated skip/play could alter the queue twice.
 
 Queue snapshots are for dashboard observation, not automatic voice-session restoration. An ordinary Lavalink reconnect can use its short resume window, but a full bot/backend restart or source-adapter change needs a new session. In demo mode all tracks are fictional previews and **no audio is played**.

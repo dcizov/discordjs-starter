@@ -103,6 +103,8 @@ npm run dev:bot    # Discord gateway + command handler + dashboard-action worker
 npm run dev:worker # schedules, feeds, deals, and outbound deliveries
 ```
 
+For Docker development on the host, `npm run dev:stack` starts web + bot + delivery worker + configured music/infra together; `npm run dev:stack:logs` follows their logs. **`npm run dev` alone is web-only**, unlike the original starter branches. The Dev Container already starts web/infra but deliberately not a second bot: run `npm run dev:bot` there only after stopping any Compose bot. Offline bot actions are rejected instead of reported as success.
+
 Sign in with Discord. Only communities you own or have **Manage Server / Administrator** permission for appear. Choose a community and click **Invite Orbit** if it is not installed. The invite does not request Administrator or Mention Everyone. Place Orbit above the community roles it will assign.
 
 Configuration is read on every bot action/message; feed schedules are reconciled every minute. No bot restart is required. Channel and role metadata syncs on Discord events and every five minutes.
@@ -110,7 +112,7 @@ Configuration is read on every bot action/message; feed schedules are reconciled
 ### 5. Configure optional integrations
 
 - **Deals:** set `ITAD_API_KEY`. See [integration guide](docs/INTEGRATIONS.md).
-- **Music:** configure a current Lavalink v4 server and supported sources. See [music guide](docs/MUSIC.md). Playback from arbitrary providers is not promised.
+- **Music:** the supplied Lavalink image includes the nine requested plugins plus Soundy, with unique source ownership and adult adapters disabled. See the [music/startup guide](docs/MUSIC.md) and [plugin inventory/SFW boundaries](docs/MUSIC-PLUGINS.md). Public catalogs are not universally SFW-rated; curate clean recordings. Playback from arbitrary providers is not promised.
 - **RSS/Atom:** enter a verified publisher URL. The bot never guesses feed URLs or scrapes sites.
 - **Webhook:** create an incoming-webhook source, save it, then use **Webhook credentials** to generate a secret. See the signed request example in the integration guide.
 

@@ -242,6 +242,7 @@ export class MusicService {
       let player = this.backend.players.get(guild.id);
       const state = this.state(guild.id);
       if (input.action === "play") {
+        const categories = sponsorBlockCategories();
         if (!input.query)
           throw new Error("Enter a track title or supported source URL.");
         const tracks = await this.resolve(input.query);
@@ -257,7 +258,6 @@ export class MusicService {
           state.volume = stored.config.music.defaultVolume;
           await player.setGlobalVolume(state.volume);
           this.wire(player);
-          const categories = sponsorBlockCategories();
           if (
             categories.length &&
             player.node.info?.plugins.some(

@@ -158,9 +158,11 @@ async function main() {
       const beat = async () => {
         await setHealth(
           "Discord API",
-          "healthy",
+          client.isReady() ? "healthy" : "offline",
           Math.max(0, client.ws.ping),
-          "Discord.js gateway connected"
+          client.isReady()
+            ? "Discord.js gateway connected"
+            : "Discord gateway disconnected; commands cannot be acknowledged"
         );
         await music.heartbeat();
       };

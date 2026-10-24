@@ -91,3 +91,26 @@ Do not run the manual processes alongside their Docker services with the same cr
 From a host terminal, use the checks in [dashboard connection troubleshooting](DEVELOPMENT.md#dashboard-unreachable-at-localhost3000). You need an **Up `web` container** with a mapping such as `0.0.0.0:3000->3000/tcp`. Seeing only `3000/tcp` on a bot/workspace container is image metadata, not a running or published web server.
 
 CI uses the real Dev Container CLI to open this configuration in demo mode and checks workspace permissions, internal service addresses, dashboard HTTP access, host port publication, and the absence of automatically started bot/worker services. This is a container/HTTP check, not a graphical-editor or live Discord/audio test.
+
+### Recent Compose/Buildx: outside-context generated Dockerfile
+
+If opening the editor fails **during build** with `additional privileges
+requested: --allow=fs.read=.../Dockerfile-with-features`, Compose's Bake mode is
+rejecting the Dev Container CLI's generated Dockerfile in the host temporary
+directory. This is not a bot/database/provider failure. Do **not** grant wildcard
+host filesystem access or mount the Docker socket into the workspace to fix it.
+
+Use Compose's regular builder for this CLI/editor session:
+
+```sh
+# Docker host terminal (not inside the workspace container)
+export COMPOSE_BAKE=false
+code .
+```
+
+Launch a fresh editor process so it inherits that environment; on PowerShell,
+set `$env:COMPOSE_BAKE="false"` before launching it. The CI opening smoke sets
+this explicitly as well. This changes only build orchestration, not image
+contents, container privileges, persisted volumes or the editor-started services.
+Ordinary Compose builds use checked-in Dockerfiles inside the checkout and do
+not require this outside-context permission.

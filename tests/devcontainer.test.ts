@@ -209,6 +209,15 @@ describe("Dev Container and dashboard startup contract", () => {
     expect(result.stdout).toBe("");
   });
 
+  it("does not grant broad filesystem entitlements to build the CLI-generated editor Dockerfile", () => {
+    const harness = readFileSync(
+      new URL("../.devcontainer/ci-smoke.sh", import.meta.url),
+      "utf8"
+    );
+    expect(harness).toContain("export COMPOSE_BAKE=false");
+    expect(harness).not.toContain("--allow=fs.read=*");
+  });
+
   it("refuses the real-queue CI smoke outside its credential-free isolated project", () => {
     const result = spawnSync(
       process.execPath,

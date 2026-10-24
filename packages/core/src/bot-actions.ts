@@ -59,7 +59,7 @@ export async function waitForBotAction(
     options.sleep ??
     ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   let state = "waiting";
-  for (let n = 0; n < (options.attempts ?? 60); n++) {
+  for (let n = 0; n < (options.attempts ?? 30); n++) {
     const job = await read();
     state = job.state;
     if (state === "completed") return job;
@@ -69,8 +69,8 @@ export async function waitForBotAction(
       throw new Error(
         "This bot request is no longer available. Completion was not confirmed; check the current queue before retrying."
       );
-    if (n + 1 < (options.attempts ?? 60))
-      await sleep(options.intervalMs ?? 500);
+    if (n + 1 < (options.attempts ?? 30))
+      await sleep(options.intervalMs ?? 1000);
   }
   throw new BotActionPendingError(jobId, state);
 }
