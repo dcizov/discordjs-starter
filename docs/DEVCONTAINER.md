@@ -6,7 +6,7 @@ This adapts the separate-editor-container approach from the [working starter bra
 
 `.devcontainer/devcontainer.json` opens the repository at `/app` in the **`dev`** service. That service stays alive with `sleep infinity`, so a missing Discord token or a stopped bot cannot close your editor.
 
-The configuration layers the root Compose files with a small `.devcontainer/docker-compose.yml` override. That override clears profiles **only for `dev`, `migrate`, and `lavalink`**, because the Dev Container CLI also runs `compose build` without profile flags. An explicit `runServices` list by itself does not activate the migration profile during that build. Normal Docker-only profiles are unchanged; `bot`/`worker` remain opt-in.
+The configuration layers the root Compose files with a small `.devcontainer/docker-compose.yml` override. That override clears profiles **only for `dev`, `migrate`, and `lavalink`**, because the Dev Container CLI also runs `compose build` without profile flags. An explicit `runServices` list by itself does not activate the migration profile during that build. Normal Docker-only profiles are unchanged; `bot`/`worker` remain opt-in. The workspace uses the same Dockerfile `dev` stage under an editor-specific image tag, so the CLI's image metadata cannot race with the dashboard/migration image tag.
 
 The explicit `runServices` list starts:
 

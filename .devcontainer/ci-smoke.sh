@@ -16,22 +16,30 @@ unset DISCORD_TOKEN DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET ITAD_API_KEY
 
 log="$(mktemp "$RUNNER_TEMP/orbit-devcontainer-log.XXXXXX")"
 output="$(mktemp "$RUNNER_TEMP/orbit-devcontainer-up.XXXXXX")"
-exec > >(tee "$log") 2>&1
+exec > >(tee -a "$log") 2>&1
 compose=(docker compose -p "$COMPOSE_PROJECT_NAME" -f docker-compose.yml -f docker-compose.dev.yml --profile dev --profile live --profile music)
 cli=(npx --yes --package=@devcontainers/cli@0.89.0 devcontainer)
 cleanup() {
   status=$?
   trap - EXIT
   if [[ "$status" != "0" ]]; then
-    cat "$output" >> "$log"
-    "${compose[@]}" logs --no-color --tail=70 dev web migrate postgres redis lavalink >> "$log" 2>&1 || true
-    python3 - "$log" <<'PYTHON'
+    services="$(mktemp "$RUNNER_TEMP/orbit-devcontainer-services.XXXXXX")"
+    "${compose[@]}" logs --no-color --tail=45 dev web migrate postgres redis lavalink > "$services" 2>&1 || true
+    python3 - "$output" "$log" "$services" <<'PYTHON'
 import sys
 from pathlib import Path
-text = Path(sys.argv[1]).read_text(errors="replace")
-tail = "\n".join(text.splitlines()[-100:])[-16000:]
-escaped = tail.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-print(f"::error title=Dev Container startup or dashboard smoke failed::{escaped}")
+# Check annotations are capped at 4096 characters by GitHub. Keep each chunk
+# below that limit, and retain the CLI's final JSON report separately.
+for label, filename, budget in zip(
+    ("CLI result", "Recent startup output", "Service logs"), sys.argv[1:], (3000, 9000, 9000)
+):
+    text = Path(filename).read_text(errors="replace")[-budget:]
+    if not text.strip():
+        continue
+    chunks = [text[offset:offset + 3000] for offset in range(0, len(text), 3000)]
+    for index, chunk in enumerate(chunks, 1):
+        escaped = chunk.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        print(f"::error title=Dev Container smoke — {label} {index}/{len(chunks)}::{escaped}")
 PYTHON
   fi
   # Preserve volumes, and only touch this dedicated disposable CI project.

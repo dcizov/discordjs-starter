@@ -3,6 +3,8 @@
 # validation. Clear only editor-started profiles; bot/worker remain opt-in.
 services:
   dev:
+    # The CLI adds image metadata; never race the web/migrate shared tag.
+    image: orbit-community:devcontainer
     profiles: !reset []
   migrate:
     profiles: !reset []

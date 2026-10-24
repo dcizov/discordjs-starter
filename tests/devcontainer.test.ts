@@ -56,6 +56,12 @@ describe("Dev Container and dashboard startup contract", () => {
       }
     );
     expect(editor.errors).toEqual([]);
+    expect(editor.toJS().services.dev.image).toBe(
+      "orbit-community:devcontainer"
+    );
+    expect(editor.toJS().services.dev.image).not.toBe(
+      development.services.web.image
+    );
     expect(Object.keys(editor.toJS().services).sort()).toEqual([
       "dev",
       "lavalink",
