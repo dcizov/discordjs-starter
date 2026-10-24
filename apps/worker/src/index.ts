@@ -8,6 +8,9 @@ import {
 } from "@orbit/core";
 import { pollDeals, pollSource, safeLink } from "@orbit/core/feeds";
 import { logger } from "@orbit/core/logger";
+import { assertDeliverableDeal } from "@orbit/core/deal-policy";
+import { dealEmbed, dealLinkRow } from "@orbit/core/deal-presentation";
+import type { GameDeal } from "@orbit/core/deal-types";
 import { createQueue, redisConnection } from "@orbit/core/queue";
 import {
   closeDb,
@@ -90,28 +93,16 @@ async function main() {
       items = items.filter(
         (i) => Date.now() - new Date(i.publishedAt).getTime() < 7 * 86400000
       );
-      if (!source.data.lastChecked) items = items.slice(0, 3);
+      if (!source.data.lastChecked && source.kind === "source")
+        items = items.slice(0, 3);
       const count = await dispatchItems(source, items);
-      if (source.kind === "source") await updateSourceHealth(source, true);
-      else
-        await database()
-          .db.update(schema.resources)
-          .set({
-            data: sql`${schema.resources.data} || ${JSON.stringify({ lastChecked: new Date().toISOString() })}::jsonb`,
-          })
-          .where(
-            and(
-              eq(schema.resources.id, source.id),
-              eq(schema.resources.guildId, source.guildId)
-            )
-          );
+      await updateSourceHealth(source, true);
       logger.info(
         { guildId: source.guildId, sourceId: source.id, queued: count },
         "Source checked"
       );
     } catch (e: any) {
-      if (source.kind === "source")
-        await updateSourceHealth(source, false, safeText(e.message, 300));
+      await updateSourceHealth(source, false, safeText(e.message, 300));
       throw e;
     }
   }
@@ -174,27 +165,48 @@ async function main() {
         )
           ? payload.notificationRoleId
           : null;
-        const embed = {
-          title: safeText(row.title, 256),
-          ...(safeLink(row.url) ? { url: safeLink(row.url) } : {}),
-          ...(payload.includeSummary
-            ? { description: safeText(payload.summary ?? "", 1000) }
-            : {}),
-          color: /^#[0-9a-f]{6}$/i.test(payload.color ?? "")
-            ? parseInt(payload.color.slice(1), 16)
-            : 0x9b7ada,
-          footer: {
-            text: safeText(
-              `${payload.sourceName ?? source.name} · via Orbit`,
-              150
-            ),
-          },
-          timestamp: new Date().toISOString(),
-        };
+        const deal =
+          source.kind === "deal"
+            ? (payload.deal as GameDeal | undefined)
+            : undefined;
+        if (source.kind === "deal") {
+          if (source.data.channelId !== row.channelId)
+            throw new Error(
+              "The deal destination changed; this old channel delivery was cancelled."
+            );
+          assertDeliverableDeal(deal, source.data);
+        }
+        const embed = deal
+          ? dealEmbed(deal)
+          : {
+              title: safeText(row.title, 256),
+              ...(safeLink(row.url) ? { url: safeLink(row.url) } : {}),
+              ...(payload.includeSummary
+                ? { description: safeText(payload.summary ?? "", 1000) }
+                : {}),
+              color: /^#[0-9a-f]{6}$/i.test(payload.color ?? "")
+                ? parseInt(payload.color.slice(1), 16)
+                : 0x9b7ada,
+              footer: {
+                text: safeText(
+                  `${payload.sourceName ?? source.name} · via Orbit`,
+                  150
+                ),
+              },
+              timestamp: new Date().toISOString(),
+            };
         await rest.post(Routes.channelMessages(row.channelId), {
           body: {
             content: roleId ? `<@&${roleId}>` : "",
             embeds: [embed],
+            ...(deal
+              ? {
+                  components: (() => {
+                    const row = dealLinkRow(deal);
+                    return row ? [row] : [];
+                  })(),
+                }
+              : {}),
             allowed_mentions: {
               parse: [],
               roles: roleId ? [roleId] : [],

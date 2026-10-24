@@ -58,6 +58,7 @@ import {
 } from "./ui/primitives";
 import { Switch } from "./ui/switch";
 import { useWorkspace } from "./workspace";
+import { dealQuality } from "@orbit/core/deal-policy";
 const settings = {
   roles: {
     title: "Self roles",
@@ -79,7 +80,7 @@ const settings = {
     title: "Good games. Better prices.",
     description: "Keep an eye on the wishlist. We’ll keep an eye on the price.",
     kind: "deal" as ResourceKind,
-    action: "Add subscription",
+    action: "Set up deal alerts",
     icon: Tags,
   },
   news: {
@@ -393,7 +394,8 @@ export function ResourcesPage({
                 Powered by IsThereAnyDeal
               </p>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                Verified stores. Regional prices. No scraping, no guesswork.
+                Automatic posts to your chosen channel. Popularity + real review
+                evidence, not obscure discount spam.
               </p>
             </span>
           </span>
@@ -405,7 +407,7 @@ export function ResourcesPage({
             {data.demo
               ? "Demo deal subscriptions"
               : data.integrations?.itad
-                ? "IsThereAnyDeal connected"
+                ? "ITAD API key configured"
                 : "API key required for live checks"}
           </Badge>
         </div>
@@ -830,7 +832,7 @@ export function ResourcesPage({
                             <p className="mt-1 text-[10px] text-muted-foreground">
                               {r.data.gameId
                                 ? "Game watchlist"
-                                : "Curated deal feed"}{" "}
+                                : "Automatic popular-game feed"}{" "}
                               · {r.data.region} / {r.data.currency}
                             </p>
                           </div>
@@ -847,6 +849,15 @@ export function ResourcesPage({
                             <Badge>
                               ≤{r.data.maxPrice} {r.data.currency}
                             </Badge>
+                            {!r.data.gameId && (
+                              <Badge tone="purple">
+                                Top {dealQuality(r.data).maxPopularityRank} · ≥
+                                {dealQuality(r.data).minReviews.toLocaleString(
+                                  "en-US"
+                                )}{" "}
+                                reviews
+                              </Badge>
+                            )}
                             {r.data.historicalLow && (
                               <Badge tone="purple">Historical low</Badge>
                             )}

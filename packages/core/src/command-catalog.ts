@@ -105,13 +105,15 @@ function runtimeNotes(path: string, module: CommandModule) {
     );
   if (module === "deals")
     notes.push(
-      "Requires the deals module. Search and live deal checks need a configured IsThereAnyDeal API key; watchlist creation uses the supplied game ID. Watchlists belong to this server."
+      "Requires the deals module and a server-side IsThereAnyDeal API key for live data. Rich search/info/now replies are ephemeral previews, not channel posts. General feeds require top-500 ITAD popularity membership plus configured Steam reviews/score; missing evidence is excluded. Feeds/watchlists belong to this server."
     );
   if (module === "news")
     notes.push(
       "Requires the news module and a source configured in this server. A source test fetches a preview; it does not deliver a Discord message."
     );
-  if (path === "deals watch" || path === "news test") {
+  if (
+    ["deals watch", "deals feed", "deals pause", "news test"].includes(path)
+  ) {
     runtimePermissions.push("ManageGuild");
     notes.push(
       "Manage Server is enforced at execution for this subcommand, even though its parent command is visible to everyone by default."

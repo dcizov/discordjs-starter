@@ -14,11 +14,11 @@ describe("implemented command catalog", () => {
     expect(result.source).toBe("registration-definitions");
     expect(result.registrationVerified).toBe(false);
     expect(result.rootCount).toBe(26);
-    expect(result.invocationCount).toBe(30);
+    expect(result.invocationCount).toBe(35);
     expect(new Set(result.commands.map((c) => c.root))).toEqual(
       new Set(commandDefinitions.map((c) => c.name))
     );
-    expect(new Set(result.commands.map((c) => c.id)).size).toBe(30);
+    expect(new Set(result.commands.map((c) => c.id)).size).toBe(35);
     expect(result.commands.every((c) => c.serverOnly)).toBe(true);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
@@ -32,7 +32,12 @@ describe("implemented command catalog", () => {
       "shop buy",
       "shop claim",
       "deals search",
+      "deals info",
+      "deals now",
       "deals watch",
+      "deals feed",
+      "deals pause",
+      "deals list",
       "news list",
       "news test",
     ]);

@@ -1,6 +1,6 @@
 import { safeText } from "@orbit/core";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
-import { pollSource, searchGames } from "@orbit/core/feeds";
+import { pollSource } from "@orbit/core/feeds";
 import { logger } from "@orbit/core/logger";
 import {
   audit,
@@ -11,7 +11,6 @@ import {
   getAccount,
   listResources,
   recordCase,
-  saveResource,
   schema,
 } from "@orbit/db";
 import {
@@ -25,6 +24,7 @@ import { logCase, moderate } from "./moderation";
 import type { MusicService } from "./music";
 import { handleRoleInteraction, publishPanel } from "./roles";
 import { claimShopRole } from "./shop";
+import { handleDeals } from "./deals";
 import {
   balanceCard,
   commandErrorReply,
@@ -356,49 +356,7 @@ export async function onInteraction(
         break;
       }
       case "deals": {
-        if (!stored.config.modules.deals)
-          throw new Error("Game deals are paused.");
-        if (i.options.getSubcommand() === "search") {
-          const results = await searchGames(i.options.getString("query", true));
-          await reply(
-            results.length
-              ? results
-                  .slice(0, 8)
-                  .map((g: any) => `${g.title}\nID: ${g.id}`)
-                  .join("\n\n")
-              : "No games found. Try another title."
-          );
-        } else {
-          if (!member.permissions.has(PermissionFlagsBits.ManageGuild))
-            throw new Error(
-              "Manage Server is required to create a shared watchlist."
-            );
-          const channel = i.options.getChannel("channel", true);
-          await saveResource(
-            guild.id,
-            "deal",
-            {
-              name: i.options.getString("name", true),
-              enabled: true,
-              data: {
-                gameId: i.options.getString("game", true),
-                channelId: channel.id,
-                region: "DE",
-                currency: "EUR",
-                minDiscount: 20,
-                maxPrice: 60,
-                historicalLow: false,
-                stores: [],
-                notificationRoleId: "",
-                intervalMinutes: 60,
-              },
-            },
-            actor
-          );
-          await reply(
-            "Watchlist created. You can refine region, prices, stores, and notifications in the dashboard."
-          );
-        }
+        await handleDeals(i, member);
         break;
       }
       case "news": {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DEAL_QUALITY_DEFAULTS } from "./deal-policy";
 import type { GuildConfig } from "./types";
 export const snowflake = z
   .string()
@@ -144,6 +145,41 @@ export const dealSchema = base.extend({
     minDiscount: z.number().int().min(0).max(100).default(50),
     maxPrice: z.number().min(0).max(10000).default(60),
     historicalLow: z.boolean().default(false),
+    maxPopularityRank: z
+      .number()
+      .int()
+      .min(1)
+      .max(500)
+      .default(DEAL_QUALITY_DEFAULTS.maxPopularityRank),
+    minReviews: z
+      .number()
+      .int()
+      .min(1000)
+      .max(10000000)
+      .default(DEAL_QUALITY_DEFAULTS.minReviews),
+    minScore: z
+      .number()
+      .int()
+      .min(0)
+      .max(100)
+      .default(DEAL_QUALITY_DEFAULTS.minScore),
+    minPlayers: z
+      .number()
+      .int()
+      .min(0)
+      .max(10000000)
+      .default(DEAL_QUALITY_DEFAULTS.minPlayers),
+    maxPostsPerCheck: z
+      .number()
+      .int()
+      .min(1)
+      .max(5)
+      .default(DEAL_QUALITY_DEFAULTS.maxPostsPerCheck),
+    health: z
+      .enum(["healthy", "degraded", "setup_required", "paused"])
+      .default("setup_required"),
+    lastChecked: z.string().optional(),
+    lastError: z.string().max(300).optional(),
     stores: z.array(z.number().int().positive()).max(50).default([]),
     notificationRoleId: optionalId,
     intervalMinutes: z.number().int().min(15).max(1440).default(60),

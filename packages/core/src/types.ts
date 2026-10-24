@@ -1,3 +1,4 @@
+import type { GameDeal } from "./deal-types";
 export type ModuleKey =
   "roles" | "moderation" | "economy" | "music" | "deals" | "news";
 export type ResourceKind =
@@ -161,6 +162,7 @@ export type FeedItem = {
   discount?: number;
   storeId?: number;
   historicalLow?: boolean;
+  deal?: GameDeal;
 };
 export const DEMO_GUILD_ID = "120000000000000001";
 export const DEMO_USER_ID = "120000000000000099";

@@ -1,6 +1,7 @@
 "use client";
 import { cn } from "@/lib/utils";
 import type { Resource, ResourceKind } from "@orbit/core";
+import { DEAL_QUALITY_DEFAULTS } from "@orbit/core/deal-policy";
 import {
   AlertCircle,
   Check,
@@ -95,6 +96,7 @@ export function ResourceEditor({
       emoji: "✨",
     },
     deal: {
+      ...DEAL_QUALITY_DEFAULTS,
       gameId: "",
       channelId:
         channels.find((c) => c.name === "game-deals")?.id ??
@@ -136,9 +138,10 @@ export function ResourceEditor({
   };
   const [name, setName] = useState(resource?.name ?? "");
   const [enabled, setEnabled] = useState(resource?.enabled ?? true);
-  const [values, setValues] = useState<Record<string, any>>(
-    resource?.data ?? defaults[kind] ?? {}
-  );
+  const [values, setValues] = useState<Record<string, any>>({
+    ...(defaults[kind] ?? {}),
+    ...resource?.data,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [advanced, setAdvanced] = useState(false);
@@ -551,7 +554,86 @@ export function ResourceEditor({
                 }}
                 selected={values.gameId}
               />
+              {!values.gameId && (
+                <div className="space-y-3 rounded-lg border border-violet-200/60 bg-violet-50/40 p-4 dark:border-violet-500/20 dark:bg-violet-500/5">
+                  <p className="text-[12px] font-medium">
+                    Automatic posts · familiar games only
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Require ITAD top-list membership AND real Steam review
+                    evidence. DLC, mature/unknown games and missing ratings are
+                    excluded. Popular indie games can qualify; random 100%-off
+                    listings cannot.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field
+                      label="Top ITAD popularity position"
+                      hint="Waitlists + collections, not live player rank."
+                    >
+                      <Input
+                        type="number"
+                        min="1"
+                        max="500"
+                        value={values.maxPopularityRank}
+                        onChange={(e) =>
+                          set("maxPopularityRank", Number(e.target.value))
+                        }
+                      />
+                    </Field>
+                    <Field label="Minimum Steam reviews">
+                      <Input
+                        type="number"
+                        min="1000"
+                        max="10000000"
+                        value={values.minReviews}
+                        onChange={(e) =>
+                          set("minReviews", Number(e.target.value))
+                        }
+                      />
+                    </Field>
+                    <Field label="Minimum Steam positive (%)">
+                      <Input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={values.minScore}
+                        onChange={(e) =>
+                          set("minScore", Number(e.target.value))
+                        }
+                      />
+                    </Field>
+                    <Field
+                      label="Minimum recent Steam players"
+                      hint="ITAD snapshot. Zero disables this extra floor."
+                    >
+                      <Input
+                        type="number"
+                        min="0"
+                        max="10000000"
+                        value={values.minPlayers}
+                        onChange={(e) =>
+                          set("minPlayers", Number(e.target.value))
+                        }
+                      />
+                    </Field>
+                  </div>
+                </div>
+              )}
               {channelSelect}
+              <Field
+                label="Maximum new posts per check"
+                hint="Already delivered offers do not count. Unchanged prices are deduplicated."
+              >
+                <Input
+                  type="number"
+                  min="1"
+                  max="5"
+                  value={values.maxPostsPerCheck}
+                  onChange={(e) =>
+                    set("maxPostsPerCheck", Number(e.target.value))
+                  }
+                />
+              </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Region">
                   <Select
@@ -935,7 +1017,7 @@ function GameSearch({
   return (
     <Field
       label="Watch a specific game"
-      hint="Leave unselected to receive a general deal feed. Search is powered by IsThereAnyDeal."
+      hint="Leave unselected for automatic popular-game discovery. Selecting a specific game is a deliberate watch, not popularity-filtered discovery. IsThereAnyDeal powers live search."
     >
       <div className="flex gap-2">
         <Input

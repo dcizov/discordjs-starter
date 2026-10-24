@@ -1,4 +1,9 @@
-import { PermissionFlagsBits, SlashCommandBuilder } from "discord.js";
+import {
+  ChannelType,
+  PermissionFlagsBits,
+  SlashCommandBuilder,
+  type SlashCommandStringOption,
+} from "discord.js";
 const command = (name: string, description: string) =>
   new SlashCommandBuilder()
     .setName(name)
@@ -17,6 +22,17 @@ const moderation = (name: string, description: string, permission: bigint) =>
         .setMinLength(1)
         .setMaxLength(500)
         .setRequired(true)
+    );
+const dealCountry = (o: SlashCommandStringOption) =>
+  o
+    .setName("country")
+    .setDescription("Regional offers and currency (default Germany / EUR)")
+    .addChoices(
+      { name: "Germany · EUR", value: "DE" },
+      { name: "United States · USD", value: "US" },
+      { name: "United Kingdom · GBP", value: "GB" },
+      { name: "Canada · CAD", value: "CA" },
+      { name: "Australia · AUD", value: "AU" }
     );
 export const commandDefinitions = [
   command("ping", "Check Orbit’s gateway connection"),
@@ -154,11 +170,13 @@ export const commandDefinitions = [
         { name: "Entire queue", value: "queue" }
       )
   ),
-  command("deals", "Find good games at better prices")
+  command("deals", "Find familiar games at better prices")
     .addSubcommand((s) =>
       s
         .setName("search")
-        .setDescription("Search IsThereAnyDeal")
+        .setDescription(
+          "Find base games with images, ratings and regional offers"
+        )
         .addStringOption((o) =>
           o
             .setName("query")
@@ -167,29 +185,153 @@ export const commandDefinitions = [
             .setMinLength(2)
             .setMaxLength(100)
         )
+        .addStringOption(dealCountry)
+        .addIntegerOption((o) =>
+          o
+            .setName("results")
+            .setDescription("Rich game cards (default 3)")
+            .setMinValue(1)
+            .setMaxValue(3)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("info")
+        .setDescription("Game artwork, ratings, players and a current offer")
+        .addStringOption((o) =>
+          o
+            .setName("game")
+            .setDescription("IsThereAnyDeal UUID from /deals search")
+            .setRequired(true)
+        )
+        .addStringOption(dealCountry)
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("now")
+        .setDescription(
+          "Preview popular-game deals; does not post to a channel"
+        )
+        .addStringOption(dealCountry)
     )
     .addSubcommand((s) =>
       s
         .setName("watch")
-        .setDescription("Create a game watchlist (Manage Server required)")
+        .setDescription("Watch one game (Manage Server required)")
         .addStringOption((o) =>
           o
             .setName("game")
             .setDescription("IsThereAnyDeal game UUID from /deals search")
             .setRequired(true)
         )
-        .addStringOption((o) =>
-          o
-            .setName("name")
-            .setDescription("Game title")
-            .setRequired(true)
-            .setMaxLength(80)
-        )
         .addChannelOption((o) =>
           o
             .setName("channel")
             .setDescription("Deal alerts destination")
+            .addChannelTypes(
+              ChannelType.GuildText,
+              ChannelType.GuildAnnouncement
+            )
             .setRequired(true)
+        )
+        .addStringOption(dealCountry)
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("feed")
+        .setDescription(
+          "Configure automatic popular-game posts (Manage Server)"
+        )
+        .addChannelOption((o) =>
+          o
+            .setName("channel")
+            .setDescription("Automatic deals destination")
+            .addChannelTypes(
+              ChannelType.GuildText,
+              ChannelType.GuildAnnouncement
+            )
+            .setRequired(true)
+        )
+        .addStringOption(dealCountry)
+        .addIntegerOption((o) =>
+          o
+            .setName("min-discount")
+            .setDescription("Minimum percent discount (default 50)")
+            .setMinValue(1)
+            .setMaxValue(100)
+        )
+        .addNumberOption((o) =>
+          o
+            .setName("max-price")
+            .setDescription("Maximum price in regional currency (default 60)")
+            .setMinValue(0)
+            .setMaxValue(10000)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("min-reviews")
+            .setDescription("Minimum Steam reviews (default 10000)")
+            .setMinValue(1000)
+            .setMaxValue(10000000)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("min-score")
+            .setDescription("Minimum Steam positive percentage (default 70)")
+            .setMinValue(0)
+            .setMaxValue(100)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("min-players")
+            .setDescription(
+              "Minimum recent Steam players via ITAD (default no minimum)"
+            )
+            .setMinValue(0)
+            .setMaxValue(10000000)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("popular-rank")
+            .setDescription("Top N ITAD waitlists + collections (default 500)")
+            .setMinValue(1)
+            .setMaxValue(500)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("interval")
+            .setDescription("Minutes between checks (default 60)")
+            .setMinValue(15)
+            .setMaxValue(1440)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("max-posts")
+            .setDescription("Maximum NEW posts per check (default 3)")
+            .setMinValue(1)
+            .setMaxValue(5)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("pause")
+        .setDescription("Pause automatic feed in a channel (Manage Server)")
+        .addChannelOption((o) =>
+          o
+            .setName("channel")
+            .setDescription("Deals channel")
+            .addChannelTypes(
+              ChannelType.GuildText,
+              ChannelType.GuildAnnouncement
+            )
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("list")
+        .setDescription(
+          "Show this server's automatic feeds and popularity filters"
         )
     ),
   command("news", "Check your connected news sources")

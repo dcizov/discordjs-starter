@@ -9,15 +9,16 @@ import {
   putMusicState,
   setHealth,
 } from "@orbit/db";
-import { PermissionFlagsBits, type Client, type GuildMember } from "discord.js";
-import { randomUUID } from "node:crypto";
 import {
-  Connectors,
-  Shoukaku,
-  type Track as LavalinkTrack,
-  type Player,
-} from "shoukaku";
+  ChannelType,
+  PermissionFlagsBits,
+  type Client,
+  type GuildMember,
+} from "discord.js";
+import { randomUUID } from "node:crypto";
+import { Shoukaku, type Track as LavalinkTrack, type Player } from "shoukaku";
 import { MusicNodeMetadata } from "./music-node";
+import { joinMusicVoice, MusicDiscordConnector } from "./music-voice";
 import { MusicPluginRest, sponsorBlockCategories } from "./music-plugins";
 import {
   musicNodeDescription,
@@ -30,11 +31,13 @@ export class MusicService {
   private locks = new Map<string, Promise<unknown>>();
   private lastSave = new Map<string, number>();
   private metadata = new MusicNodeMetadata();
+  private voiceConnector: MusicDiscordConnector;
   constructor(private client: Client) {
+    this.voiceConnector = new MusicDiscordConnector(client);
     this.backend =
       process.env.LAVALINK_URL && process.env.LAVALINK_PASSWORD
         ? new Shoukaku(
-            new Connectors.DiscordJS(client),
+            this.voiceConnector,
             [
               {
                 name: "main",
@@ -224,6 +227,10 @@ export class MusicService {
         throw new Error("The DJ role is required to control music.");
       const voice = member.voice.channel;
       if (!voice) throw new Error("Join a voice channel first.");
+      if (voice.type !== ChannelType.GuildVoice)
+        throw new Error(
+          "Use a normal server voice channel. Stage-channel speaker promotion is not supported."
+        );
       if ("nsfw" in voice && voice.nsfw)
         throw new Error(
           "Music is restricted to non-NSFW voice channels. Choose a clean recording in an appropriate channel."
@@ -239,6 +246,14 @@ export class MusicService {
         throw new Error(
           "Orbit needs Connect and Speak permissions in your voice channel."
         );
+      if (
+        me.voice.channelId !== voice.id &&
+        voice.full &&
+        !voice.permissionsFor(me)?.has(PermissionFlagsBits.MoveMembers)
+      )
+        throw new Error(
+          "This voice channel is full. Choose a non-full channel or grant the bot Move Members to bypass the user limit."
+        );
       let player = this.backend.players.get(guild.id);
       const state = this.state(guild.id);
       if (input.action === "play") {
@@ -249,11 +264,11 @@ export class MusicService {
         if (state.tracks.length + tracks.length > stored.config.music.maxQueue)
           throw new Error("This request would exceed the queue limit.");
         if (!player) {
-          player = await this.backend.joinVoiceChannel({
+          player = await joinMusicVoice(this.backend, this.voiceConnector, {
             guildId: guild.id,
             channelId: voice.id,
             shardId: guild.shardId,
-            deaf: true,
+            currentChannelId: me.voice.channelId,
           });
           state.volume = stored.config.music.defaultVolume;
           await player.setGlobalVolume(state.volume);
@@ -295,6 +310,17 @@ export class MusicService {
         );
         if (!state.current) await this.next(guild.id, player);
       } else {
+        if (input.action === "stop" && !player) {
+          await this.backend.leaveVoiceChannel(guild.id);
+          if (me.voice.channelId)
+            await this.voiceConnector.clearStaleVoice(guild.id, guild.shardId);
+          this.sessions.set(guild.id, emptyMusic());
+          await this.persist(guild.id);
+          return {
+            message: "Stopped and cleared the pending voice connection.",
+            queued: 0,
+          };
+        }
         if (!player)
           throw new Error(
             "Nothing is playing right now. Add a track with /play."

@@ -1,6 +1,7 @@
 import type { FeedItem, Resource } from "@orbit/core";
 import { isDemo } from "@orbit/core";
 import { matchesFilters, safeLink } from "@orbit/core/feeds";
+import { dealQuality, eligibleDeal } from "@orbit/core/deal-policy";
 import { createQueue } from "@orbit/core/queue";
 import { getGuild, getResource, listResources, reserveDelivery } from "./store";
 let queue: ReturnType<typeof createQueue> | undefined;
@@ -23,14 +24,19 @@ export async function dispatchItems(source: Resource, items: FeedItem[]) {
       : [];
   let count = 0;
   for (const item of items) {
+    if (
+      source.kind === "deal" &&
+      (!item.deal || !eligibleDeal(item.deal, current.data))
+    )
+      continue;
     const normalized = {
       ...item,
-      tags: [...new Set([...item.tags, ...(source.data.tags ?? [])])],
+      tags: [...new Set([...item.tags, ...(current.data.tags ?? [])])],
     };
-    if (!matchesFilters(normalized, source.data.keywords ?? [])) continue;
+    if (!matchesFilters(normalized, current.data.keywords ?? [])) continue;
     const destinations = new Map<string, Record<string, any>>();
-    if (source.data.channelId)
-      destinations.set(source.data.channelId, source.data);
+    if (current.data.channelId)
+      destinations.set(current.data.channelId, current.data);
     for (const route of routes)
       if (matchesFilters(normalized, route.data.keywords, route.data.tags))
         destinations.set(route.data.channelId, route.data);
@@ -42,9 +48,10 @@ export async function dispatchItems(source: Resource, items: FeedItem[]) {
         sourceId: source.id,
         externalId: item.id,
         title: item.title,
-        url: safeLink(item.url),
+        url: source.kind === "deal" ? item.url : safeLink(item.url),
         channelId,
         payload: {
+          ...(source.kind === "deal" && item.deal ? { deal: item.deal } : {}),
           summary: item.summary,
           tags: normalized.tags,
           notificationRoleId:
@@ -64,6 +71,13 @@ export async function dispatchItems(source: Resource, items: FeedItem[]) {
         count++;
       }
     }
+    // Apply the cap AFTER deduplication; already-seen top games must not starve
+    // later eligible games forever, or create more posts on every timestamp tick.
+    if (
+      source.kind === "deal" &&
+      count >= dealQuality(current.data).maxPostsPerCheck
+    )
+      break;
   }
   return count;
 }

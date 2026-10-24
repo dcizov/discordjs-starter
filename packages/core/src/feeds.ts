@@ -1,26 +1,12 @@
+import { officialJson, upstreamError } from "./integration-http";
+export { officialJson } from "./integration-http";
+export { searchGames, pollDeals } from "./deals";
 import { XMLParser } from "fast-xml-parser";
 import { lookup } from "node:dns/promises";
 import { Agent, request } from "undici";
 import { assertFeedUrl, isPublicAddress, safeText } from "./safety";
 import type { FeedItem, Resource } from "./types";
 const MAX_BYTES = 1024 * 1024;
-function upstreamError(status: number, retryAfter?: string) {
-  let retryAfterMs: number | undefined;
-  if (retryAfter) {
-    const seconds = Number(retryAfter);
-    retryAfterMs = Number.isFinite(seconds)
-      ? seconds * 1000
-      : new Date(retryAfter).getTime() - Date.now();
-    if (!Number.isFinite(retryAfterMs)) retryAfterMs = undefined;
-    else retryAfterMs = Math.max(1000, Math.min(retryAfterMs, 86400000));
-  }
-  return Object.assign(
-    new Error(
-      `Integration returned HTTP ${status}${retryAfterMs ? `; retry after ${Math.ceil(retryAfterMs / 1000)}s` : ""}`
-    ),
-    { status, retryAfterMs }
-  );
-}
 
 export async function fetchFeedText(
   input: string,
@@ -166,19 +152,7 @@ export function parseFeed(xml: string): FeedItem[] {
     })
     .filter((i) => i.id && i.title);
 }
-export async function officialJson(url: string, init?: RequestInit) {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
-  if (!res.ok) {
-    throw upstreamError(
-      res.status,
-      res.headers.get("retry-after") ?? undefined
-    );
-  }
-  const text = await res.text();
-  if (text.length > 4 * MAX_BYTES)
-    throw new Error("Integration response is too large");
-  return JSON.parse(text);
-}
+
 export async function pollSource(source: Resource): Promise<FeedItem[]> {
   const d = source.data;
   if (d.adapter === "webhook") return [];
@@ -216,83 +190,4 @@ export function matchesFilters(
         item.tags.some((it) => it.toLowerCase() === t.toLowerCase())
       ))
   );
-}
-export async function searchGames(query: string) {
-  const key = process.env.ITAD_API_KEY;
-  if (!key)
-    throw new Error("Add an IsThereAnyDeal API key to enable game search");
-  if (query.trim().length < 2) throw new Error("Enter at least 2 characters");
-  const data = await officialJson(
-    `https://api.isthereanydeal.com/games/search/v1?key=${encodeURIComponent(key)}&title=${encodeURIComponent(query.slice(0, 100))}&results=15`
-  );
-  return data.map((g: any) => ({
-    id: g.id,
-    title: safeText(g.title, 150),
-    slug: g.slug,
-  }));
-}
-export async function pollDeals(resource: Resource): Promise<FeedItem[]> {
-  const key = process.env.ITAD_API_KEY;
-  if (!key) throw new Error("IsThereAnyDeal is not configured");
-  const d = resource.data;
-  const params = new URLSearchParams({
-    key,
-    country: d.region ?? "DE",
-    shops: (d.stores ?? []).join(","),
-  });
-  let list: any[] = [];
-  if (d.gameId) {
-    const data = await officialJson(
-      `https://api.isthereanydeal.com/games/prices/v3?${params}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify([d.gameId]),
-      }
-    );
-    list = (data[0]?.deals ?? []).map((deal: any) => ({
-      id: d.gameId,
-      title: resource.name,
-      deal,
-      historyLow: data[0]?.historyLow,
-    }));
-  } else {
-    params.set("sort", "-cut");
-    params.set("limit", "50");
-    params.set("nondeals", "false");
-    const data = await officialJson(
-      `https://api.isthereanydeal.com/deals/v2?${params}`
-    );
-    list = data.list ?? [];
-  }
-  return list
-    .map((g: any): FeedItem => {
-      const p = g.deal;
-      const low =
-        p?.historyLow?.amount ??
-        g.historyLow?.all?.amount ??
-        g.historyLow?.amount;
-      return {
-        id: `${g.id}:${p?.shop?.id}:${p?.price?.amountInt ?? p?.price?.amount}:${p?.timestamp ?? ""}`,
-        title: safeText(g.title, 200),
-        url: safeLink(p?.url ?? ""),
-        summary: `${p?.price?.amount} ${p?.price?.currency} · ${p?.cut ?? 0}% off at ${safeText(p?.shop?.name ?? "store", 50)}`,
-        price: p?.price?.amount,
-        currency: p?.price?.currency,
-        discount: p?.cut ?? 0,
-        storeId: p?.shop?.id,
-        historicalLow: typeof low === "number" && p?.price?.amount <= low,
-        publishedAt: new Date().toISOString(),
-        tags: ["Deals"],
-      };
-    })
-    .filter(
-      (i) =>
-        typeof i.price === "number" &&
-        i.currency === d.currency &&
-        i.price <= d.maxPrice &&
-        (i.discount ?? 0) >= d.minDiscount &&
-        (!d.historicalLow || i.historicalLow) &&
-        (!d.stores?.length || d.stores.includes(i.storeId))
-    );
 }
