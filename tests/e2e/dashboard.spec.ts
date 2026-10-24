@@ -344,6 +344,12 @@ test("server switcher distinguishes communities that need an invite", async ({
   await expect(
     page.getByRole("heading", { name: "Let’s connect Pixel Pioneers." })
   ).toBeVisible();
+  await expect(
+    page.getByText("All systems operational", { exact: true })
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("Status not reported", { exact: true })
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Invite Orbit to your server" })
     .click();

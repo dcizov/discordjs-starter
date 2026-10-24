@@ -356,14 +356,18 @@ export function Dashboard({
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
-                    data.health.every((h) => h.status === "healthy")
+                    data.health.length > 0 &&
+                      data.health.every((h) => h.status === "healthy")
                       ? "bg-emerald-400"
                       : "bg-amber-400"
                   )}
                 />
-                {data.health.every((h) => h.status === "healthy")
+                {data.health.length > 0 &&
+                data.health.every((h) => h.status === "healthy")
                   ? "All systems operational"
-                  : "Some services need attention"}
+                  : data.health.length
+                    ? "Some services need attention"
+                    : "Status not reported"}
               </span>
               <button
                 aria-label="Search dashboard"

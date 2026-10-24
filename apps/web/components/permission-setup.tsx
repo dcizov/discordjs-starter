@@ -223,9 +223,12 @@ export function PermissionSetup() {
             </li>
             <li>
               Gateway intents requested in code: {gatewayIntentNames.join(", ")}
-              . Enable Server Members and Message Content in the Portal for this
-              runtime. GuildVoiceStates is NOT a privileged toggle; no Presence
-              intent is requested.
+              . No Presence intent is requested.
+            </li>
+            <li>
+              Portal privileged intents: enable Server Members and Message
+              Content for this runtime. GuildVoiceStates is NOT a privileged
+              toggle.
             </li>
             <li>
               Command defaults, runtime moderator checks, protected targets and
@@ -236,13 +239,13 @@ export function PermissionSetup() {
               Administrator) authorizes the dashboard, not bot powers; writes
               re-check authorization.
             </li>
-            <li>
-              For music, test a normal non-full voice channel with View Channel,
-              Connect and Speak. Then distinguish Discord handshake, Lavalink
-              player and permitted source loading. No playback claim follows
-              from these synced bits.
-            </li>
           </ol>
+          <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+            For music, test a normal non-full voice channel with View Channel,
+            Connect and Speak. Then distinguish Discord handshake, Lavalink
+            player and permitted source loading. No playback claim follows from
+            these synced bits.
+          </p>
         </Card>
       </div>
     </div>
