@@ -12,7 +12,9 @@ x-app: &app
     DATABASE_URL: postgres://orbit:${POSTGRES_PASSWORD:-orbit_dev_password}@postgres:5432/orbit
     REDIS_URL: redis://redis:6379
     APP_URL: ${APP_URL:-http://localhost:3000}
-    LAVALINK_URL: lavalink:2333
+    # Keep optional music disabled unless credentials are configured.
+    LAVALINK_URL: ${LAVALINK_PASSWORD:+lavalink:2333}
+    LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:-}
     DEMO_DATA_PATH: /app/.data/demo.json
   init: true
   restart: unless-stopped
@@ -127,8 +129,9 @@ services:
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-change-this-lavalink-password}
     volumes:
       - ./docker/lavalink/application.yml:/opt/Lavalink/application.yml:ro
-    expose:
-      - "2333"
+    # Host-run development bots need this; never bind the audio API publicly.
+    ports:
+      - "127.0.0.1:2333:2333"
     restart: unless-stopped
     mem_limit: 768m
 

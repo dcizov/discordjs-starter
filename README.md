@@ -126,13 +126,13 @@ docker compose --profile live up -d --build
 
 docker compose --profile live run --rm bot node dist/register.js
 
-# Optional music server, on the private Compose network:
+# Optional music server, after setting LAVALINK_PASSWORD in .env:
 docker compose --profile music up -d lavalink
 
 docker compose logs -f web bot worker
 ```
 
-In containers, the database and Redis hosts are `postgres` and `redis`; Compose overrides the host connection URLs. Lavalink is `lavalink:2333` and is not exposed publicly. Choose a strong Lavalink password and set it consistently in `.env`.
+In containers, the database and Redis hosts are `postgres` and `redis`; Compose overrides the host connection URLs. Lavalink is `lavalink:2333` inside Compose and `localhost:2333` for a host-run bot; the optional music service publishes its port only on `127.0.0.1`, not publicly. Choose a strong Lavalink password and set it consistently in `.env`. Music connections are disabled by default in `.env.example`: leave both `LAVALINK_URL` and `LAVALINK_PASSWORD` empty if you are not using music.
 
 Docker images run as the unprivileged `node` user. Compose uses an init process and graceful stop periods. PostgreSQL and Redis use persistent volumes. `.data`, credentials, dependencies, browser artifacts, and build outputs are not committed.
 

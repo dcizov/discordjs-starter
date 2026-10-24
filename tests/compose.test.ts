@@ -42,4 +42,21 @@ describe("Compose startup and upgrade safety", () => {
       );
     }
   });
+
+  it("publishes the optional music backend on host loopback for local bot development", () => {
+    const music = compose.services.lavalink;
+    expect(music.profiles).toEqual(["music"]);
+    expect(music.ports).toEqual(["127.0.0.1:2333:2333"]);
+    expect(music.environment.LAVALINK_SERVER_PASSWORD).toContain(
+      "${LAVALINK_PASSWORD:"
+    );
+  });
+
+  it("keeps shared music connections disabled in Compose when no password is configured", () => {
+    for (const service of ["web", "bot", "worker", "migrate"]) {
+      const env = compose.services[service].environment;
+      expect(env.LAVALINK_URL).toBe("${LAVALINK_PASSWORD:+lavalink:2333}");
+      expect(env.LAVALINK_PASSWORD).toBe("${LAVALINK_PASSWORD:-}");
+    }
+  });
 });
