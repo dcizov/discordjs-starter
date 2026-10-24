@@ -1,7 +1,9 @@
 import { safeText } from "@orbit/core";
+import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { pollSource, searchGames } from "@orbit/core/feeds";
 import { logger } from "@orbit/core/logger";
 import {
+  audit,
   database,
   economyTransaction,
   getDashboardData,
@@ -444,9 +446,35 @@ export async function onInteraction(
           "That command is not available. Try /roles, /daily, /shop, or /play."
         );
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
+    const detail = errorDiagnostic(e);
+    if (
+      i.isChatInputCommand() &&
+      [
+        "play",
+        "pause",
+        "resume",
+        "skip",
+        "stop",
+        "volume",
+        "shuffle",
+        "repeat",
+      ].includes(i.commandName)
+    )
+      await audit(
+        i.guild.id,
+        { id: i.user.id, name: i.user.displayName },
+        "failed",
+        `music /${i.commandName}`,
+        detail
+      ).catch((error) =>
+        logger.warn(
+          { error: errorDiagnostic(error) },
+          "Could not save music command failure"
+        )
+      );
     logger.warn(
-      { guildId: i.guildId, interactionType: i.type, error: e.message },
+      { guildId: i.guildId, interactionType: i.type, error: detail },
       "Interaction could not be completed"
     );
     if (i.isAutocomplete()) {
@@ -455,7 +483,7 @@ export async function onInteraction(
     }
     if (i.isRepliable()) {
       const text = {
-        content: safeText(`A small bump in the orbit: ${e.message}`, 1900),
+        content: safeText(`A small bump in the orbit: ${detail}`, 1900),
         allowedMentions: { parse: [] as never[] },
       };
       if (i.deferred || i.replied) await i.editReply(text).catch(() => {});

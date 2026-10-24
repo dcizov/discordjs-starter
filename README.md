@@ -138,7 +138,7 @@ Docker images run as the unprivileged `node` user. Compose uses an init process 
 
 The schema is a new baseline for this expanded application, not an in-place migration of a previously deployed standalone starter. Back up an existing installation and plan data import before replacing it.
 
-## Developer utility: export channels and permissions
+## Developer utilities: export channels, permissions, and server roles
 
 Export live Discord channel/category structure, role base permissions, and role/member permission overwrites as readable JSON:
 
@@ -147,11 +147,28 @@ npm run channels:export -- --guild YOUR_SERVER_ID
 
 # Optional: select one channel (includes its parent category).
 npm run channels:export -- --guild YOUR_SERVER_ID --channel YOUR_CHANNEL_ID
+
+# Dedicated server-role snapshot, including colors, flags, and integration tags.
+npm run roles:export -- --guild YOUR_SERVER_ID
 ```
 
 Use the server ID from your dashboard URL. This read-only utility uses `DISCORD_TOKEN` with `DEMO_MODE=false`; no database, Redis, gateway login, or bot restart is required. Output goes to the ignored `.exports/` directory with overwrite protection. Masks are exact decimal strings with decoded permission names; this is configured permission data, not calculated effective permissions for each member.
 
-See [channel export options, format, and privacy](docs/CHANNEL_EXPORT.md) for `--out`, JSON piping, limits, and the compiled CLI. Export files can contain private channel names and member IDs—keep them private.
+See [channel/role export options, format, and privacy](docs/CHANNEL_EXPORT.md) for `--out`, JSON piping, limits, and the compiled CLI. Export files can contain private channel names and member IDs—keep them private.
+
+## Dashboard command reference and error diagnostics
+
+The **Commands** sidebar page lists all implemented slash-command invocations, with search, module filters, current module switches, usage copying, arguments/choices/limits, and permission notes. It is generated from the same builders used by registration, not a second hand-maintained command list. It does **not** verify the commands currently registered in Discord. See [command reference behavior](docs/COMMANDS.md).
+
+Audit details offer **Copy error / Copy details** (the exact stored detail) and **Copy full event** (JSON). New errors retain sanitized multiline diagnostics, bounded to 8,192 characters with an explicit truncation marker. Previously shortened audit records cannot be reconstructed.
+
+For a connected backend that cannot load a track, use the read-only source check:
+
+```sh
+npm run music:doctor -- --query "the same failing search text"
+```
+
+It reports backend versions, enabled sources, and the provider's sanitized cause/severity, without Discord login, queue changes, or audio playback. See [music troubleshooting](docs/MUSIC.md#connected-but-a-track-will-not-load). Source availability and live playback still require verification on your deployment.
 
 ## Verification
 

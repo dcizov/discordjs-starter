@@ -28,6 +28,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CommandsPage } from "./commands-page";
 import { EconomyPage } from "./economy-page";
 import { MusicPage } from "./music-page";
 import { navigation } from "./navigation";
@@ -312,7 +313,7 @@ export function Dashboard({
       value={{ data, setData, api, refresh, saveConfig, navigate }}
     >
       <div className="min-h-screen" inert={!hydrated} data-hydrated={hydrated}>
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col border-r border-border bg-card px-4 pb-5 pt-7 lg:flex">
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col overflow-y-auto border-r border-border bg-card px-4 pb-5 pt-7 lg:flex">
           {sidebar}
         </aside>
         {mobile && (
@@ -535,6 +536,8 @@ export function Dashboard({
                   <EconomyPage />
                 ) : section === "music" ? (
                   <MusicPage />
+                ) : section === "commands" ? (
+                  <CommandsPage />
                 ) : section === "channels" ? (
                   <ChannelsPage />
                 ) : section === "audit" ? (

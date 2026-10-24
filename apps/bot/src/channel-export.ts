@@ -17,6 +17,41 @@ const roleSchema = z.object({
   position: z.number().int(),
   managed: z.boolean(),
   permissions: bitfield,
+  color: z.number().int().min(0).max(0xffffff).optional(),
+  colors: z
+    .object({
+      primary_color: z.number().int().min(0).max(0xffffff),
+      secondary_color: z
+        .number()
+        .int()
+        .min(0)
+        .max(0xffffff)
+        .nullable()
+        .optional(),
+      tertiary_color: z
+        .number()
+        .int()
+        .min(0)
+        .max(0xffffff)
+        .nullable()
+        .optional(),
+    })
+    .optional(),
+  hoist: z.boolean().optional(),
+  mentionable: z.boolean().optional(),
+  icon: z.string().nullable().optional(),
+  unicode_emoji: z.string().nullable().optional(),
+  flags: z.number().int().nonnegative().safe().optional(),
+  tags: z
+    .object({
+      bot_id: snowflake.optional(),
+      integration_id: snowflake.optional(),
+      premium_subscriber: z.null().optional(),
+      subscription_listing_id: snowflake.optional(),
+      available_for_purchase: z.null().optional(),
+      guild_connections: z.null().optional(),
+    })
+    .optional(),
 });
 const overwriteSchema = z.object({
   id: snowflake,
@@ -59,6 +94,89 @@ export function exportPermissionBits(value: string) {
 function byId(a: { id: string }, b: { id: string }) {
   return BigInt(a.id) < BigInt(b.id) ? -1 : BigInt(a.id) > BigInt(b.id) ? 1 : 0;
 }
+function exportRoles(roles: z.infer<typeof roleSchema>[], guildId: string) {
+  return [...roles]
+    .sort((a, b) => b.position - a.position || byId(a, b))
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      position: r.position,
+      isEveryone: r.id === guildId,
+      managed: r.managed,
+      permissions: exportPermissionBits(r.permissions),
+      color: r.color ?? null,
+      colors: r.colors
+        ? {
+            primary: r.colors.primary_color,
+            secondary: r.colors.secondary_color ?? null,
+            tertiary: r.colors.tertiary_color ?? null,
+          }
+        : null,
+      hoist: r.hoist ?? null,
+      mentionable: r.mentionable ?? null,
+      icon: r.icon ?? null,
+      unicodeEmoji: r.unicode_emoji ?? null,
+      flags: r.flags ?? null,
+      // Discord represents these tag flags by a PRESENT null, not true/false.
+      tags: r.tags
+        ? {
+            botId: r.tags.bot_id ?? null,
+            integrationId: r.tags.integration_id ?? null,
+            premiumSubscriber: Object.hasOwn(r.tags, "premium_subscriber"),
+            subscriptionListingId: r.tags.subscription_listing_id ?? null,
+            availableForPurchase: Object.hasOwn(
+              r.tags,
+              "available_for_purchase"
+            ),
+            guildConnections: Object.hasOwn(r.tags, "guild_connections"),
+          }
+        : null,
+    }));
+}
+
+/** A role-only snapshot: no channels, members, assignments, or gateway access. */
+export function buildServerRoleExport(
+  input: { guild: unknown; roles: unknown },
+  selection: { guildId: string },
+  exportedAt = new Date()
+) {
+  const guildId = snowflake.parse(selection.guildId);
+  const guild = guildSchema.parse(input.guild);
+  const roles = z.array(roleSchema).parse(input.roles);
+  if (guild.id !== guildId)
+    throw new Error(
+      "Discord returned data for a different server; no export was written."
+    );
+  if (new Set(roles.map((r) => r.id)).size !== roles.length)
+    throw new Error("Discord returned duplicate role IDs; retry the export.");
+  return {
+    format: "orbit.discord-server-roles" as const,
+    schemaVersion: 1,
+    exportedAt: exportedAt.toISOString(),
+    source: "discord-rest-api",
+    guild: {
+      id: guild.id,
+      name: guild.name,
+      ownerId: guild.owner_id,
+      everyoneRoleId: guild.id,
+    },
+    limitations: [
+      "Configured base role permissions only, not effective member access. Administrator and owner bypasses are not expanded.",
+      "Channels, channel overwrites, members, role assignments, messages, tokens, and secrets are not included.",
+      "Absent optional role metadata is null, not a guessed false or empty value. Colors are Discord's integer RGB values.",
+      "Multiple read-only REST requests are not an atomic snapshot. This is not an import/restore file or a full server backup.",
+    ],
+    permissionFlags: Object.fromEntries(
+      flags.map(([bits, name]) => [name, bits.toString()])
+    ),
+    roles: exportRoles(roles, guildId),
+    warnings: roles.some((r) => r.id === guildId)
+      ? []
+      : [{ code: "EVERYONE_ROLE_NOT_RETURNED" }],
+  };
+}
+export type ServerRoleExport = ReturnType<typeof buildServerRoleExport>;
+
 function normalizeOverwrites(overwrites: RawOverwrite[]) {
   return overwrites
     .map((o) => `${o.type}:${o.id}:${BigInt(o.allow)}:${BigInt(o.deny)}`)
@@ -138,7 +256,7 @@ export function buildChannelPermissionExport(
     .filter((c) => included.has(c.id))
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || byId(a, b));
   return {
-    format: "orbit.discord-channel-permissions",
+    format: "orbit.discord-channel-permissions" as const,
     schemaVersion: 1,
     exportedAt: exportedAt.toISOString(),
     source: "discord-rest-api",
@@ -159,15 +277,7 @@ export function buildChannelPermissionExport(
     permissionFlags: Object.fromEntries(
       flags.map(([bits, name]) => [name, bits.toString()])
     ),
-    roles: [...roles]
-      .sort((a, b) => b.position - a.position || byId(a, b))
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        position: r.position,
-        managed: r.managed,
-        permissions: exportPermissionBits(r.permissions),
-      })),
+    roles: exportRoles(roles, guildId),
     channels: selected.map((c) => {
       if (!c.permission_overwrites)
         warnings.push({ code: "OVERWRITES_NOT_RETURNED", channelId: c.id });
@@ -239,12 +349,26 @@ export async function collectChannelPermissionExport(
   );
 }
 
+export async function collectServerRoleExport(
+  api: ReadOnlyDiscordApi,
+  selection: { guildId: string },
+  now: () => Date = () => new Date()
+) {
+  const guildId = snowflake.parse(selection.guildId);
+  const [guild, roles] = await Promise.all([
+    api.get(Routes.guild(guildId)),
+    api.get(Routes.guildRoles(guildId)),
+  ]);
+  return buildServerRoleExport({ guild, roles }, { guildId }, now());
+}
+
 export function parseChannelExportArgs(args: string[]) {
   const { values, tokens } = parseArgs({
     args,
     options: {
       guild: { type: "string" },
       channel: { type: "string" },
+      "roles-only": { type: "boolean", default: false },
       out: { type: "string" },
       stdout: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
@@ -272,6 +396,8 @@ export function parseChannelExportArgs(args: string[]) {
     throw new Error(
       "Provide --channel with a valid 17–20 digit Discord channel ID."
     );
+  if (values["roles-only"] && values.channel !== undefined)
+    throw new Error("--channel cannot be combined with --roles-only.");
   if (values.stdout && values.out !== undefined)
     throw new Error("Choose either --out or --stdout, not both.");
   if (
@@ -283,17 +409,20 @@ export function parseChannelExportArgs(args: string[]) {
     help: false,
     guildId: values.guild,
     channelId: values.channel,
+    rolesOnly: values["roles-only"],
     out: values.out,
     stdout: values.stdout,
   } as const;
 }
 export async function writeChannelPermissionExport(
-  data: ChannelPermissionExport,
+  data: ChannelPermissionExport | ServerRoleExport,
   out?: string
 ) {
   const timestamp = data.exportedAt.replace(/[:.]/g, "-");
+  const kind =
+    data.format === "orbit.discord-server-roles" ? "roles" : "channels";
   const path = resolve(
-    out ?? `.exports/channels-${data.guild.id}-${timestamp}.json`
+    out ?? `.exports/${kind}-${data.guild.id}-${timestamp}.json`
   );
   const json = `${JSON.stringify(data, null, 2)}\n`;
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });

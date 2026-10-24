@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DEMO_GUILD_ID, DEMO_USER_ID } from "@orbit/core";
 import { demoRead } from "../packages/db/src/demo";
-import { economyTransaction, getGuild, saveConfig } from "@orbit/db";
+import { audit, economyTransaction, getGuild, saveConfig } from "@orbit/db";
 let dir: string;
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "orbit-demo-test-"));
@@ -35,6 +35,21 @@ describe("credential-free persistent demo", () => {
       "Moon dust"
     );
     expect((await demoRead()).audit[0].actorName).toBe("Demo tester");
+  });
+  it("preserves safe multiline errors in the persistent audit store instead of flattening or shortening them", async () => {
+    const detail = `Source lookup failed
+	java.example.Loader.<init>
+${"nested details ".repeat(120)}`;
+    await audit(
+      DEMO_GUILD_ID,
+      { id: DEMO_USER_ID, name: "Demo tester" },
+      "failed",
+      "music",
+      detail
+    );
+    const stored = (await demoRead()).audit[0];
+    expect(stored.detail).toBe(detail);
+    expect(stored.detail.length).toBeGreaterThan(1000);
   });
   it("serializes competing rewards and never double grants", async () => {
     const results = await Promise.allSettled(

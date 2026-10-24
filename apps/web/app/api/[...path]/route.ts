@@ -11,6 +11,8 @@ import {
   resourceSchemas,
   snowflake,
 } from "@orbit/core";
+import { diagnosticText } from "@orbit/core/diagnostics";
+import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { pollSource, searchGames } from "@orbit/core/feeds";
 import { createQueue, enqueueAction } from "@orbit/core/queue";
 import {
@@ -19,6 +21,7 @@ import {
   deleteResource,
   economyTransaction,
   getDashboardData,
+  getGuild,
   queryHistory,
   getResource,
   putMusicState,
@@ -54,6 +57,12 @@ async function handle(req: Request, context: Context) {
       return NextResponse.json({ url: inviteUrl(guildId) });
     if (!auth.guild.installed)
       throw new HttpError(409, "Invite Orbit to this server first");
+    if (path[2] === "commands" && path.length === 3 && req.method === "GET") {
+      const guild = await getGuild(guildId);
+      if (!guild)
+        throw new HttpError(409, "Orbit is still syncing this server");
+      return NextResponse.json(getCommandCatalog(guild.config));
+    }
     if (path[2] === "actions" && path[3] && req.method === "GET") {
       if (isDemo()) throw new HttpError(404, "No live jobs in demo mode");
       const q = createQueue("discord-actions");
@@ -67,7 +76,7 @@ async function handle(req: Request, context: Context) {
           throw new HttpError(404, "Action not found");
         return NextResponse.json({
           state: await job.getState(),
-          error: job.failedReason || null,
+          error: job.failedReason ? diagnosticText(job.failedReason) : null,
           result: job.returnvalue,
         });
       } finally {

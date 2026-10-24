@@ -5,6 +5,7 @@ import {
   safeText,
   validateEnvironment,
 } from "@orbit/core";
+import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import { redisConnection } from "@orbit/core/queue";
 import {
@@ -170,81 +171,97 @@ async function main() {
       actionWorker = new Worker(
         "discord-actions",
         async (job) => {
-          const { guildId, actorId } = job.data;
-          const guild = await client.guilds.fetch(guildId),
-            actor = await guild.members.fetch({ user: actorId, force: true });
-          if (
-            job.name !== "music" &&
-            job.name !== "claim-role" &&
-            !actor.permissions.has(PermissionFlagsBits.ManageGuild)
-          )
-            throw new Error(
-              "The requester no longer has Manage Server permission"
-            );
-          if (job.name === "publish-panel")
-            return publishPanel(client, guildId, job.data.panelId, actorId);
-          if (job.name === "claim-role")
-            return claimShopRole(actor, job.data.itemId);
-          if (job.name === "music") return music.action(actor, job.data);
-          if (job.name === "test-message") {
-            const stored = await getGuild(guildId),
-              source = await getResource(guildId, job.data.sourceId);
+          try {
+            const { guildId, actorId } = job.data;
+            const guild = await client.guilds.fetch(guildId),
+              actor = await guild.members.fetch({ user: actorId, force: true });
             if (
-              !stored?.config.modules.news ||
-              !source ||
-              source.kind !== "source"
+              job.name !== "music" &&
+              job.name !== "claim-role" &&
+              !actor.permissions.has(PermissionFlagsBits.ManageGuild)
             )
-              throw new Error("Source unavailable or news paused");
-            const channel = await guild.channels.fetch(source.data.channelId),
-              me = await guild.members.fetchMe();
-            if (
-              !channel?.isTextBased() ||
-              !("send" in channel) ||
-              !channel
-                .permissionsFor(me)
-                ?.has([
-                  PermissionFlagsBits.ViewChannel,
-                  PermissionFlagsBits.SendMessages,
-                  PermissionFlagsBits.EmbedLinks,
-                ])
-            )
-              throw new Error("Missing permissions to send a test message");
-            const message = await channel.send({
-              embeds: [
-                new EmbedBuilder()
-                  .setTitle(
-                    `A little test flight from ${safeText(source.name, 80)}`
-                  )
-                  .setDescription(
-                    "Your community updates have found their way. This is a test message from Orbit."
-                  )
-                  .setColor(
-                    parseInt(source.data.embedColor.replace("#", ""), 16)
-                  )
-                  .setTimestamp(),
-              ],
-              allowedMentions: { parse: [] },
-              nonce: fingerprint(guildId, source.id, job.id!).slice(0, 24),
-              enforceNonce: true,
-            });
-            return { messageId: message.id };
+              throw new Error(
+                "The requester no longer has Manage Server permission"
+              );
+            if (job.name === "publish-panel")
+              return await publishPanel(
+                client,
+                guildId,
+                job.data.panelId,
+                actorId
+              );
+            if (job.name === "claim-role")
+              return await claimShopRole(actor, job.data.itemId);
+            if (job.name === "music")
+              return await music.action(actor, job.data);
+            if (job.name === "test-message") {
+              const stored = await getGuild(guildId),
+                source = await getResource(guildId, job.data.sourceId);
+              if (
+                !stored?.config.modules.news ||
+                !source ||
+                source.kind !== "source"
+              )
+                throw new Error("Source unavailable or news paused");
+              const channel = await guild.channels.fetch(source.data.channelId),
+                me = await guild.members.fetchMe();
+              if (
+                !channel?.isTextBased() ||
+                !("send" in channel) ||
+                !channel
+                  .permissionsFor(me)
+                  ?.has([
+                    PermissionFlagsBits.ViewChannel,
+                    PermissionFlagsBits.SendMessages,
+                    PermissionFlagsBits.EmbedLinks,
+                  ])
+              )
+                throw new Error("Missing permissions to send a test message");
+              const message = await channel.send({
+                embeds: [
+                  new EmbedBuilder()
+                    .setTitle(
+                      `A little test flight from ${safeText(source.name, 80)}`
+                    )
+                    .setDescription(
+                      "Your community updates have found their way. This is a test message from Orbit."
+                    )
+                    .setColor(
+                      parseInt(source.data.embedColor.replace("#", ""), 16)
+                    )
+                    .setTimestamp(),
+                ],
+                allowedMentions: { parse: [] },
+                nonce: fingerprint(guildId, source.id, job.id!).slice(0, 24),
+                enforceNonce: true,
+              });
+              return { messageId: message.id };
+            }
+            throw new Error("Unknown bot action");
+          } catch (error) {
+            // BullMQ persists failedReason: sanitize it before it reaches Redis or an API response.
+            throw new Error(errorDiagnostic(error));
           }
-          throw new Error("Unknown bot action");
         },
         { connection: redisConnection(), concurrency: 5 }
       );
       actionWorker.on("failed", (job, error) => {
         logger.warn(
-          { jobId: job?.id, error: error.message },
+          { jobId: job?.id, error: errorDiagnostic(error) },
           "Dashboard bot action failed"
         );
         if (job)
           void audit(
             job.data.guildId,
-            { id: job.data.actorId, name: "Orbit" },
+            {
+              id: job.data.actorId,
+              name:
+                client.users.cache.get(job.data.actorId)?.displayName ??
+                job.data.actorId,
+            },
             "failed",
             job.name,
-            safeText(error.message, 300)
+            errorDiagnostic(error)
           ).catch(() => {});
       });
       actionWorker.on("error", (e) =>

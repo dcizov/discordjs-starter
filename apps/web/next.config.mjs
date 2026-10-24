@@ -7,7 +7,14 @@ dotenv.config({
 const config = {
   transpilePackages: ["@orbit/core", "@orbit/db"],
   allowedDevOrigins: ["*.e2b.app"],
-  serverExternalPackages: ["pg", "bullmq", "ioredis", "pino", "undici"],
+  serverExternalPackages: [
+    "pg",
+    "bullmq",
+    "ioredis",
+    "pino",
+    "undici",
+    "discord.js",
+  ],
   poweredByHeader: false,
   devIndicators: false,
   async headers() {

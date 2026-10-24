@@ -1,5 +1,6 @@
 import {
   Hash,
+  Terminal,
   LayoutGrid,
   Music2,
   Rss,
@@ -24,6 +25,7 @@ export const navigation = [
   { id: "deals", label: "Game deals", icon: Tags, group: "workspace" },
   { id: "news", label: "News & feeds", icon: Rss, group: "workspace" },
   { id: "channels", label: "Channels & roles", icon: Hash, group: "server" },
+  { id: "commands", label: "Commands", icon: Terminal, group: "server" },
   { id: "audit", label: "Audit log", icon: ScrollText, group: "server" },
   {
     id: "settings",

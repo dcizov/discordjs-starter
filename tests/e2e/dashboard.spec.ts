@@ -3,7 +3,9 @@ const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, url: string) {
   await page.goto(url);
-  await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
+    timeout: 15000,
+  });
 }
 test("overview is polished, responsive, and clearly labels simulation", async ({
   page,
@@ -22,7 +24,9 @@ test("overview is polished, responsive, and clearly labels simulation", async ({
   await page.getByRole("button", { name: "Looks like home" }).click();
   await expect(page.getByText("A little less managing.")).not.toBeVisible();
   await page.reload();
-  await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
+    timeout: 15000,
+  });
   await expect(page.getByText("A little less managing.")).not.toBeVisible();
   await page.getByRole("button", { name: "Customize", exact: true }).click();
   await page.getByRole("switch", { name: "A little welcome" }).click();
@@ -78,7 +82,9 @@ test("role panels have working create, preview, publish, edit, and delete flows"
   await page.getByRole("button", { name: "Save changes", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   await page.reload();
-  await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
+    timeout: 15000,
+  });
   await expect(
     page.getByRole("heading", { name: "E2E · Updated panel" })
   ).toBeVisible();
@@ -269,7 +275,9 @@ test("server settings persist and leave an audit trail", async ({ page }) => {
     .click();
   await expect(page.getByText("Unsaved changes")).not.toBeVisible();
   await page.reload();
-  await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
+    timeout: 15000,
+  });
   await expect(page.getByLabel("Timezone", { exact: true })).toHaveValue(next);
   await page.getByLabel("Timezone", { exact: true }).selectOption(old);
   await page

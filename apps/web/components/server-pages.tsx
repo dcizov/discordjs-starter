@@ -1,4 +1,5 @@
 "use client";
+import { copyText } from "@/lib/clipboard";
 import { cn, relativeTime } from "@/lib/utils";
 import type { AuditEntry, GuildConfig } from "@orbit/core";
 import {
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { CopyButton } from "./copy-button";
 import { DataTable } from "./data-table";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
@@ -63,7 +65,7 @@ export function ChannelsPage() {
   );
   async function copy(id: string) {
     try {
-      await navigator.clipboard.writeText(id);
+      await copyText(id);
       toast.success("Discord ID copied");
     } catch {
       toast.info(`Discord ID: ${id}`);
@@ -473,13 +475,29 @@ export function AuditPage() {
           if (!o) setDetail(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>A closer look at this change.</DialogTitle>
             <DialogDescription>
               Audit events are immutable through Orbit.
             </DialogDescription>
           </DialogHeader>
+          {detail && (
+            <div className="mb-5 flex flex-wrap gap-2 border-b pb-4">
+              <CopyButton
+                key={detail.id}
+                text={detail.detail}
+                label={
+                  detail.action === "failed" ? "Copy error" : "Copy details"
+                }
+              />
+              <CopyButton
+                text={JSON.stringify(detail, null, 2)}
+                label="Copy full event"
+                success="Full audit event copied as JSON"
+              />
+            </div>
+          )}
           <dl className="space-y-4 text-xs">
             {[
               ["Event ID", detail?.id],
@@ -498,7 +516,14 @@ export function AuditPage() {
             ].map(([k, v]) => (
               <div key={k} className="grid grid-cols-[90px_1fr] gap-4">
                 <dt className="text-muted-foreground">{k}</dt>
-                <dd className="break-all leading-relaxed">{v}</dd>
+                <dd
+                  className={cn(
+                    "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed",
+                    k === "Details" && "font-mono text-[11px]"
+                  )}
+                >
+                  {v}
+                </dd>
               </div>
             ))}
           </dl>

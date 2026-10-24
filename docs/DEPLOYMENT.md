@@ -29,7 +29,7 @@ npm run start:bot
 npm run start:worker
 ```
 
-The service bundles are `dist/bot.js`, `dist/worker.js`, `dist/register.js`, `dist/migrate.js`, and the read-only `dist/export-channels.js` developer CLI. Web artifacts are in `apps/web/.next`. Production dependencies must include the root npm workspace packages. The supplied Dockerfile builds and assembles these paths correctly, including workspace manifests for `npm ci`.
+The service bundles are `dist/bot.js`, `dist/worker.js`, `dist/register.js`, `dist/migrate.js`, and the read-only `dist/export-channels.js` (channels or `--roles-only`) and `dist/music-doctor.js` developer CLIs. Web artifacts are in `apps/web/.next`. Production dependencies must include the root npm workspace packages. The supplied Dockerfile builds and assembles these paths correctly, including workspace manifests for `npm ci`.
 
 Use a service supervisor/container orchestrator, restart on failure, and allow at least 30 seconds for worker/job shutdown. For scaling, run one gateway owner per Discord shard assignment, any number of BullMQ workers, and multiple live web replicas backed by the same PostgreSQL/Redis. Do not share a demo JSON store across replicas.
 

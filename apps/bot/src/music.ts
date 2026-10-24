@@ -1,17 +1,23 @@
 import type { MusicState, Track } from "@orbit/core";
-import { assertFeedUrl, isPublicAddress, safeText } from "@orbit/core";
+import { safeText } from "@orbit/core";
+import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
-import { emptyMusic, getGuild, putMusicState, setHealth } from "@orbit/db";
+import {
+  audit,
+  emptyMusic,
+  getGuild,
+  putMusicState,
+  setHealth,
+} from "@orbit/db";
 import { PermissionFlagsBits, type Client, type GuildMember } from "discord.js";
 import { randomUUID } from "node:crypto";
-import { lookup } from "node:dns/promises";
 import {
   Connectors,
-  LoadType,
   Shoukaku,
   type Track as LavalinkTrack,
   type Player,
 } from "shoukaku";
+import { musicSourceFailure, resolveMusicQuery } from "./music-source";
 export class MusicService {
   readonly backend: Shoukaku | null;
   private sessions = new Map<string, MusicState>();
@@ -43,7 +49,10 @@ export class MusicService {
       logger.info("Lavalink connected");
     });
     this.backend?.on("error", (_name, error) => {
-      logger.warn({ error: error.message }, "Lavalink connection error");
+      logger.warn(
+        { error: errorDiagnostic(error) },
+        "Lavalink connection error"
+      );
       void setHealth(
         "Music backend",
         "degraded",
@@ -103,15 +112,29 @@ export class MusicService {
         );
       }
     });
-    player.on("exception", (error) =>
+    player.on("exception", (event) => {
+      const detail = musicSourceFailure(event.exception, {
+        stage: "playback",
+        source: null,
+        info: player.node.info,
+      });
       logger.warn(
-        {
-          guildId: player.guildId,
-          error: safeText(error.exception.message, 200),
-        },
+        { guildId: player.guildId, error: detail },
         "Audio source playback failed"
-      )
-    );
+      );
+      void audit(
+        player.guildId,
+        { id: this.client.user?.id ?? "system:music", name: "Orbit" },
+        "failed",
+        "music playback",
+        detail
+      ).catch((error) =>
+        logger.warn(
+          { error: errorDiagnostic(error) },
+          "Could not save music playback failure"
+        )
+      );
+    });
     player.on("closed", () => {
       if (this.backend?.players.get(player.guildId) !== player) return;
       void this.locked(player.guildId, async () => {
@@ -141,46 +164,12 @@ export class MusicService {
       throw new Error(
         "The music backend is unavailable. Ask an administrator to configure Lavalink."
       );
-    let identifier: string;
-    if (/^https?:\/\//i.test(query)) {
-      const u = assertFeedUrl(query);
-      const allowed = (
-        process.env.MUSIC_ALLOWED_HOSTS ?? "soundcloud.com,bandcamp.com"
-      )
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (
-        !allowed.some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`))
-      )
-        throw new Error(
-          "This audio source is not enabled. Ask your administrator which sources are supported."
-        );
-      const ips = await lookup(u.hostname, { all: true });
-      if (!ips.length || ips.some((ip) => !isPublicAddress(ip.address)))
-        throw new Error("Private audio-source addresses are not allowed");
-      identifier = u.toString();
-    } else {
-      const prefix = process.env.MUSIC_SEARCH_PREFIX ?? "scsearch";
-      if (!["scsearch", "bcsearch"].includes(prefix))
-        throw new Error(
-          "Configure a supported search prefix: scsearch or bcsearch."
-        );
-      identifier = `${prefix}:${query}`;
-    }
-    const result = await node.rest.resolve(identifier);
-    if (!result || result.loadType === LoadType.EMPTY)
-      throw new Error("No playable track was found on the configured source.");
-    if (result.loadType === LoadType.ERROR)
-      throw new Error(
-        `The configured source could not load this track: ${safeText(result.data.message, 180)}`
-      );
-    return result.loadType === LoadType.TRACK
-      ? [result.data]
-      : result.loadType === LoadType.PLAYLIST
-        ? result.data.tracks
-        : result.data.slice(0, 1);
+    const result = await resolveMusicQuery(node.rest, query, {
+      info: node.info,
+    });
+    return result.tracks;
   }
+
   async action(
     member: GuildMember,
     input: {

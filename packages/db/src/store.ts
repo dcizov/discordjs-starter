@@ -18,6 +18,7 @@ import {
   resourceSchemas,
   safeText,
 } from "@orbit/core";
+import { diagnosticText } from "@orbit/core/diagnostics";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { database } from "./client";
@@ -117,7 +118,7 @@ export async function audit(
     actor,
     action,
     safeText(target, 80),
-    safeText(detail, 1000)
+    diagnosticText(detail)
   );
   if (isDemo())
     await demoTransaction((d) => {

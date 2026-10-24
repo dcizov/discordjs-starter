@@ -3,20 +3,23 @@ import { REST } from "discord.js";
 import dotenv from "dotenv";
 import {
   collectChannelPermissionExport,
+  collectServerRoleExport,
   parseChannelExportArgs,
   writeChannelPermissionExport,
 } from "./channel-export";
 
 dotenv.config({ quiet: true });
-const help = `Export Discord channels and configured permissions (read-only).
+const help = `Export Discord channels, server roles, and configured permissions (read-only).
 
 Usage:
   npm run channels:export -- --guild SERVER_ID [options]
+  npm run roles:export -- --guild SERVER_ID [--out PATH | --stdout]
 
 Options:
   --guild ID       Required Discord server ID (not the bot/application ID).
   --channel ID     Export one channel plus its parent category for context.
-  --out PATH       New JSON file. Defaults to .exports/channels-ID-TIMESTAMP.json.
+  --roles-only     Export roles and their metadata only (no channel requests).
+  --out PATH       New JSON file. Default: .exports/{channels|roles}-ID-TIMESTAMP.json.
   --stdout         Write JSON to stdout instead of a file. Conflicts with --out.
   -h, --help       Show this help; no credentials or network required.
 
@@ -36,29 +39,30 @@ async function main() {
   }
   if (isDemo())
     throw new Error(
-      "Channel export requires live read-only Discord access. Set DEMO_MODE=false and DISCORD_TOKEN in the root .env. No export was written."
+      "Discord export requires live read-only Discord access. Set DEMO_MODE=false and DISCORD_TOKEN in the root .env. No export was written."
     );
   const token = required("DISCORD_TOKEN");
   const rest = new REST({ version: "10", timeout: 10000, retries: 2 }).setToken(
     token
   );
   try {
-    console.error(`Reading channels and roles for server ${options.guildId}…`);
-    const data = await collectChannelPermissionExport(rest, options);
+    console.error(
+      `Reading ${options.rolesOnly ? "roles" : "channels and roles"} for server ${options.guildId}…`
+    );
+    const data = options.rolesOnly
+      ? await collectServerRoleExport(rest, options)
+      : await collectChannelPermissionExport(rest, options);
+    const counts = `${"channels" in data ? `${data.channels.length} channels and ` : ""}${data.roles.length} roles`;
     if (options.stdout) {
       await new Promise<void>((done, fail) => {
         process.stdout.write(`${JSON.stringify(data, null, 2)}\n`, (error) =>
           error ? fail(error) : done()
         );
       });
-      console.error(
-        `Exported ${data.channels.length} channels and ${data.roles.length} roles.`
-      );
+      console.error(`Exported ${counts}.`);
     } else {
       const path = await writeChannelPermissionExport(data, options.out);
-      console.error(
-        `Exported ${data.channels.length} channels and ${data.roles.length} roles to ${path}`
-      );
+      console.error(`Exported ${counts} to ${path}`);
     }
     if (data.warnings.length)
       console.error(
@@ -74,7 +78,7 @@ main().catch((error: unknown) => {
   const message = error instanceof Error ? error.message : "Unknown error";
   const token = process.env.DISCORD_TOKEN;
   console.error(
-    "Channel export failed:",
+    "Discord export failed:",
     token ? message.replaceAll(token, "[REDACTED]") : message
   );
   process.exitCode = 1;

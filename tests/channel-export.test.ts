@@ -379,6 +379,7 @@ describe("channel export command-line and file safety", () => {
       help: false,
       guildId,
       channelId: textId,
+      rolesOnly: false,
       out: "my export.json",
       stdout: false,
     });

@@ -1,5 +1,6 @@
 import { defaultConfig } from "@orbit/core";
 import {
+  audit,
   closeDb,
   database,
   deleteResource,
@@ -381,6 +382,28 @@ describe("persistent feed deduplication and tenant isolation", () => {
         actor
       )
     ).rejects.toThrow("elevated");
+  });
+  it("stores multiline errors safely and retrieves the exact detail with server isolation", async () => {
+    const detail = `Source lookup failed\n\tjava.example.Loader.<init>\n${"nested detail ".repeat(140)}`;
+    await audit(g1, actor, "failed", "music", detail);
+    const page = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "failed",
+    });
+    expect(page.total).toBe(1);
+    expect(page.rows[0]).toMatchObject({ detail });
+    expect(
+      (
+        await queryHistory(g2, "audit", {
+          page: 1,
+          pageSize: 7,
+          query: "",
+          filter: "failed",
+        })
+      ).total
+    ).toBe(0);
   });
   it("writes configuration and its audit record together", async () => {
     const r = await saveResource(
