@@ -1,6 +1,10 @@
 {
   "name": "Orbit community development",
-  "dockerComposeFile": ["../docker-compose.yml", "../docker-compose.dev.yml"],
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "../docker-compose.dev.yml",
+    "docker-compose.yml"
+  ],
   "service": "dev",
   "runServices": ["dev", "web", "migrate", "postgres", "redis", "lavalink"],
   "workspaceFolder": "/app",

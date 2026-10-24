@@ -1,0 +1,10 @@
+# The Dev Container CLI also runs `compose build` without --profile flags.
+# Explicit runServices alone does not enable profiles during that build/model
+# validation. Clear only editor-started profiles; bot/worker remain opt-in.
+services:
+  dev:
+    profiles: !reset []
+  migrate:
+    profiles: !reset []
+  lavalink:
+    profiles: !reset []

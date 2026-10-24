@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseDocument } from "yaml";
+import { isSeq, parseDocument } from "yaml";
 
 const config = JSON.parse(
   readFileSync(
@@ -28,6 +28,7 @@ describe("Dev Container and dashboard startup contract", () => {
     expect(config.dockerComposeFile).toEqual([
       "../docker-compose.yml",
       "../docker-compose.dev.yml",
+      "docker-compose.yml",
     ]);
     for (const path of config.dockerComposeFile)
       expect(existsSync(resolve(".devcontainer", path))).toBe(true);
@@ -40,6 +41,38 @@ describe("Dev Container and dashboard startup contract", () => {
       "dev_node_modules:/app/node_modules",
     ]);
     expect(compose.volumes).toHaveProperty("dev_node_modules");
+  });
+
+  it("clears only editor-started profiles so the CLI build can resolve web's migration dependency", () => {
+    const editor = parseDocument(
+      readFileSync(
+        new URL("../.devcontainer/docker-compose.yml", import.meta.url),
+        "utf8"
+      ),
+      {
+        customTags: [
+          { tag: "!reset", collection: "seq", resolve: (seq) => seq },
+        ],
+      }
+    );
+    expect(editor.errors).toEqual([]);
+    expect(Object.keys(editor.toJS().services).sort()).toEqual([
+      "dev",
+      "lavalink",
+      "migrate",
+    ]);
+    for (const name of ["dev", "migrate", "lavalink"]) {
+      const profiles = editor.getIn(["services", name, "profiles"], true);
+      if (!isSeq(profiles))
+        throw new Error(`Expected a profile reset for ${name}`);
+      // Plain [] would merge with, not remove, profiles from the root file.
+      expect(profiles.tag).toBe("!reset");
+      expect(profiles.toJSON()).toEqual([]);
+    }
+    expect(compose.services.bot.profiles).toEqual(["live"]);
+    expect(compose.services.worker.profiles).toEqual(["live"]);
+    expect(compose.services.migrate.profiles).toEqual(["live"]);
+    expect(compose.services.lavalink.profiles).toEqual(["music"]);
   });
 
   it("starts the dashboard/infrastructure explicitly, but never a second bot or delivery worker", () => {

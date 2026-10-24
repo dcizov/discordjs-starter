@@ -47,7 +47,7 @@ if ! command -v setfacl >/dev/null; then
   sudo apt-get install -y --no-install-recommends acl
 fi
 sudo setfacl -R -m u:1000:rwX .
-find . -type d -not -path './.git/*' -exec sudo setfacl -m d:u:1000:rwx {} +
+find . -type d -not -path './.git/*' -exec sudo setfacl -m "d:u:1000:rwx,d:u:$(id -u):rwx" {} +
 
 "${cli[@]}" up --workspace-folder . --log-level info > "$output"
 cat "$output"
