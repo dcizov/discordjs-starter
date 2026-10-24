@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { parseDocument } from "yaml";
@@ -81,6 +82,61 @@ describe("Compose startup and upgrade safety", () => {
     );
     expect(docker).toContain("javac --release 17");
     expect(docker).toContain("/tmp/healthcheck/ /opt/Lavalink/healthcheck/");
+  });
+
+  it("keeps the headless CI readiness wait alive between unrefed backend retries, then cancels its deadline", () => {
+    const workflow = parseDocument(
+      readFileSync(
+        new URL("../.github/workflows/ci.yml", import.meta.url),
+        "utf8"
+      )
+    ).toJS();
+    const steps = workflow.jobs.containers.steps as Array<{
+      name?: string;
+      run?: string;
+    }>;
+    const smoke = steps.find(
+      (step) =>
+        step.name ===
+        "Verify plugins, backend WebSocket and readiness without Discord/provider access"
+    )?.run;
+    // Execute the actual CI wait, not a duplicate implementation. The simulated
+    // ready signal is unrefed just like the production supervisor retry timer.
+    const wait = smoke?.match(
+      /const deadline = new AbortController\(\);[\s\S]*?deadline\.abort\(\);\s*}/
+    )?.[0];
+    if (!wait)
+      throw new Error("Missing cancellable backend readiness deadline in CI");
+    const run = (body: string) =>
+      spawnSync(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `
+      import { setTimeout } from "node:timers/promises";
+      const connected = setTimeout(30, undefined, { ref: false });
+      const lastSocketError = "not ready";
+      ${body}
+      console.log("ready");
+    `,
+        ],
+        { encoding: "utf8", timeout: 5000 }
+      );
+    const fixed = run(wait);
+    expect(fixed.error).toBeUndefined();
+    expect(fixed.status, fixed.stderr).toBe(0);
+    expect(fixed.stdout).toBe("ready\n");
+    // Reproduce the old unsettled top-level-await exit, without any Docker,
+    // provider or Discord access, so a future ref:false regression is visible.
+    const broken = run(
+      wait.replace(
+        "signal: deadline.signal",
+        "signal: deadline.signal, ref: false"
+      )
+    );
+    expect(broken.status).toBe(13);
+    expect(broken.stdout).toBe("");
   });
 
   it("builds the canonical commit-pinned AAC/fMP4 adapter and never registers the broken builtin alongside it", () => {

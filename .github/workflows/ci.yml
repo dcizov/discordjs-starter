@@ -161,10 +161,18 @@ jobs:
             assert.deepEqual([...info.sourceManagers].sort(), ["bandcamp", "ocremix", "soundcloud", "youtube"]);
             for (const filter of ["high-pass", "low-pass", "normalization", "echo"]) assert.ok(info.filters.includes(filter), filter);
             assert.ok(!info.filters.includes("lowPass"), "No duplicate built-in low-pass filter");
-            await Promise.race([
-              connected,
-              setTimeout(10000, undefined, { ref: false }).then(() => { throw Error(`Backend WebSocket not ready: ${lastSocketError}`); }),
-            ]);
+            // This headless process has no Discord socket keeping it alive.
+            // Retry timers are deliberately unrefed: keep the readiness deadline
+            // referenced or Node can exit 13 between REST-ready and the next retry.
+            const deadline = new AbortController();
+            try {
+              await Promise.race([
+                connected,
+                setTimeout(10000, undefined, { signal: deadline.signal }).then(() => { throw Error(`Backend WebSocket not ready: ${lastSocketError}`); }),
+              ]);
+            } finally {
+              deadline.abort();
+            }
             assert.ok(backend.getIdealNode(), "Application connection controller must retain the connected node");
             assert.equal((await backend.getIdealNode().rest.getLavalinkInfo()).version.semver, "4.2.2");
             await setTimeout(300);
