@@ -81,9 +81,18 @@ services:
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # Do not reuse the original starter's PostgreSQL 18 volume/layout.
+      - orbit_pgdata_v17:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U orbit -d orbit"]
+      # Check authenticated TCP access, not the temporary init-only Unix socket.
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD="$$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=3
+          psql --host=127.0.0.1 --username="$$POSTGRES_USER"
+          --dbname="$$POSTGRES_DB" --no-password --tuples-only --no-align
+          --command="SELECT 1" > /dev/null
+      start_period: 10s
       interval: 5s
       timeout: 5s
       retries: 10
@@ -124,6 +133,6 @@ services:
     mem_limit: 768m
 
 volumes:
-  pgdata:
+  orbit_pgdata_v17:
   redisdata:
   demo_data:

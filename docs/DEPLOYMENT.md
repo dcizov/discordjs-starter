@@ -33,6 +33,41 @@ The service bundles are `dist/bot.js`, `dist/worker.js`, `dist/register.js`, and
 
 Use a service supervisor/container orchestrator, restart on failure, and allow at least 30 seconds for worker/job shutdown. For scaling, run one gateway owner per Discord shard assignment, any number of BullMQ workers, and multiple live web replicas backed by the same PostgreSQL/Redis. Do not share a demo JSON store across replicas.
 
+## Local startup troubleshooting
+
+### PostgreSQL is unhealthy: data directory exists but is not empty
+
+The original starter used PostgreSQL 18 with `pgdata` mounted at `/var/lib/postgresql`. Orbit uses PostgreSQL 17 with its data mounted at `/var/lib/postgresql/data`. Reusing that original volume at the new mount point makes initialization fail; changing a container tag is not a supported database downgrade.
+
+The corrected Compose file uses the separate `orbit_pgdata_v17` volume, leaving the original `pgdata` untouched. Pull the updated branch, stop your development web process, and run:
+
+```sh
+docker compose up -d --wait postgres redis && npm run db:migrate && npm run dev
+```
+
+Do **not** delete the old volume or run `docker compose down -v` as a troubleshooting shortcut. The new Orbit database starts empty. If you need data from the original installation, keep its volume, back it up using a compatible PostgreSQL version, and plan an explicit import into Orbit's new schema. If an earlier Orbit installation already stored data in `pgdata`, back it up before moving that data to the new volume; the volume switch does not migrate it automatically.
+
+The PostgreSQL health check now runs an authenticated `SELECT 1` over TCP. It does not become healthy merely because the temporary initialization server is accepting Unix-socket connections, or because a server is listening with mismatched credentials.
+
+If startup still fails, inspect:
+
+```sh
+docker compose ps
+docker compose logs --tail=100 postgres
+```
+
+For host-run services, `DATABASE_URL` must use user `orbit`, database `orbit`, host `localhost:5432`, and the same password as `POSTGRES_PASSWORD`. Changing `.env` does not change a password already stored in an initialized database; use the database administrator's password-rotation procedure instead of deleting data.
+
+### Discord says `Invalid OAuth2 redirect_uri`
+
+Open the Discord Developer Portal and select the application matching `DISCORD_CLIENT_ID`. Under **OAuth2 → Redirects**, add and save the exact local callback:
+
+```text
+http://localhost:3000/api/auth/callback
+```
+
+Set `APP_URL=http://localhost:3000` (without a trailing slash), restart the development server after `.env` changes, and start sign-in again from the dashboard rather than reusing an old authorization URL. `localhost` versus `127.0.0.1`, HTTP versus HTTPS, port, path, and a trailing slash all need to match. For a deployed site, register its exact HTTPS callback instead. Never share your client secret, bot token, or `.env` file while troubleshooting.
+
 ## Health and observability
 
 - `GET /api/healthz` is a lightweight web liveness endpoint; it intentionally does not claim database or bot readiness.

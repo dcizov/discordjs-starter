@@ -76,11 +76,12 @@ In the Discord Developer Portal:
 ### 2. Start PostgreSQL and Redis
 
 ```sh
-docker compose up -d --wait postgres redis
-npm run db:migrate
+docker compose up -d --wait postgres redis && npm run db:migrate
 ```
 
-The supplied local connection strings match the default Compose credentials. Change the database password for deployment. Redis is private to the containers and exposed only on loopback for local development.
+Orbit uses a dedicated `orbit_pgdata_v17` named volume. The original starter's `pgdata` volume is not reused, upgraded, or deleted: it used PostgreSQL 18 and a different mount layout. See [startup troubleshooting](docs/DEPLOYMENT.md#local-startup-troubleshooting) if you are updating an existing checkout.
+
+The supplied local connection strings match the default Compose credentials. Change the database password for deployment, and update the password in `DATABASE_URL` to match. Changing `POSTGRES_PASSWORD` after a database has initialized does not rotate the existing database password. Redis is private to the containers and exposed only on loopback for local development.
 
 Do **not** seed production. Live guilds are created and synchronized when the bot joins. `ALLOW_DEMO_SEED=true npm run db:seed` is only for a disposable development database; demo mode does not need this command.
 
