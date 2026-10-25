@@ -18,12 +18,12 @@ describe("implemented command catalog", () => {
     const result = catalog();
     expect(result.source).toBe("registration-definitions");
     expect(result.registrationVerified).toBe(false);
-    expect(result.rootCount).toBe(29);
-    expect(result.invocationCount).toBe(44);
+    expect(result.rootCount).toBe(31);
+    expect(result.invocationCount).toBe(46);
     expect(new Set(result.commands.map((c) => c.root))).toEqual(
       new Set(commandDefinitions.map((c) => c.name))
     );
-    expect(new Set(result.commands.map((c) => c.id)).size).toBe(44);
+    expect(new Set(result.commands.map((c) => c.id)).size).toBe(46);
     expect(result.commands.every((c) => c.serverOnly)).toBe(true);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });
@@ -50,6 +50,26 @@ describe("implemented command catalog", () => {
     expect(find("balance").usage).toBe("/balance [member]");
     expect(find("timeout").usage).toBe("/timeout <member> <reason> <minutes>");
     expect(find("ping").usage).toBe("/ping");
+  });
+  it("documents the explicit music search and seek contracts", () => {
+    expect(find("search")).toMatchObject({
+      module: "music",
+      usage: "/search <query>",
+    });
+    expect(find("search").arguments[0]).toMatchObject({
+      type: "String",
+      required: true,
+      minLength: 1,
+      maxLength: 200,
+    });
+    expect(find("seek")).toMatchObject({
+      module: "music",
+      usage: "/seek <position>",
+    });
+    expect(find("seek").notes.join(" ")).toMatch(/known duration/i);
+    expect(find("search").notes.join(" ")).toMatch(
+      /expires after two minutes/i
+    );
   });
   it("retains argument constraints, types, autocomplete, and choices", () => {
     expect(find("play").arguments[0]).toMatchObject({

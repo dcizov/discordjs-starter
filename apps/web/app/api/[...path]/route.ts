@@ -576,9 +576,11 @@ async function handle(req: Request, context: Context) {
             "repeat",
             "volume",
             "remove",
+            "seek",
           ]),
           query: z.string().min(2).max(200).optional(),
           volume: z.number().int().min(0).max(100).optional(),
+          position: z.number().int().min(1).max(86400).optional(),
           repeat: z.enum(["off", "track", "queue"]).optional(),
           trackId: z.string().max(100).optional(),
         })
@@ -619,6 +621,18 @@ async function handle(req: Request, context: Context) {
             break;
           case "remove":
             state.tracks = state.tracks.filter((t) => t.id !== input.trackId);
+            break;
+          case "seek":
+            if (!state.current)
+              throw new HttpError(400, "Nothing is playing right now.");
+            if (!input.position)
+              throw new HttpError(400, "Choose a position in seconds.");
+            state.position = Math.min(
+              input.position * 1000,
+              state.current.duration > 0
+                ? state.current.duration - 1000
+                : input.position * 1000
+            );
             break;
           case "play": {
             if (!input.query) throw new HttpError(400, "Enter a track title");

@@ -118,6 +118,19 @@ describe("real music route response contract (mocked I/O, no Discord)", () => {
     expect((await post({ action: "play", query: "Track" })).status).toBe(403);
     expect(deps.enqueueAction).not.toHaveBeenCalled();
   });
+  it("forwards an authorized seek with its position and rejects an invalid one", async () => {
+    const response = await post({ action: "seek", position: 42 });
+    expect(response.status).toBe(202);
+    expect(deps.enqueueAction).toHaveBeenCalledWith(
+      guildId,
+      actorId,
+      "music",
+      { action: "seek", position: 42 },
+      expect.any(String)
+    );
+    expect((await post({ action: "seek", position: 0 })).status).toBe(422);
+    expect((await post({ action: "seek", position: 1.5 })).status).toBe(422);
+  });
   it("keeps demo playback purely local and never touches the live queue", async () => {
     vi.stubEnv("DEMO_MODE", "true");
     const response = await post({ action: "play", query: "Fictional preview" });

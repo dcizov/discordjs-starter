@@ -2,6 +2,7 @@ import { canManageGuild } from "@orbit/core";
 import {
   createDiscordPermissionState,
   DiscordPermissionClient,
+  DiscordPermissionError,
 } from "@orbit/core/discord-permissions";
 import { describe, expect, it, vi } from "vitest";
 
@@ -67,7 +68,7 @@ describe("Discord OAuth permission lookup reliability", () => {
     await f.client.guilds("session", "token");
     await Promise.all(
       Array.from({ length: 10 }, () =>
-        f.client.guilds("session", "token", true)
+        f.client.guilds("session", "token", { maxAgeMs: 0 })
       )
     );
     expect(f.fetcher).toHaveBeenCalledTimes(2);
@@ -77,6 +78,45 @@ describe("Discord OAuth permission lookup reliability", () => {
     });
   });
 
+  it("reuses a mutation snapshot inside the short window and refetches after it", async () => {
+    const f = fixture();
+    // Dashboard controls burst: pause, skip, volume, repeat within seconds.
+    for (const maxAgeMs of [10000, 10000, 10000, 10000]) {
+      await f.client.guilds("session", "token", { maxAgeMs });
+      f.clock.now += 500;
+    }
+    expect(f.fetcher).toHaveBeenCalledTimes(1);
+    f.clock.now += 10000;
+    await f.client.guilds("session", "token", { maxAgeMs: 10000 });
+    expect(f.fetcher).toHaveBeenCalledTimes(2);
+    // Any age forces a lookup when the caller must observe revocation now.
+    await f.client.guilds("session", "token", { maxAgeMs: 0 });
+    expect(f.fetcher).toHaveBeenCalledTimes(3);
+  });
+
+  it("still coalesces concurrent forced lookups instead of multiplying requests", async () => {
+    const f = fixture();
+    await f.client.guilds("session", "token");
+    await Promise.all(
+      Array.from({ length: 8 }, () =>
+        f.client.guilds("session", "token", { maxAgeMs: 0 })
+      )
+    );
+    expect(f.fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("words the retry hint with correct singular and plural", () => {
+    expect(new DiscordPermissionError(429, 1).message).toBe(
+      "Discord is rate limiting permission checks. Please try again in 1 second."
+    );
+    expect(new DiscordPermissionError(429, 2).message).toBe(
+      "Discord is rate limiting permission checks. Please try again in 2 seconds."
+    );
+    expect(new DiscordPermissionError(429).message).toBe(
+      "Discord is rate limiting permission checks. Please try again in 30 seconds."
+    );
+  });
+
   it("observes revoked permissions on a fresh check instead of retaining earlier access", async () => {
     const f = fixture();
     expect(
@@ -84,7 +124,9 @@ describe("Discord OAuth permission lookup reliability", () => {
     ).toHaveLength(1);
     f.fetcher.mockResolvedValueOnce(ok([{ ...guild, permissions: "0" }]));
     expect(
-      (await f.client.guilds("session", "token", true)).filter(canManageGuild)
+      (await f.client.guilds("session", "token", { maxAgeMs: 0 })).filter(
+        canManageGuild
+      )
     ).toEqual([]);
     expect(
       (await f.client.guilds("session", "token")).filter(canManageGuild)
@@ -109,7 +151,7 @@ describe("Discord OAuth permission lookup reliability", () => {
     });
     f.clock.now += 1500;
     await expect(
-      f.client.guilds("session", "token", true)
+      f.client.guilds("session", "token", { maxAgeMs: 0 })
     ).rejects.toMatchObject({ status: 429, retryAfterSeconds: 2 });
     expect(f.fetcher).toHaveBeenCalledTimes(1);
     f.clock.now += 2000;
@@ -158,7 +200,7 @@ describe("Discord OAuth permission lookup reliability", () => {
       Response.json({ retry_after: 20 }, { status: 429 })
     );
     await expect(
-      f.client.guilds("session", "token", true)
+      f.client.guilds("session", "token", { maxAgeMs: 0 })
     ).rejects.toMatchObject({ status: 429 });
     await expect(f.client.guilds("session", "token")).rejects.toMatchObject({
       status: 429,
@@ -177,7 +219,7 @@ describe("Discord OAuth permission lookup reliability", () => {
     await f.client.guilds("session", "token");
     await f.client.guilds("session", "token");
     await expect(
-      f.client.guilds("session", "token", true)
+      f.client.guilds("session", "token", { maxAgeMs: 0 })
     ).rejects.toMatchObject({ status: 429, retryAfterSeconds: 60 });
     f.clock.now += 30000;
     await expect(f.client.guilds("session", "token")).rejects.toMatchObject({
@@ -186,7 +228,7 @@ describe("Discord OAuth permission lookup reliability", () => {
     });
     expect(f.fetcher).toHaveBeenCalledTimes(1);
     f.clock.now += 30000;
-    await f.client.guilds("session", "token", true);
+    await f.client.guilds("session", "token", { maxAgeMs: 0 });
     expect(f.fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -227,7 +269,7 @@ describe("Discord OAuth permission lookup reliability", () => {
       await f.client.guilds("session", "token");
       f.fetcher.mockResolvedValueOnce(Response.json({}, { status }));
       await expect(
-        f.client.guilds("session", "token", true)
+        f.client.guilds("session", "token", { maxAgeMs: 0 })
       ).rejects.toMatchObject({ status: 401, upstreamStatus: status });
       await expect(f.client.guilds("session", "token")).rejects.toMatchObject({
         status: 401,
@@ -261,7 +303,7 @@ describe("Discord OAuth permission lookup reliability", () => {
       new Error("transport error containing sensitive-test-token")
     );
     await expect(
-      f.client.guilds("session", "sensitive-test-token", true)
+      f.client.guilds("session", "sensitive-test-token", { maxAgeMs: 0 })
     ).rejects.toMatchObject({ status: 503 });
     await expect(
       f.client.guilds("session", "sensitive-test-token")

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { clampVolume, playbackProgress } from "@orbit/core/music-progress";
+import {
+  clampVolume,
+  playbackProgress,
+  PLAYBACK_STALE_AFTER_MS,
+} from "@orbit/core/music-progress";
 import type { MusicState, Track } from "@orbit/core";
 
 const track = (duration: number): Track => ({
@@ -57,9 +61,12 @@ describe("playback progress from a persisted snapshot", () => {
   });
 
   it("clamps at the track duration and never divides by an unknown one", () => {
-    const overshoot = playbackProgress(state(), snapshotAt + 10 * 60000);
-    expect(overshoot.position).toBe(180000);
-    expect(overshoot.percent).toBe(100);
+    const nearTheEnd = playbackProgress(
+      state({ position: 175000 }),
+      snapshotAt + 10000
+    );
+    expect(nearTheEnd.position).toBe(180000);
+    expect(nearTheEnd.percent).toBe(100);
     const liveStream = playbackProgress(
       state({ current: track(0) }),
       snapshotAt + 1000
@@ -77,6 +84,42 @@ describe("playback progress from a persisted snapshot", () => {
     expect(broken.position).toBe(0);
     expect(broken.duration).toBeNull();
     expect(broken.percent).toBeNull();
+  });
+
+  it("stops extrapolating once the snapshot is too old to trust", () => {
+    const fresh = playbackProgress(state(), snapshotAt + 60000);
+    expect(fresh).toMatchObject({ status: "playing", stale: false });
+    expect(fresh.ageMs).toBe(60000);
+
+    // The bot persists a running player at least every ~15 s. Silence for
+    // longer than the threshold must not keep drawing a moving bar.
+    const stale = playbackProgress(
+      state(),
+      snapshotAt + PLAYBACK_STALE_AFTER_MS + 1
+    );
+    expect(stale).toMatchObject({
+      status: "stale",
+      stale: true,
+      interpolated: false,
+      position: 30000,
+    });
+    expect(stale.percent).toBe(17);
+
+    // Staleness is measured in server time, so a visitor with a fast clock
+    // does not make a healthy snapshot look abandoned.
+    const fastClock = playbackProgress(state(), snapshotAt + 5 * 60000, {
+      clockOffsetMs: 5 * 60000 - 5000,
+    });
+    expect(fastClock).toMatchObject({ status: "playing", stale: false });
+    expect(fastClock.position).toBe(35000);
+
+    // Paused, idle and unknown-time snapshots are never reported as "playing".
+    expect(
+      playbackProgress(state({ paused: true }), snapshotAt + 1).status
+    ).toBe("paused");
+    expect(
+      playbackProgress(state({ updatedAt: "not-a-date" }), snapshotAt + 1).stale
+    ).toBe(false);
   });
 
   it("ignores an unparseable snapshot time instead of guessing", () => {

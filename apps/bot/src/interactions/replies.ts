@@ -204,6 +204,7 @@ export function musicActionCard(action: string, state: MusicState): ReplyCard {
     volume: "Volume updated",
     shuffle: "Queue shuffled",
     repeat: "Repeat updated",
+    seek: "Seek requested",
   };
   return {
     title: messages[action] ?? "Listening room updated",
@@ -213,9 +214,11 @@ export function musicActionCard(action: string, state: MusicState): ReplyCard {
         ? "Disconnected from voice and cleared the queue."
         : action === "skip"
           ? "The skip request was sent. Use `/queue` to see the updated track."
-          : state.current
-            ? `**Current track**\n${replyLabel(state.current.title)} — ${replyLabel(state.current.author, 80)}`
-            : "Use `/play` to add a track to the listening room.",
+          : action === "seek"
+            ? "The seek was sent to the backend. The progress bar follows the position the server reports next; it is not proof of audible playback."
+            : state.current
+              ? `**Current track**\n${replyLabel(state.current.title)} — ${replyLabel(state.current.author, 80)}`
+              : "Use `/play` to add a track to the listening room.",
     fields:
       action === "stop"
         ? []

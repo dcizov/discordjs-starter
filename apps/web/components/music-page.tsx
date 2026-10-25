@@ -19,10 +19,11 @@ import {
   Square,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "./page-header";
 import { VolumeControl } from "./features/music/volume-control";
+import { SeekControl } from "./features/music/seek-control";
 import { usePlaybackNow } from "./features/music/playback-clock";
 import { playbackProgress } from "@orbit/core/music-progress";
 import { Button } from "./ui/button";
@@ -47,15 +48,37 @@ export function MusicPage() {
   const { data, api, refresh, saveConfig } = useWorkspace();
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // Survives the same tick, where `busy` state has not been applied yet.
+  const inflight = useRef(false);
   const [settings, setSettings] = useState(false);
   const [config, setConfig] = useState(data.guild.config.music);
   const [stop, setStop] = useState(false);
   const m = data.music;
   // The clock only runs while a player is actually advancing; the first paint
   // always uses the persisted snapshot (no hydration drift).
-  const now = usePlaybackNow(!!m.current && !m.paused);
-  const progress = playbackProgress(m, now ?? NaN);
+  const playback = usePlaybackNow(
+    !!m.current && !m.paused,
+    data.presentation.referenceAt
+  );
+  // `now` is null on the first render, so the server and client agree; after
+  // mount the position interpolates from the last backend snapshot only.
+  const progress = playbackProgress(m, playback.now ?? NaN, {
+    clockOffsetMs: playback.offset,
+  });
+  const playingLabel =
+    progress.status === "stale"
+      ? "State unconfirmed"
+      : progress.status === "playing"
+        ? "Now playing"
+        : progress.status === "paused"
+          ? "Taking a breath"
+          : "Ready when you are";
+  // One music action at a time: a second click while a job is pending would
+  // submit a duplicate Discord action (skip especially must not be replayed
+  // blindly when the first execution is unconfirmed).
   async function action(action: string, extra: Record<string, any> = {}) {
+    if (inflight.current) return;
+    inflight.current = true;
     setBusy(action);
     try {
       await api("/music", "POST", { action, ...extra });
@@ -75,6 +98,7 @@ export function MusicPage() {
       if (e instanceof BotActionPendingError) toast.warning(e.message);
       else toast.error(e.message);
     } finally {
+      inflight.current = false;
       setBusy(null);
     }
   }
@@ -110,18 +134,26 @@ export function MusicPage() {
               <AudioLines size={15} className="text-primary" />
               The listening room
             </span>
-            <Badge tone={m.current ? "green" : "neutral"}>
+            <Badge
+              tone={
+                progress.status === "playing"
+                  ? "green"
+                  : progress.status === "stale"
+                    ? "amber"
+                    : "neutral"
+              }
+            >
               <span
                 className={cn(
                   "size-1 rounded-full",
-                  m.current ? "bg-emerald-500" : "bg-slate-400"
+                  progress.status === "playing"
+                    ? "bg-emerald-500"
+                    : progress.status === "stale"
+                      ? "bg-amber-500"
+                      : "bg-slate-400"
                 )}
               />
-              {m.current
-                ? m.paused
-                  ? "Taking a breath"
-                  : "Now playing"
-                : "Ready when you are"}
+              {playingLabel}
             </Badge>
           </div>
           <div className="relative flex min-h-[285px] flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-[#f2edf9] to-card px-6 py-8 dark:from-violet-500/10 dark:to-card">
@@ -158,11 +190,15 @@ export function MusicPage() {
                 progress.duration === null ? undefined : progress.position
               }
               aria-valuetext={
-                progress.duration === null
-                  ? progress.status === "idle"
-                    ? "Nothing is playing"
-                    : `Elapsed ${duration(progress.position)}; duration unknown`
-                  : `${duration(progress.position)} of ${duration(progress.duration)}`
+                progress.status === "idle"
+                  ? "Nothing is playing"
+                  : `${
+                      progress.status === "stale" ? "Last known position " : ""
+                    }${duration(progress.position)}${
+                      progress.duration === null
+                        ? "; duration unknown"
+                        : ` of ${duration(progress.duration)}`
+                    }`
               }
               className="h-1 w-full overflow-hidden rounded-full bg-muted"
             >
@@ -172,15 +208,29 @@ export function MusicPage() {
               />
             </div>
             <div className="mt-2 flex justify-between text-[9px] tabular-nums text-muted-foreground">
-              <span>{duration(progress.position)}</span>
+              <span>
+                {progress.status === "idle"
+                  ? "0:00"
+                  : duration(progress.position)}
+              </span>
               <span>
                 {progress.duration === null
                   ? progress.status === "idle"
                     ? "0:00"
                     : "Live / duration unknown"
-                  : duration(progress.duration)}
+                  : `${progress.status === "stale" ? "last known " : ""}${duration(
+                      progress.duration
+                    )}`}
               </span>
             </div>
+            {progress.status === "stale" && (
+              <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50/70 px-3 py-2 text-[10px] leading-relaxed text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                <Info size={12} className="mt-px shrink-0" />
+                {m.paused
+                  ? "This is the last reported state; it has not been updated recently."
+                  : "Orbit has not reported progress recently, so playback is not confirmed. The bar is frozen at the last known position. Check the bot logs or the Audit log before assuming audio is still playing."}
+              </p>
+            )}
             <div className="mt-4 flex items-center justify-center gap-6">
               <Button
                 variant="ghost"
@@ -262,6 +312,22 @@ export function MusicPage() {
                 </span>
               </Button>
             </div>
+            <SeekControl
+              position={progress.position}
+              duration={progress.duration}
+              disabled={
+                !!busy ||
+                !m.current ||
+                progress.duration === null ||
+                progress.status === "stale"
+              }
+              disabledReason={
+                !m.current
+                  ? "Seek needs something playing."
+                  : "This source has no known duration, so seeking is unavailable."
+              }
+              onSeek={(seconds) => action("seek", { position: seconds })}
+            />
             <VolumeControl
               value={m.volume}
               live={!data.demo}

@@ -324,3 +324,87 @@ it("serializes same-member admissions and rejects oversized playlists before que
   ).rejects.toThrow(/entire request/);
   expect(state.tracks).toEqual(before);
 });
+
+describe("seek on a finite track", () => {
+  const guildId = "120000000000000004",
+    memberId = "120000000000000099",
+    voiceId = "120000000000000209";
+  function member() {
+    return {
+      id: memberId,
+      displayName: "Listener",
+      permissions: new PermissionsBitField(0n),
+      roles: { cache: new Map() },
+      guild: {
+        id: guildId,
+        shardId: 0,
+        members: { fetchMe: async () => ({ voice: { channelId: voiceId } }) },
+      },
+      voice: {
+        channel: {
+          id: voiceId,
+          type: ChannelType.GuildVoice,
+          full: false,
+          permissionsFor: () =>
+            new PermissionsBitField([
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.Speak,
+            ]),
+        },
+      },
+    } as unknown as GuildMember;
+  }
+  function player() {
+    return {
+      playTrack: vi.fn(async () => {}),
+      setGlobalVolume: vi.fn(async () => {}),
+      setPaused: vi.fn(async () => {}),
+      stopTrack: vi.fn(async () => {}),
+      seekTo: vi.fn(async () => {}),
+    };
+  }
+  function current(duration: number) {
+    return {
+      id: "now",
+      title: "Current",
+      author: "Artist",
+      duration,
+      uri: "",
+      encoded: "encoded-current",
+      requestedBy: "Listener",
+      requestedById: memberId,
+    };
+  }
+
+  it("asks Lavalink to seek and records the reported position", async () => {
+    const music = service();
+    const p = player();
+    music.backend!.players.set(guildId, p as unknown as Player);
+    const state = music.state(guildId);
+    state.current = current(180000);
+    await music.action(member(), { action: "seek", position: 30 });
+    expect(p.seekTo).toHaveBeenCalledWith(30000);
+    expect(state.position).toBe(30000);
+    expect(db.putMusicState).toHaveBeenCalled();
+  });
+
+  it("clamps to just before the end and rejects non-finite or invalid input", async () => {
+    const music = service();
+    const p = player();
+    music.backend!.players.set(guildId, p as unknown as Player);
+    const state = music.state(guildId);
+    state.current = current(60000);
+    await music.action(member(), { action: "seek", position: 600 });
+    expect(p.seekTo).toHaveBeenCalledWith(59000);
+    for (const position of [-1, 1.5, Number.NaN])
+      await expect(
+        music.action(member(), { action: "seek", position })
+      ).rejects.toThrow(/seek position in seconds/);
+    state.current = current(0);
+    await expect(
+      music.action(member(), { action: "seek", position: 5 })
+    ).rejects.toThrow(/no known duration/);
+    expect(p.seekTo).toHaveBeenCalledTimes(1);
+  });
+});

@@ -4,7 +4,7 @@ import { request } from "@/lib/utils";
 import type { DashboardData, GuildConfig } from "@orbit/core";
 import { ArrowUpRight, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CommunityPage } from "./features/community/community-page";
 import { CommandsPage } from "./commands-page";
 import { EconomyPage } from "./economy-page";
@@ -61,7 +61,12 @@ export function Dashboard({
     },
     [data.guild.id]
   );
+  // Only the newest snapshot may replace what the visitor sees. A slow GET
+  // that resolves after a newer one (a burst of music controls, a tab that
+  // regains focus) must not roll the UI back to older queue state.
+  const refreshSeq = useRef(0);
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeq.current;
     const d = await api<DashboardData>(
       section === "polls"
         ? "?community=poll"
@@ -75,6 +80,7 @@ export function Dashboard({
       router.refresh();
       return;
     }
+    if (seq !== refreshSeq.current) return;
     setData(d);
   }, [api, section, data.user.id, data.guild.id, router]);
   const navigate = useCallback(
@@ -104,6 +110,16 @@ export function Dashboard({
       refresh().catch(() => {});
     }, 30000);
     return () => clearInterval(timer);
+  }, [refresh, data.guild.installed]);
+  // A background tab throttles timers, so reconcile as soon as it is visible
+  // again instead of animating an old snapshot for another interval.
+  useEffect(() => {
+    if (!data.guild.installed) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [refresh, data.guild.installed]);
 
   const sidebar = (

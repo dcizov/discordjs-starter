@@ -36,9 +36,12 @@ vi.mock("@orbit/core/discord-permissions", () => ({
     guilds = deps.guilds;
   },
   isDiscordPermissionError: () => false,
+  PERMISSION_READ_MAX_AGE_MS: 30_000,
+  PERMISSION_MUTATION_MAX_AGE_MS: 10_000,
 }));
 import { GET as oauthCallback } from "../apps/web/app/api/auth/callback/route";
 import {
+  authorize,
   createSession,
   identity,
   manageableGuilds,
@@ -180,6 +183,18 @@ describe("OAuth identity characterization before simplification", () => {
       manageableGuilds({ id: uid, name: "No token", avatar: null })
     ).rejects.toMatchObject({ status: 401 });
     expect(deps.guilds).not.toHaveBeenCalled();
+  });
+  it("bounds how long a guild snapshot is reused instead of bypassing the cache", async () => {
+    deps.rows.mockResolvedValue([session()]);
+    deps.guilds.mockResolvedValue([
+      { ...discordUser, id: uid, owner: false, permissions: "32", icon: null },
+    ]);
+    const user = await identity();
+    await manageableGuilds(user!);
+    expect(deps.guilds.mock.calls.at(-1)![2]).toEqual({ maxAgeMs: 30_000 });
+    // Mutations reuse a short window; they do not issue one Discord request each.
+    await authorize(uid, true);
+    expect(deps.guilds.mock.calls.at(-1)![2]).toEqual({ maxAgeMs: 10_000 });
   });
 });
 

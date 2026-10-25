@@ -28,6 +28,7 @@ const moduleRoots: Record<CommandModule, readonly string[]> = {
   ],
   music: [
     "play",
+    "search",
     "queue",
     "pause",
     "resume",
@@ -36,6 +37,7 @@ const moduleRoots: Record<CommandModule, readonly string[]> = {
     "shuffle",
     "volume",
     "repeat",
+    "seek",
   ],
   deals: ["deals"],
   news: ["news"],
@@ -119,7 +121,11 @@ function runtimeNotes(path: string, module: CommandModule) {
     notes.push(
       path === "queue"
         ? "Reads the queue snapshot; it does not start audio. Queue history can be read even when the music module is paused."
-        : "Requires the music module, a configured Lavalink backend, an approved source, and a voice channel. Same-room, DJ-role, Connect, and Speak checks apply at execution."
+        : path === "search"
+          ? "Searches the same approved sources as /play and lists up to five tracks to choose from. Each menu belongs to the member who ran it, works once, and expires after two minutes; the chosen tracks are re-checked and queue admission applies, so nothing is queued twice."
+          : path === "seek"
+            ? "Requires an active player with a known duration. Live or unknown-length sources cannot seek. The position is clamped to the track, and playback resumes from the server-reported position."
+            : "Requires the music module, a configured Lavalink backend, an approved source, and a voice channel. Same-room, DJ-role, Connect, and Speak checks apply at execution."
     );
   if (module === "deals")
     notes.push(

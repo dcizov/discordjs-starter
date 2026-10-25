@@ -47,6 +47,8 @@ export async function dispatchCommand(
     case "volume":
     case "shuffle":
     case "repeat":
+    case "search":
+    case "seek":
       return musicCommand(context, music);
     case "deals":
       return handleDeals(context.i, context.member);

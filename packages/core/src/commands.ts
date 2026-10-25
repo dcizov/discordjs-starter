@@ -155,6 +155,17 @@ export const commandDefinitions = [
       .setMaxLength(200)
       .setRequired(true)
   ),
+  command(
+    "search",
+    "Search a source and choose exactly which track to queue"
+  ).addStringOption((o) =>
+    o
+      .setName("query")
+      .setDescription("What should Orbit look for?")
+      .setMinLength(1)
+      .setMaxLength(200)
+      .setRequired(true)
+  ),
   command("queue", "See what’s playing and what’s up next"),
   command("pause", "Pause the listening room"),
   command("resume", "Resume the listening room"),
@@ -168,6 +179,15 @@ export const commandDefinitions = [
       .setMinValue(0)
       .setMaxValue(100)
       .setRequired(true)
+  ),
+  command("seek", "Jump to a position in the current track").addIntegerOption(
+    (o) =>
+      o
+        .setName("position")
+        .setDescription("Seconds from the start of the track")
+        .setMinValue(1)
+        .setMaxValue(86400)
+        .setRequired(true)
   ),
   command("repeat", "Set the queue repeat mode").addStringOption((o) =>
     o
