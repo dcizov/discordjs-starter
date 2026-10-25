@@ -4,6 +4,19 @@ import * as Primitive from "@radix-ui/react-dropdown-menu";
 import * as React from "react";
 export const DropdownMenu = Primitive.Root;
 export const DropdownMenuTrigger = Primitive.Trigger;
+/** Non-interactive heading inside a menu; not a focusable item. */
+export const DropdownMenuLabel = ({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof Primitive.Label>) => (
+  <Primitive.Label
+    className={cn(
+      "px-3 pb-1 pt-1.5 text-[10px] font-medium text-muted-foreground",
+      className
+    )}
+    {...props}
+  />
+);
 export const DropdownMenuSeparator = () => (
   <Primitive.Separator className="my-1.5 h-px bg-border" />
 );

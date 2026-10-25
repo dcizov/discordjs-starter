@@ -87,10 +87,10 @@ test("the Steam preview renders real announcement content without raw markup", a
   await expect(
     card.getByText("App announcement", { exact: true })
   ).toBeVisible();
-  // The meta line names the producing feed next to the date; the disclosure
-  // below repeats the feed name, so match the meta line exactly.
+  // The meta line is posted date first, then the producing feed; match the line
+  // exactly so the disclosure's copy of the feed name cannot satisfy it.
   await expect(
-    card.getByText(/^Community Announcements · \d{1,2} \w{3} \d{4}$/)
+    card.getByText(/^Posted \d{1,2} \w{3} \d{4} · Community Announcements$/)
   ).toBeVisible();
   await expect(
     card.getByRole("link", { name: "Read the announcement" })
@@ -107,20 +107,33 @@ test("the Steam preview renders real announcement content without raw markup", a
     expect(lines[i], `line ${i} must not be blank`).not.toBe("");
   expect(lines.length).toBeLessThanOrEqual(7);
 
-  // Missing-image and metadata diagnostics live in a collapsed disclosure, not
-  // in the article body.
-  const details = card.locator("details");
+  // Diagnostics live in collapsed disclosures, not in the article body: one on
+  // the feature card (configured subscription vs provider feed) and one for the
+  // dialog (delivery behaviour, polled counts, provider notices).
+  const details = card.locator("details").first();
   await expect(details).not.toHaveAttribute("open", "");
   await expect(card.getByText("Preview details")).toBeVisible();
   expect(text).not.toContain("No provider-supplied image");
 
-  // Expanding the disclosure names the configured subscription separately from
-  // the provider feed.
+  // Expanding the card disclosure names the configured subscription separately
+  // from the provider feed.
   await details.locator("summary").click();
   await expect(
     details.getByText(
       /Configured source: CS2 updates · feed: Community Announcements/
     )
+  ).toBeVisible();
+  const dialogDetails = dialog.locator("details").last();
+  await expect(dialogDetails).not.toHaveAttribute("open", "");
+  await dialogDetails.locator("summary").click();
+  await expect(
+    dialogDetails.getByText(/Same normalization and embed limits/)
+  ).toBeVisible();
+
+  // The remaining polled items form a dated "more updates" list under the
+  // feature card, and every row keeps its own link.
+  await expect(
+    dialog.getByRole("heading", { name: /^More updates from / })
   ).toBeVisible();
 });
 

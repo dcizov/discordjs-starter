@@ -35,7 +35,7 @@ import { DataTable } from "./data-table";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { ResourceEditor, kindNames } from "./resource-editor";
-import { NewsArticleCard } from "./news-article-card";
+import { NewsPreviewFeed } from "./news-preview-feed";
 import type { NewsCard } from "@orbit/core/news-presentation";
 import { sourceFreshness } from "@orbit/core/source-health";
 import { Button } from "./ui/button";
@@ -461,6 +461,7 @@ export function ResourcesPage({
               {
                 key: "name",
                 label: "Case",
+                sortKey: "name",
                 render: (r) => <span className="font-medium">{r.name}</span>,
               },
               {
@@ -501,6 +502,7 @@ export function ResourcesPage({
               {
                 key: "when",
                 label: "Created",
+                sortKey: "createdAt",
                 render: (r) => (
                   <span className="whitespace-nowrap text-muted-foreground">
                     {relativeTime(r.createdAt, data.presentation.referenceAt)}
@@ -1059,38 +1061,57 @@ export function ResourcesPage({
                 : `Source reached successfully. Found ${test?.count ?? 0} recent item${test?.count === 1 ? "" : "s"}. Nothing has been sent to Discord.`}
             </DialogDescription>
           </DialogHeader>
-          <p className="rounded-lg border bg-muted/50 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            These cards use the same normalization and embed limits as live
-            delivery. Deliveries are still made only by the worker for new items
-            that pass your filters and routing rules.
-            {test?.officialOnly
-              ? " The official-only filter is on: Steam was asked for this app's announcement feed, so posts from other publishers are not shown."
-              : ""}
-          </p>
-          <div className="space-y-3">
-            {test?.items?.map((item: NewsCard) => (
-              <NewsArticleCard key={item.id || item.title} card={item} />
-            ))}
-            {!test?.items?.length && (
-              <p className="rounded-lg bg-muted p-4 text-xs text-muted-foreground">
-                The source is reachable but has no recent items. Incoming
-                webhooks wait for your integration to send an event.
+          {test?.items?.length ? (
+            <NewsPreviewFeed items={test.items} sourceName={test.name} />
+          ) : (
+            <p className="rounded-lg bg-muted p-4 text-xs text-muted-foreground">
+              The source is reachable but has no recent items. Incoming webhooks
+              wait for your integration to send an event.
+            </p>
+          )}
+          {/* Facts a reader only sometimes wants: how many items were polled,
+              which filter was applied, and what each provider omitted. */}
+          <details className="rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+            <summary className="cursor-pointer select-none font-medium text-foreground/80 underline-offset-2 hover:underline">
+              Preview details
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              <p>
+                Same normalization and embed limits as live delivery; only the
+                worker sends new items that pass your filters and routing.
               </p>
-            )}
-            {!!test?.count && test.count > (test?.shown ?? 0) && (
-              <p className="text-[11px] text-muted-foreground">
-                Showing the {test.shown} most recent items of {test.count}; the
-                rest arrive through normal delivery only.
-              </p>
-            )}
-            {!!test?.notices?.length && (
-              <ul className="space-y-1 rounded-lg border border-amber-200/70 bg-amber-50/70 p-3 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
-                {test.notices.map((notice: string) => (
-                  <li key={notice}>{notice}</li>
-                ))}
-              </ul>
-            )}
-          </div>
+              {test?.officialOnly ? (
+                <p>
+                  Official-only filter on: Steam was asked for this app&apos;s
+                  announcement feed.
+                </p>
+              ) : null}
+              {!!test?.count && test.count > (test?.shown ?? 0) ? (
+                <p>
+                  Showing the {test.shown} most recent of {test.count}; the rest
+                  arrive through normal delivery only.
+                </p>
+              ) : null}
+              {test?.items?.flatMap((item: NewsCard) => item.notices).length ? (
+                <ul className="space-y-1">
+                  {[
+                    ...new Set<string>(
+                      test.items.flatMap((item: NewsCard) => item.notices)
+                    ),
+                  ].map((notice) => (
+                    <li key={notice}>{notice}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </details>
+          {!!test?.notices?.length && (
+            <ul className="space-y-1 rounded-lg border border-amber-200/70 bg-amber-50/70 p-3 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+              {test.notices.map((notice: string) => (
+                <li key={notice}>{notice}</li>
+              ))}
+            </ul>
+          )}
           <Button className="mt-5 w-full" onClick={() => setTest(null)}>
             Looks good
             <Check size={14} />
@@ -1199,6 +1220,7 @@ function DeliveryTable({ query, filter }: { query: string; filter: string }) {
         {
           key: "status",
           label: "Status",
+          sortKey: "status",
           render: (r) => (
             <div>
               <Badge
@@ -1226,6 +1248,7 @@ function DeliveryTable({ query, filter }: { query: string; filter: string }) {
         {
           key: "time",
           label: "When",
+          sortKey: "createdAt",
           render: (r) => (
             <span className="whitespace-nowrap text-muted-foreground">
               {relativeTime(r.createdAt, data.presentation.referenceAt)}

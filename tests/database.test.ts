@@ -1090,3 +1090,90 @@ describe("profile refresh SQL ownership and session lifetime", () => {
     }
   });
 });
+
+describe("server-side history ordering", () => {
+  beforeEach(async () => {
+    await database().db.delete(s.auditLogs).where(eq(s.auditLogs.guildId, g1));
+  });
+
+  it("orders by an allowed text field in both directions", async () => {
+    await audit(g1, { id: u1, name: "zoe" }, "created", "roles", "first");
+    await audit(g1, { id: u1, name: "alice" }, "updated", "news", "second");
+    await audit(g1, { id: u1, name: "mike" }, "deleted", "deals", "third");
+
+    const asc = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "asc",
+    });
+    expect(asc.rows.map((r) => r.actorName)).toEqual(["alice", "mike", "zoe"]);
+
+    const desc = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "desc",
+    });
+    expect(desc.rows.map((r) => r.actorName)).toEqual(["zoe", "mike", "alice"]);
+    // Ordering never changes which rows match: same filter, same total.
+    expect(desc.total).toBe(asc.total);
+  });
+
+  it("keeps the default newest-first order when nothing is requested", async () => {
+    await audit(g1, actor, "created", "roles", "older");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await audit(g1, actor, "updated", "roles", "newer");
+    const page = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "all",
+    });
+    expect(page.rows[0].detail).toBe("newer");
+    expect(page.rows[1].detail).toBe("older");
+  });
+
+  it("rejects a field the screen does not show for that dataset", async () => {
+    // "amount" belongs to the ledger; sorting audit logs by it would be an
+    // invented column, so it must fail rather than silently fall back.
+    await expect(
+      queryHistory(g1, "audit", {
+        page: 1,
+        pageSize: 7,
+        query: "",
+        filter: "all",
+        sort: "amount" as never,
+        dir: "asc",
+      })
+    ).rejects.toThrow('Cannot sort audit history by "amount"');
+  });
+
+  it("pages a sorted result without repeating or skipping rows", async () => {
+    for (const name of ["a", "b", "c", "d", "e", "f", "g", "h"])
+      await audit(g1, { id: u1, name }, "created", "roles", name);
+    const first = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 3,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "asc",
+    });
+    const second = await queryHistory(g1, "audit", {
+      page: 2,
+      pageSize: 3,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "asc",
+    });
+    expect(first.rows.map((r) => r.actorName)).toEqual(["a", "b", "c"]);
+    expect(second.rows.map((r) => r.actorName)).toEqual(["d", "e", "f"]);
+    expect(first.total).toBe(8);
+  });
+});

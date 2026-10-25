@@ -392,6 +392,7 @@ export function AuditPage() {
             {
               key: "person",
               label: "Who",
+              sortKey: "actorName",
               render: (r) => (
                 <span className="flex items-center gap-2.5">
                   {r.actorName === "Orbit" ? (
@@ -414,6 +415,7 @@ export function AuditPage() {
             {
               key: "action",
               label: "What changed",
+              sortKey: "action",
               render: (r) => (
                 <Badge
                   tone={
@@ -447,6 +449,7 @@ export function AuditPage() {
             {
               key: "time",
               label: "When",
+              sortKey: "createdAt",
               render: (r) => (
                 <span className="whitespace-nowrap text-muted-foreground">
                   {relativeTime(r.createdAt, data.presentation.referenceAt)}

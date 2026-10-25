@@ -27,6 +27,7 @@ import { diagnosticText } from "@orbit/core/diagnostics";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { pollSourceDetailed, searchGames } from "@orbit/core/feeds";
 import { UpstreamError } from "@orbit/core/integration-http";
+import { HISTORY_KINDS, parseHistoryQuery } from "@orbit/core/history-query";
 import { newsCard } from "@orbit/core/news-presentation";
 import { createQueue, enqueueAction } from "@orbit/core/queue";
 import {
@@ -247,31 +248,16 @@ async function handle(req: Request, context: Context) {
     }
     if (path[2] === "history" && req.method === "GET") {
       const u = new URL(req.url);
-      const kind = z
-        .enum(["audit", "ledger", "deliveries", "cases"])
-        .parse(u.searchParams.get("kind"));
-      const page = z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(100000)
-        .parse(u.searchParams.get("page") ?? 1);
-      const pageSize = z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(50)
-        .parse(u.searchParams.get("pageSize") ?? 7);
-      const query = z
-        .string()
-        .max(100)
-        .parse(u.searchParams.get("query") ?? "");
-      const filter = z
-        .string()
-        .max(30)
-        .parse(u.searchParams.get("filter") ?? "all");
+      const kind = z.enum(HISTORY_KINDS).parse(u.searchParams.get("kind"));
+      // One shared contract (`@orbit/core/history-query`) builds and parses
+      // these parameters, so the dashboard cannot request a filter the route
+      // quietly ignores. Sorting is further checked per dataset in @orbit/db.
+      const params = parseHistoryQuery(u.searchParams);
       return NextResponse.json(
-        await queryHistory(guildId, kind, { page, pageSize, query, filter })
+        await queryHistory(guildId, kind, {
+          ...params,
+          sort: params.sort as never,
+        })
       );
     }
     if (path[2] === "config" && req.method === "PATCH")

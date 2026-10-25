@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useWorkspace } from "./workspace";
+import { historyQueryString } from "@orbit/core/history-query";
 import { DataTable, type Column } from "./data-table";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/primitives";
@@ -22,6 +23,12 @@ export function HistoryTable<T extends { id: string }>({
 }) {
   const { api, data } = useWorkspace();
   const [page, setPage] = useState(1);
+  // Sorting is a server contract: changing it restarts at page 1 so the reader
+  // never sees page 4 of a different ordering.
+  const [sort, setSort] = useState<{ field: string; dir: "asc" | "desc" }>({
+    field: "createdAt",
+    dir: "desc",
+  });
   const [result, setResult] = useState<{ rows: T[]; total: number } | null>(
     null
   );
@@ -36,13 +43,20 @@ export function HistoryTable<T extends { id: string }>({
         : kind === "deliveries"
           ? data.deliveries[0]?.id
           : data.resources.find((r) => r.kind === "case")?.id;
-  useEffect(() => setPage(1), [query, filter, kind]);
+  useEffect(() => setPage(1), [query, filter, kind, sort]);
   useEffect(() => {
     let active = true;
     setLoading(true);
     const timer = setTimeout(() => {
       api(
-        `/history?${new URLSearchParams({ kind, page: String(page), pageSize: "7", query, filter })}`
+        `/history?${historyQueryString({
+          kind,
+          page,
+          query,
+          filter,
+          sort: sort.field,
+          dir: sort.dir,
+        })}`
       )
         .then((r) => {
           if (active) {
@@ -61,7 +75,7 @@ export function HistoryTable<T extends { id: string }>({
       active = false;
       clearTimeout(timer);
     };
-  }, [api, kind, page, query, filter, token, retry]);
+  }, [api, kind, page, query, filter, sort, token, retry]);
   if (error)
     return (
       <div
@@ -89,19 +103,23 @@ export function HistoryTable<T extends { id: string }>({
       </div>
     );
   return (
-    <div
-      aria-busy={loading}
-      className={
-        loading ? "opacity-60 transition-opacity" : "transition-opacity"
-      }
-    >
-      <DataTable
-        rows={result.rows}
-        columns={columns}
-        pagination={{ page, total: result.total, onPage: setPage }}
-        emptyTitle={emptyTitle}
-        emptyDescription={emptyDescription}
-      />
-    </div>
+    <DataTable
+      rows={result.rows}
+      columns={columns}
+      loading={loading}
+      pagination={{ page, total: result.total, onPage: setPage }}
+      sort={{
+        field: sort.field,
+        dir: sort.dir,
+        onChange: (field) =>
+          setSort((current) =>
+            current.field === field
+              ? { field, dir: current.dir === "asc" ? "desc" : "asc" }
+              : { field, dir: "desc" }
+          ),
+      }}
+      emptyTitle={emptyTitle}
+      emptyDescription={emptyDescription}
+    />
   );
 }

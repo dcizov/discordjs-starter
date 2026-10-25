@@ -482,6 +482,7 @@ export function EconomyPage() {
                   {
                     key: "type",
                     label: "Type",
+                    sortKey: "type",
                     render: (r) => (
                       <Badge
                         tone={
@@ -506,6 +507,7 @@ export function EconomyPage() {
                   {
                     key: "amount",
                     label: "Amount",
+                    sortKey: "amount",
                     render: (r) => (
                       <span
                         className={cn(
@@ -523,6 +525,7 @@ export function EconomyPage() {
                   {
                     key: "time",
                     label: "When",
+                    sortKey: "createdAt",
                     render: (r) => (
                       <span className="whitespace-nowrap text-muted-foreground">
                         {relativeTime(
