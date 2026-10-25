@@ -88,6 +88,47 @@ If `web` exits or restarts, read its logs and migration status rather than reset
 
 For editor-based development, use the checked-in [Dev Container setup](DEVCONTAINER.md): it starts `web` and infrastructure automatically, and opens a separate persistent workspace without automatically logging in a second bot.
 
+### `Module not found: Can't resolve '<package>'` after an update
+
+All third-party dependencies are declared **once** in the root `package.json`
+(the workspaces `apps/*` and `packages/*` deliberately have no dependency
+blocks). That keeps one hoisted tree and a single lockfile, but it has two
+consequences that look like a broken build rather than a stale install:
+
+- A host checkout that has not run `npm ci` since the manifest changed is
+  missing the new package.
+- The Docker workflow seeds a named volume at **`/app/node_modules`**. Rebuilding
+  the image does **not** refresh that volume, so an old volume keeps masking the
+  new tree and the Next.js build reports only a resolution error, for example:
+
+  ```text
+  Module not found: Can't resolve 'marked'
+  Import trace: ./apps/web/lib/docs-content.ts → ./apps/web/app/docs/layout.tsx
+  ```
+
+Orbit now checks the critical packages before `dev`, `build`, `start` and
+`test` (`scripts/check-dependencies.mjs`) and prints the remediation instead of
+leaving you with a webpack trace.
+
+Host/CI checkout:
+
+```sh
+npm ci
+```
+
+Docker Compose — remove only the dependency volume, never the database volume:
+
+```sh
+docker volume ls | grep dev_node_modules
+docker volume rm <compose-project>_dev_node_modules
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+The volume name is `<project>_dev_node_modules`, where the Compose project name
+defaults to the directory name (or `COMPOSE_PROJECT_NAME`). `npm install` inside
+a running container cannot fix a masked volume: the mount hides whatever the
+install wrote.
+
 ## Run just the main bot
 
 **`bot` is the main Discord gateway process.** With this override it runs `npm run dev:bot` (`tsx watch apps/bot/src/index.ts`), not the compiled production entrypoint. You do not need Node/npm on the host and must not start a second host bot with the same token.
