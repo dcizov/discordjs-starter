@@ -21,7 +21,7 @@ vi.mock("@orbit/core/deals", () => ({
   ...api,
   dealCountryCurrencies: { DE: "EUR", US: "USD" },
 }));
-import { handleDeals } from "../apps/bot/src/deals";
+import { handleDeals } from "../apps/bot/src/features/deals/commands";
 const guildId = "120000000000000001",
   channelId = "120000000000000010",
   actorId = "120000000000000099";

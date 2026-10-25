@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DealGameSelection } from "../apps/bot/src/deal-game-selection";
+import { DealGameSelection } from "../apps/bot/src/features/deals/selection";
 import { deal, gameId, otherId } from "./fixtures/deals";
 const guildId = "120000000000000001",
   actorId = "120000000000000002";

@@ -10,6 +10,14 @@ export function redisConnection() {
     enableReadyCheck: false,
   }));
 }
+/** Shutdown must never create a connection merely to close it. */
+export async function closeRedisConnection() {
+  const connection = redis;
+  redis = undefined;
+  if (!connection) return;
+  if (connection.status === "ready") await connection.quit();
+  else connection.disconnect();
+}
 export function createQueue(name: string) {
   return new Queue(name, {
     connection: redisConnection(),

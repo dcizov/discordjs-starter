@@ -17,7 +17,7 @@ import {
   exportPermissionBits,
   parseChannelExportArgs,
   writeChannelPermissionExport,
-} from "../apps/bot/src/channel-export";
+} from "../apps/bot/src/tools/channel-export";
 
 const guildId = "120000000000000001";
 const roleId = "120000000000000201";
@@ -439,7 +439,7 @@ describe("channel export command-line and file safety", () => {
   it("offers real CLI help without live credentials or services", () => {
     const result = spawnSync(
       process.execPath,
-      ["--import", "tsx", "apps/bot/src/export-channels.ts", "--help"],
+      ["--import", "tsx", "apps/bot/src/tools/export-channels.ts", "--help"],
       {
         cwd: process.cwd(),
         encoding: "utf8",
@@ -458,7 +458,7 @@ describe("channel export command-line and file safety", () => {
       [
         "--import",
         "tsx",
-        "apps/bot/src/export-channels.ts",
+        "apps/bot/src/tools/export-channels.ts",
         "--guild",
         guildId,
         "--stdout",

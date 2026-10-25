@@ -6,7 +6,7 @@ import {
   resolveMusicQuery,
   type MusicNodeInfo,
   type MusicSourceSettings,
-} from "../apps/bot/src/music-source";
+} from "../apps/bot/src/features/music/source";
 
 const settings: MusicSourceSettings = {
   searchPrefix: "scsearch",

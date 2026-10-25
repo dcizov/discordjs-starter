@@ -2,14 +2,19 @@ import { defaultConfig } from "@orbit/core";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { commandDefinitions } from "@orbit/core/commands";
 import { PermissionFlagsBits } from "discord.js";
-import { describe, expect, it } from "vitest";
-import { commandDefinitions as botDefinitions } from "../apps/bot/src/commands";
+import { describe, expect, it, vi } from "vitest";
+import { registerCommands } from "../apps/bot/src/commands/registration";
 
 const catalog = () => getCommandCatalog(structuredClone(defaultConfig));
 const find = (path: string) => catalog().commands.find((c) => c.path === path)!;
 describe("implemented command catalog", () => {
-  it("uses the bot registration builders themselves, not a duplicate command list", () => {
-    expect(botDefinitions).toBe(commandDefinitions);
+  it("uses the bot registration builders themselves, not a duplicate command list", async () => {
+    const put = vi.fn(async () => ({}));
+    await registerCommands({ put }, "120000000000000099");
+    expect(put).toHaveBeenCalledWith(
+      "/applications/120000000000000099/commands",
+      { body: commandDefinitions.map((command) => command.toJSON()) }
+    );
     const result = catalog();
     expect(result.source).toBe("registration-definitions");
     expect(result.registrationVerified).toBe(false);

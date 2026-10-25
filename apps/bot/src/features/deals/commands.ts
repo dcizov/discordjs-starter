@@ -14,9 +14,9 @@ import {
   type GuildMember,
 } from "discord.js";
 import type { Resource } from "@orbit/core";
-import { gameDealReply } from "./deal-replies";
-import { dealGameSelection } from "./deal-game-selection";
-import { commandReply, replyLabel } from "./replies";
+import { gameDealReply } from "./replies";
+import { dealGameSelection } from "./selection";
+import { commandReply, replyLabel } from "../../interactions/replies";
 
 export async function handleDeals(
   i: ChatInputCommandInteraction,

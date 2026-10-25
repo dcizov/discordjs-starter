@@ -5,7 +5,7 @@ import {
   dealLinkRow,
   dealMoney,
 } from "../packages/core/src/deal-presentation";
-import { gameDealReply } from "../apps/bot/src/deal-replies";
+import { gameDealReply } from "../apps/bot/src/features/deals/replies";
 import { deal } from "./fixtures/deals";
 import { EmbedBuilder, ButtonBuilder, type APIEmbed } from "discord.js";
 

@@ -5,7 +5,7 @@ import {
   createMusicDoctorClient,
   parseMusicDoctorArgs,
   runMusicDoctor,
-} from "./music-doctor";
+} from "../features/music/diagnostics";
 
 dotenv.config({ quiet: true });
 const help = `Check Lavalink v4 and its configured audio source (read-only).

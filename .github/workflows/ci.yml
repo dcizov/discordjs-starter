@@ -115,7 +115,7 @@ jobs:
             import fs from "node:fs";
             import { setTimeout } from "node:timers/promises";
             import { Connector } from "shoukaku";
-            import { MusicBackend } from "/app/apps/bot/src/music-backend.ts";
+            import { MusicBackend } from "/app/apps/bot/src/features/music/backend.ts";
             process.on("uncaughtException", error => {
               const detail = String(error.stack ?? error).replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A");
               console.error(`::error title=Music backend smoke test failed::${detail}`);

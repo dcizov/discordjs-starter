@@ -6,10 +6,10 @@ import {
   PermissionsBitField,
   PermissionFlagsBits,
 } from "discord.js";
-import { dealGameSelection } from "../apps/bot/src/deal-game-selection";
+import { dealGameSelection } from "../apps/bot/src/features/deals/selection";
 import { deal } from "./fixtures/deals";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { MusicService } from "../apps/bot/src/music";
+import type { MusicService } from "../apps/bot/src/features/music/service";
 
 const db = vi.hoisted(() => ({
   audit: vi.fn(),
@@ -30,20 +30,20 @@ const db = vi.hoisted(() => ({
 }));
 vi.mock("@orbit/db", () => db);
 const communityTransport = vi.hoisted(() => ({ executeCommunity: vi.fn() }));
-vi.mock("../apps/bot/src/community", () => communityTransport);
+vi.mock("../apps/bot/src/features/community", () => communityTransport);
 vi.mock("@orbit/core/logger", () => ({
   logger: { warn: vi.fn(), info: vi.fn() },
 }));
-vi.mock("../apps/bot/src/moderation", () => ({
+vi.mock("../apps/bot/src/features/moderation/actions", () => ({
   moderate: vi.fn(),
   logCase: vi.fn(),
 }));
-vi.mock("../apps/bot/src/roles", () => ({
+vi.mock("../apps/bot/src/features/roles/panels", () => ({
   handleRoleInteraction: vi.fn(),
   publishPanel: vi.fn(),
 }));
-vi.mock("../apps/bot/src/shop", () => ({ claimShopRole: vi.fn() }));
-import { onInteraction } from "../apps/bot/src/interactions";
+vi.mock("../apps/bot/src/features/roles/shop", () => ({ claimShopRole: vi.fn() }));
+import { onInteraction } from "../apps/bot/src/interactions/dispatch";
 
 const guildId = "120000000000000001";
 const memberId = "120000000000000099";

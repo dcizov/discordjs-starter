@@ -7,7 +7,11 @@ import { logger } from "@orbit/core/logger";
 import { assertDeliverableDeal } from "@orbit/core/deal-policy";
 import { dealEmbed, dealLinkRow } from "@orbit/core/deal-presentation";
 import type { GameDeal } from "@orbit/core/deal-types";
-import { createQueue, redisConnection } from "@orbit/core/queue";
+import {
+  createQueue,
+  redisConnection,
+  closeRedisConnection,
+} from "@orbit/core/queue";
 import {
   closeDb,
   database,
@@ -376,7 +380,7 @@ async function main() {
       0,
       "Workers shut down"
     ).catch(() => {});
-    await redisConnection().quit();
+    await closeRedisConnection();
     await closeDb();
   }
   process.once("SIGTERM", () => void shutdown());

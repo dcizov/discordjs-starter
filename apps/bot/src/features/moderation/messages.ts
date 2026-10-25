@@ -7,7 +7,7 @@ import { logger } from "@orbit/core/logger";
 import { economyTransaction, getGuild, listResources } from "@orbit/db";
 import type { Message } from "discord.js";
 import { PermissionFlagsBits } from "discord.js";
-import { logCase, moderate } from "./moderation";
+import { logCase, moderate } from "./actions";
 const history = new Map<string, RecentMessage[]>();
 const lastTriggered = new Map<string, number>();
 const locks = new Map<string, Promise<unknown>>();

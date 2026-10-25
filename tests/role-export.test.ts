@@ -10,7 +10,7 @@ import {
   collectServerRoleExport,
   parseChannelExportArgs,
   writeChannelPermissionExport,
-} from "../apps/bot/src/channel-export";
+} from "../apps/bot/src/tools/channel-export";
 
 const guildId = "120000000000000001";
 const roleId = "120000000000000201";
@@ -249,7 +249,7 @@ describe("role export CLI and private output", () => {
         [
           "--import",
           "tsx",
-          "apps/bot/src/export-channels.ts",
+          "apps/bot/src/tools/export-channels.ts",
           "--roles-only",
           ...args,
         ],

@@ -28,7 +28,7 @@ vi.mock("@orbit/db", () => db);
 vi.mock("@orbit/core/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
-import { MusicService } from "../apps/bot/src/music";
+import { MusicService } from "../apps/bot/src/features/music/service";
 const services: MusicService[] = [];
 function service(configured = true) {
   vi.stubEnv("LAVALINK_URL", configured ? "127.0.0.1:1" : "");

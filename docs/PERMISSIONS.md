@@ -1,6 +1,6 @@
 # Discord permissions and practical setup
 
-This matrix is derived from the installed Discord.js code and Orbit's actual handlers, not the Developer Portal's permission calculator. See `packages/core/src/permissions.ts`, `apps/bot/src/{index,sync,roles,shop,moderation,automod,music,interactions}.ts`, `apps/worker/src/index.ts`, and `apps/web/lib/auth.ts`.
+This matrix is derived from the installed Discord.js code and Orbit's actual handlers, not the Developer Portal's permission calculator. See `packages/core/src/permissions.ts`, `apps/bot/src/bootstrap.ts`, `commands/`, `events/`, `features/` and `infrastructure/`, `apps/worker/src/index.ts`, and `apps/web/lib/auth.ts`.
 
 ## Six different layers — do not conflate them
 

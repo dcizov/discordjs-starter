@@ -3,8 +3,8 @@ import type { NodeInfo } from "shoukaku";
 import {
   MusicNodeMetadata,
   type MusicMetadataNode,
-} from "../apps/bot/src/music-node";
-import { musicNodeDescription } from "../apps/bot/src/music-source";
+} from "../apps/bot/src/features/music/node";
+import { musicNodeDescription } from "../apps/bot/src/features/music/source";
 
 const info: NodeInfo = {
   version: { semver: "4.2.2", major: 4, minor: 2, patch: 2 },

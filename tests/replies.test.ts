@@ -9,7 +9,7 @@ import {
   musicActionCard,
   queueCard,
   replyCodeBlock,
-} from "../apps/bot/src/replies";
+} from "../apps/bot/src/interactions/replies";
 
 const economy = { currency: "Stardust", symbol: "✦" };
 const track: Track = {

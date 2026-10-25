@@ -8,7 +8,7 @@ import {
   type MusicLookup,
   type MusicResolver,
   type MusicSourceSettings,
-} from "./music-source";
+} from "./source";
 
 const infoSchema = z.object({
   version: z.object({ semver: z.string().max(100) }),

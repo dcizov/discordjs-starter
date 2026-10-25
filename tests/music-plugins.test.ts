@@ -3,7 +3,7 @@ import type { Node } from "shoukaku";
 import {
   MusicPluginRest,
   sponsorBlockCategories,
-} from "../apps/bot/src/music-plugins";
+} from "../apps/bot/src/features/music/plugins";
 
 afterEach(() => vi.unstubAllGlobals());
 describe("SponsorBlock per-player configuration", () => {

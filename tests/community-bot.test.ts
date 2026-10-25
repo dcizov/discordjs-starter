@@ -23,7 +23,7 @@ import {
   communityPollResult,
   executeCommunity,
   createCommunityRest,
-} from "../apps/bot/src/community";
+} from "../apps/bot/src/features/community";
 const gid = "120000000000000001",
   cid = "120000000000000201",
   uid = "120000000000000099",

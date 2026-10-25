@@ -3,7 +3,7 @@ import { database, getResource, schema } from "@orbit/db";
 import type { GuildMember } from "discord.js";
 import { PermissionFlagsBits } from "discord.js";
 import { and, eq } from "drizzle-orm";
-import { memberLock, roleView } from "./roles";
+import { memberLock, roleView } from "./panels";
 export async function claimShopRole(member: GuildMember, itemId: string) {
   const item = await getResource(member.guild.id, itemId);
   if (!item || item.kind !== "shop" || item.data.type !== "role")

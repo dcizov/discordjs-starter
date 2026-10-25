@@ -5,8 +5,8 @@ import type { Client } from "discord.js";
 import { Shoukaku } from "shoukaku";
 import { WebSocketServer } from "ws";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MusicBackend } from "../apps/bot/src/music-backend";
-import { MusicDiscordConnector } from "../apps/bot/src/music-voice";
+import { MusicBackend } from "../apps/bot/src/features/music/backend";
+import { MusicDiscordConnector } from "../apps/bot/src/features/music/voice";
 
 const backends: MusicBackend[] = [];
 const servers: Array<() => Promise<void>> = [];

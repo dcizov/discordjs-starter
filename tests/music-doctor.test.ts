@@ -4,7 +4,7 @@ import {
   createMusicDoctorClient,
   parseMusicDoctorArgs,
   runMusicDoctor,
-} from "../apps/bot/src/music-doctor";
+} from "../apps/bot/src/features/music/diagnostics";
 
 const metadata = {
   version: { semver: "4.2.2" },
@@ -195,7 +195,7 @@ describe("read-only music doctor", () => {
     const run = (args: string[]) =>
       spawnSync(
         process.execPath,
-        ["--import", "tsx", "apps/bot/src/diagnose-music.ts", ...args],
+        ["--import", "tsx", "apps/bot/src/tools/music-doctor.ts", ...args],
         {
           encoding: "utf8",
           cwd: process.cwd(),

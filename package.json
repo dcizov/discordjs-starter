@@ -19,7 +19,7 @@
     "start": "next start apps/web --hostname 0.0.0.0 --port 3000",
     "start:bot": "node dist/bot.js",
     "start:worker": "node dist/worker.js",
-    "commands:register": "tsx apps/bot/src/register.ts",
+    "commands:register": "tsx apps/bot/src/commands/register.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "next typegen apps/web && tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",
@@ -32,9 +32,9 @@
     "test:ci": "npm test && npm run test:e2e",
     "format": "prettier --write \"apps/**/*.{ts,tsx,mjs,css,json}\" \"packages/**/*.{ts,json}\" \"tests/**/*.ts\" \"docs/**/*.md\" README.md",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,mjs,css,json}\" \"packages/**/*.{ts,json}\" \"tests/**/*.ts\"",
-    "channels:export": "tsx apps/bot/src/export-channels.ts",
-    "roles:export": "tsx apps/bot/src/export-channels.ts --roles-only",
-    "music:doctor": "tsx apps/bot/src/diagnose-music.ts"
+    "channels:export": "tsx apps/bot/src/tools/export-channels.ts",
+    "roles:export": "tsx apps/bot/src/tools/export-channels.ts --roles-only",
+    "music:doctor": "tsx apps/bot/src/tools/music-doctor.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

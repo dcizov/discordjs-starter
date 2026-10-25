@@ -16,7 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   joinMusicVoice,
   MusicDiscordConnector,
-} from "../apps/bot/src/music-voice";
+} from "../apps/bot/src/features/music/voice";
 const guildId = "120000000000000001",
   botId = "120000000000000012",
   channelId = "120000000000000111";

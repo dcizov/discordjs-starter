@@ -27,7 +27,7 @@ import {
   PermissionFlagsBits,
   StringSelectMenuBuilder,
 } from "discord.js";
-import { commandReply } from "./replies";
+import { commandReply } from "../../interactions/replies";
 export const roleView = (g: Guild): GuildRole[] =>
   g.roles.cache.map((r) => ({
     id: r.id,

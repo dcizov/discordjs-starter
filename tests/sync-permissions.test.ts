@@ -20,7 +20,7 @@ vi.mock("@orbit/db", () => ({
     },
   }),
 }));
-import { syncGuild } from "../apps/bot/src/sync";
+import { syncGuild } from "../apps/bot/src/infrastructure/guild-sync";
 beforeEach(() => vi.clearAllMocks());
 function guild() {
   const roles = new Collection(

@@ -2,7 +2,7 @@ import { defaultConfig, type GuildChannel } from "@orbit/core";
 import { database, schema } from "@orbit/db";
 import { ChannelType, PermissionFlagsBits, type Guild } from "discord.js";
 import { eq } from "drizzle-orm";
-import { roleView } from "./roles";
+import { roleView } from "../features/roles/panels";
 export async function syncGuild(guild: Guild) {
   const me = await guild.members.fetchMe();
   await guild.roles.fetch();

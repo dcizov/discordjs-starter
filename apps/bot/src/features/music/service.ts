@@ -18,15 +18,15 @@ import {
 } from "discord.js";
 import { randomUUID } from "node:crypto";
 import { type Track as LavalinkTrack, type Player } from "shoukaku";
-import { MusicBackend } from "./music-backend";
-import { MusicNodeMetadata } from "./music-node";
-import { joinMusicVoice, MusicDiscordConnector } from "./music-voice";
-import { MusicPluginRest, sponsorBlockCategories } from "./music-plugins";
+import { MusicBackend } from "./backend";
+import { MusicNodeMetadata } from "./node";
+import { joinMusicVoice, MusicDiscordConnector } from "./voice";
+import { MusicPluginRest, sponsorBlockCategories } from "./plugins";
 import {
   musicNodeDescription,
   musicSourceFailure,
   resolveMusicQuery,
-} from "./music-source";
+} from "./source";
 export class MusicService {
   readonly backend: MusicBackend | null;
   private sessions = new Map<string, MusicState>();
