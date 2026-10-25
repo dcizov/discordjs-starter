@@ -112,6 +112,7 @@ export function createActionConsumer(
           name:
             client.users.cache.get(job.data.actorId)?.displayName ??
             job.data.actorId,
+          avatar: client.users.cache.get(job.data.actorId)?.avatar ?? null,
         },
         "failed",
         job.name,

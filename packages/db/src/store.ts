@@ -112,7 +112,7 @@ export async function getResource(guildId: string, id: string) {
     .where(and(eq(s.resources.guildId, guildId), eq(s.resources.id, id)));
   return row ? serialize<Resource>(row) : null;
 }
-export type Actor = { id: string; name: string };
+export type Actor = { id: string; name: string; avatar?: string | null };
 function newAudit(
   guildId: string,
   actor: Actor,
@@ -125,6 +125,7 @@ function newAudit(
     guildId,
     actorId: actor.id,
     actorName: actor.name,
+    actorAvatar: actor.avatar ?? null,
     action,
     target,
     detail,

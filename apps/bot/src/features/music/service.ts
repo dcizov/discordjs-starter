@@ -351,7 +351,11 @@ export class MusicService {
                 );
                 await audit(
                   guild.id,
-                  { id: member.id, name: member.displayName },
+                  {
+                    id: member.id,
+                    name: member.displayName,
+                    avatar: member.user.avatar,
+                  },
                   "failed",
                   "SponsorBlock setup",
                   detail

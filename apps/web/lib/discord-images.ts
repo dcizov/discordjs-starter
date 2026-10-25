@@ -1,6 +1,6 @@
 import "server-only";
 import { CDN } from "discord.js";
-import { DEMO_GUILD_ICON, DEMO_USER_AVATAR } from "@orbit/core";
+import { DEMO_GUILD_ICON } from "@orbit/core";
 import { isDemo } from "@orbit/core/environment";
 import type { DashboardData } from "@orbit/core";
 
@@ -16,7 +16,9 @@ export function guildIconUrl(id: string, icon: string | null) {
   return validImage(id, icon) ? cdn.icon(id, icon, options) : null;
 }
 export function userAvatarUrl(id: string, avatar: string | null) {
-  if (isDemo() && avatar === DEMO_USER_AVATAR) return avatar;
+  // Only the bundled, original demo illustrations bypass the Discord CDN.
+  if (isDemo() && avatar && /^\/demo\/[a-z0-9-]+\.svg$/.test(avatar))
+    return avatar;
   return validImage(id, avatar) ? cdn.avatar(id, avatar, options) : null;
 }
 /** Deliberate public projection: never spread a server-side session identity. */

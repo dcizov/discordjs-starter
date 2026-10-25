@@ -29,6 +29,13 @@ export type DemoState = {
   operations: Record<string, { payload: string; result: any }>;
   inventory: Record<string, number>;
 };
+/** Demo-only persona illustrations; "Orbit" has no user avatar by design. */
+const DEMO_PERSONA_AVATARS: Record<string, string> = {
+  Alex: "/demo/alex.svg",
+  Sophie: "/demo/sophie.svg",
+  Milo: "/demo/milo.svg",
+  Jamie: "/demo/jamie-davis.svg",
+};
 const minutesAgo = (n: number) =>
   new Date(Date.now() - n * 60000).toISOString();
 const role = (
@@ -478,6 +485,8 @@ export function createDemo(): DemoState {
     guildId: guild.id,
     actorId: DEMO_USER_ID,
     actorName,
+    // Simulated personas: local original illustrations, never live Discord metadata.
+    actorAvatar: DEMO_PERSONA_AVATARS[String(actorName)] ?? null,
     action,
     target,
     detail,

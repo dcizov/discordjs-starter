@@ -22,6 +22,13 @@
       "when": 1792926490151,
       "tag": "0002_community_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792959202158,
+      "tag": "0003_audit_actor_avatar",
+      "breakpoints": true
     }
   ]
 }

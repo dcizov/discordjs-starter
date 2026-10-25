@@ -14,6 +14,7 @@ import {
   Layers,
   Lock,
   Music2,
+  Orbit,
   Radio,
   RotateCcw,
   Rss,
@@ -28,6 +29,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "./copy-button";
+import { IdentityImage } from "./identity/image";
 import { DataTable } from "./data-table";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
@@ -357,6 +359,12 @@ export function AuditPage() {
         description="A clear, lasting record of the changes that shape your community."
         badge="Append-only"
       />
+      <p className="mb-4 text-[11px] leading-relaxed text-muted-foreground">
+        Names and avatars are recorded when an action happens. They are not
+        refreshed afterwards, so an entry shows who acted at that moment — not
+        necessarily someone's current Discord avatar. Missing or deleted
+        pictures fall back to initials.
+      </p>
       <div className="mb-4 flex justify-between gap-3">
         <SearchInput
           value={q}
@@ -386,9 +394,19 @@ export function AuditPage() {
               label: "Who",
               render: (r) => (
                 <span className="flex items-center gap-2.5">
-                  <span className="flex size-7 items-center justify-center rounded-full bg-violet-50 text-violet-400 dark:bg-violet-500/10">
-                    {r.actorName.slice(0, 1)}
-                  </span>
+                  {r.actorName === "Orbit" ? (
+                    <span className="flex size-[28px] items-center justify-center rounded-full bg-violet-50 text-violet-400 dark:bg-violet-500/10">
+                      <Orbit size={14} />
+                    </span>
+                  ) : (
+                    <IdentityImage
+                      id={r.actorId}
+                      name={r.actorName}
+                      src={r.actorAvatarUrl}
+                      kind="user"
+                      size={28}
+                    />
+                  )}
                   <span className="font-medium">{r.actorName}</span>
                 </span>
               ),

@@ -62,7 +62,7 @@ export async function onInteraction(
     )
       await audit(
         i.guild.id,
-        { id: i.user.id, name: i.user.displayName },
+        { id: i.user.id, name: i.user.displayName, avatar: i.user.avatar },
         "failed",
         `music /${i.commandName}`,
         detail

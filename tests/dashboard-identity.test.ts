@@ -136,6 +136,60 @@ describe("dashboard identity projection and tenant boundary", () => {
     expect(result.guild.icon).toBeNull();
     expect(result.guilds[0].icon).toBeNull();
   });
+  it("resolves recorded audit avatars from the row without extra Discord requests", async () => {
+    deps.dashboard.mockResolvedValue({
+      guild,
+      resources: [],
+      audit: [
+        {
+          id: "a1",
+          guildId: gid,
+          actorId: uid,
+          actorName: "Recorded actor",
+          actorAvatar: avatar,
+          action: "updated",
+          target: "News",
+          detail: "Changed the destination",
+          createdAt: "2026-10-25T00:00:00Z",
+        },
+        {
+          id: "a2",
+          guildId: gid,
+          actorId: "120000000000000555",
+          actorName: "Deleted account",
+          actorAvatar: null,
+          action: "created",
+          target: "Rule",
+          detail: "Created a rule",
+          createdAt: "2026-10-25T00:01:00Z",
+        },
+        {
+          id: "a3",
+          guildId: gid,
+          actorId: "system:orbit",
+          actorName: "Orbit",
+          action: "delivered",
+          target: "Steam",
+          detail: "Delivered one update",
+          createdAt: "2026-10-25T00:02:00Z",
+        },
+      ],
+      ledger: [],
+      accounts: [],
+      deliveries: [],
+      music,
+      health: [],
+      demo: false,
+    });
+    const result = await loadDashboard(gid);
+    expect(result.audit[0].actorAvatarUrl).toBe(
+      `https://cdn.discordapp.com/avatars/${uid}/${avatar}.webp?size=128`
+    );
+    expect(result.audit[1].actorAvatarUrl).toBeNull();
+    expect(result.audit[2].actorAvatarUrl).toBeNull();
+    // Resolution is purely local: no REST client or fetcher is involved.
+    expect(JSON.stringify(result.audit)).not.toContain("accessToken");
+  });
   it("denies foreign access before loading any tenant data", async () => {
     deps.authorize.mockRejectedValue(new HttpError(403, "Forbidden"));
     await expect(loadDashboard("990000000000000999")).rejects.toMatchObject({

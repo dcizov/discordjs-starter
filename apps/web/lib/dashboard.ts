@@ -8,7 +8,7 @@ import { isDemo } from "@orbit/core/environment";
 import { emptyMusic, getDashboardData, getAccount } from "@orbit/db";
 import "server-only";
 import { authorize, HttpError } from "./auth";
-import { guildIconUrl, publicUser } from "./discord-images";
+import { guildIconUrl, publicUser, userAvatarUrl } from "./discord-images";
 export async function loadDashboard(
   guildId: string,
   authorized?: Awaited<ReturnType<typeof authorize>>,
@@ -79,6 +79,13 @@ export async function loadDashboard(
       itad: !!process.env.ITAD_API_KEY,
       lavalink: !!process.env.LAVALINK_URL && !!process.env.LAVALINK_PASSWORD,
     },
+    // Audit avatars are the hashes recorded with each action. They are resolved
+    // from the row itself (no per-row Discord request) and may be stale: the
+    // audit log shows the actor's recorded identity, not their current avatar.
+    audit: data.audit.map((entry) => ({
+      ...entry,
+      actorAvatarUrl: userAvatarUrl(entry.actorId, entry.actorAvatar ?? null),
+    })),
     user: publicUser(user),
     guilds: guilds.map((g) => ({ ...g, iconUrl: guildIconUrl(g.id, g.icon) })),
   };

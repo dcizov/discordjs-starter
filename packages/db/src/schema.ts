@@ -62,6 +62,8 @@ export const auditLogs = pgTable(
       .references(() => guilds.id, { onDelete: "cascade" }),
     actorId: text("actor_id").notNull(),
     actorName: text("actor_name").notNull(),
+    /** Avatar hash recorded when the action happened; never re-fetched per row. */
+    actorAvatar: text("actor_avatar"),
     action: text("action").notNull(),
     target: text("target").notNull(),
     detail: text("detail").notNull(),

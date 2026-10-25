@@ -33,6 +33,7 @@ import {
 import { Badge, Card } from "../../ui/primitives";
 
 import { useWorkspace } from "../../workspace";
+import { IdentityImage } from "../../identity/image";
 import { OverviewToolkit } from "./toolkit";
 import { ConnectionStatus } from "./connection-status";
 import { OverviewPreferences } from "./preferences";
@@ -234,25 +235,21 @@ export function Overview() {
             </button>
           </div>
           <div className="divide-y divide-border/50 px-5">
-            {data.audit.slice(0, 4).map((a, i) => (
+            {data.audit.slice(0, 4).map((a) => (
               <div className="flex items-center gap-3 py-3.5" key={a.id}>
-                <span
-                  className={cn(
-                    "flex size-[28px] shrink-0 items-center justify-center rounded-full text-[10px] font-medium",
-                    [
-                      "bg-[#f4e7db] text-[#b18d6c]",
-                      "bg-violet-50 text-violet-500",
-                      "bg-[#e9efdf] text-[#94a176]",
-                      "bg-[#e9eff7] text-[#819bbc]",
-                    ][i]
-                  )}
-                >
-                  {a.actorName === "Orbit" ? (
+                {a.actorName === "Orbit" ? (
+                  <span className="flex size-[28px] shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-500 dark:bg-violet-500/10">
                     <Orbit size={14} />
-                  ) : (
-                    a.actorName.slice(0, 1)
-                  )}
-                </span>
+                  </span>
+                ) : (
+                  <IdentityImage
+                    id={a.actorId}
+                    name={a.actorName}
+                    src={a.actorAvatarUrl}
+                    kind="user"
+                    size={28}
+                  />
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[11px]">
                     <strong className="font-medium">{a.actorName}</strong>{" "}
