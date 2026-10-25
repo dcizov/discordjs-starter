@@ -173,6 +173,15 @@ presentation policy:
 npx tsx scripts/build-steam-preview.ts   # tests/steam-news.test.ts fails if it drifts
 ```
 
+## Source freshness
+
+The source card no longer calls a source "Healthy" on the strength of its saved
+health field. `sourceFreshness()` (packages/core/src/source-health.ts) compares
+the recorded check time with the source's own `intervalMinutes` (50% slack) and
+reports `fresh`, `overdue`, `never-checked` or `unknown`, with the measured age
+and no score. A paused source says no check is expected; an unreadable timestamp
+says freshness is unknown. Covered by `tests/source-freshness.test.ts`.
+
 ## Remaining work
 
 - Open Graph / Steam store header images need a dedicated SSRF-reviewed fetcher.
