@@ -852,10 +852,11 @@ export function ResourceEditor({
                   <span className="text-xs leading-relaxed">
                     Official announcements only
                     <span className="mt-1 block text-[11px] text-muted-foreground">
-                      Hides items Steam marks as external or does not attribute
-                      to this app. Classification comes from Steam metadata, so
-                      community crossposts can still appear when Steam labels
-                      them as app announcements.
+                      Asks Steam for this app's announcement feed, so posts
+                      syndicated from other publishers are not requested. Steam
+                      does not publish a "first party" field; Orbit treats
+                      Steam's app-announcement feed as the app's own channel and
+                      never claims more than that.
                     </span>
                   </span>
                   <Switch

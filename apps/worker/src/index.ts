@@ -192,7 +192,13 @@ async function main() {
                 attribution: payload.attribution ?? "unknown",
                 publishedAt: payload.publishedAt ?? "",
                 tags: payload.tags ?? [],
-                sourceLabel: payload.sourceName ?? source.name,
+                // The provider's own label, e.g. "Community Announcements",
+                // so a syndicated item is never attributed to the configured
+                // subscription name. Older queued payloads only carry
+                // sourceName, which remains the fallback.
+                sourceLabel:
+                  payload.providerLabel || payload.sourceName || source.name,
+                publisher: payload.publisher ?? "",
               },
               {
                 includeSummary: payload.includeSummary,

@@ -11,7 +11,7 @@ import {
   normalizeFeedText,
   plainText,
   safeImageUrl,
-  steamAttribution,
+  steamIdentity,
 } from "./feed-content";
 import type { NewsAttribution } from "./news-presentation";
 import type { FeedItem, Resource } from "./types";
@@ -188,19 +188,21 @@ export function parseFeed(xml: string): FeedItem[] {
 
 function steamItem(item: any, tags: string[]) {
   const contents = String(item?.contents ?? "");
+  const identity = steamIdentity(item ?? {});
   return {
     id: String(item?.gid ?? ""),
     title: plainText(String(item?.title ?? ""), 256),
     url: safeLink(String(item?.url ?? "")),
-    summary: excerpt(normalizeFeedText(contents, "bbcode"), 1200),
+    summary: normalizeFeedText(contents, "bbcode"),
     publishedAt:
       Number(item?.date) > 0
         ? new Date(Number(item.date) * 1000).toISOString()
         : "",
     tags: ["Steam", ...tags],
     image: imageFromMarkup(contents),
-    attribution: steamAttribution(item ?? {}),
-    sourceLabel: plainText(String(item?.feedlabel ?? "Steam"), 120),
+    attribution: identity.attribution,
+    sourceLabel: identity.feedLabel,
+    publisher: identity.publisher,
   } satisfies FeedItem;
 }
 
@@ -209,6 +211,28 @@ function steamItem(item: any, tags: string[]) {
  * shown in the dashboard preview so a partial result is never presented as a
  * complete one.
  */
+/**
+ * The official-only filter asks Steam for the app's announcement feed instead of
+ * filtering a mixed page of ten items locally (which silently hides older
+ * matching posts). `feeds` is not in Valve's published parameter list; it is
+ * used only for this filter and the caller falls back to local filtering if the
+ * response still contains other feeds.
+ */
+export const STEAM_ANNOUNCEMENT_FEED = "steam_community_announcements";
+
+export function steamNewsUrl(appId: number, officialOnly = false) {
+  const params = new URLSearchParams({
+    appid: String(appId),
+    count: "10",
+    // Full content: upstream truncation (`maxlength`) appends an ellipsis and
+    // cuts mid-paragraph, which cannot be re-shaped into readable bullets.
+    maxlength: "0",
+    format: "json",
+  });
+  if (officialOnly) params.set("feeds", STEAM_ANNOUNCEMENT_FEED);
+  return `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?${params}`;
+}
+
 /** Normalize an `ISteamNews` payload. Pure, so filtering is testable offline. */
 export function mapSteamNews(
   newsitems: unknown,
@@ -222,11 +246,18 @@ export function mapSteamNews(
     ? mapped.filter((i: FeedItem) => i.attribution === "official")
     : mapped;
   const notices: string[] = [];
+  const truncated = raw.filter((n: any) =>
+    /…\s*$/.test(String(n?.contents ?? ""))
+  ).length;
+  if (truncated)
+    notices.push(
+      `${truncated} item${truncated === 1 ? " was" : "s were"} truncated upstream by Steam (the API's maxlength limit). Orbit requests full content, so this means the stored feed was cut before it reached us.`
+    );
   if (options.officialOnly) {
     const hidden = mapped.length - items.length;
     if (hidden > 0)
       notices.push(
-        `${hidden} of ${mapped.length} recent items were hidden by the official-only filter. Steam metadata decides this; items Steam labels as app announcements can still be community crossposts.`
+        `${hidden} of ${mapped.length} item${mapped.length === 1 ? "" : "s"} ${mapped.length === 1 ? "was" : "were"} not in Steam's app announcement feed, so the official-only filter hid ${hidden === 1 ? "it" : "them"}.`
       );
   }
   if (
@@ -234,10 +265,8 @@ export function mapSteamNews(
     !items.some((i: FeedItem) => i.attribution === "official")
   )
     notices.push(
-      "None of these items is labelled as a first-party announcement by Steam metadata."
+      "None of these items is posted on this app's Steam announcement hub; they come from publisher feeds."
     );
-  if (items.length && !items.some((i: FeedItem) => i.image))
-    notices.push("Steam's news API supplies no lead image for these items.");
   return { items, notices };
 }
 
@@ -247,10 +276,9 @@ export async function pollSourceDetailed(
   const d = source.data;
   if (d.adapter === "webhook") return { items: [], notices: [] };
   if (d.adapter === "steam") {
-    if (!d.appId) throw new Error("A Steam application ID is required");
-    const json = await officialJson(
-      `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${d.appId}&count=10&maxlength=0`
-    );
+    if (!d.appId || !Number.isSafeInteger(d.appId) || d.appId <= 0)
+      throw new Error("A Steam application ID is required");
+    const json = await officialJson(steamNewsUrl(d.appId, !!d.officialOnly));
     return mapSteamNews(json.appnews?.newsitems, {
       tags: d.tags ?? [],
       officialOnly: !!d.officialOnly,

@@ -26,6 +26,7 @@ import { BotActionUnavailableError } from "@orbit/core/bot-actions";
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { pollSourceDetailed, searchGames } from "@orbit/core/feeds";
+import { UpstreamError } from "@orbit/core/integration-http";
 import { newsCard } from "@orbit/core/news-presentation";
 import { createQueue, enqueueAction } from "@orbit/core/queue";
 import {
@@ -333,6 +334,7 @@ async function handle(req: Request, context: Context) {
                     "This is a simulated preview. No external source was fetched and nothing was sent to Discord.",
                   url: "",
                   attribution: "unknown" as const,
+                  publisher: "",
                   publishedAt: "",
                   image: null,
                   tags: [],
@@ -698,9 +700,13 @@ async function handle(req: Request, context: Context) {
       error instanceof BotActionUnavailableError ||
       error instanceof CommunityConflict
         ? error.status
-        : error instanceof ZodError
-          ? 422
-          : 400;
+        : // A provider outage is reported as a bad gateway, never as a bad
+          // request, so the dashboard can tell "fix your setup" from "retry".
+          error instanceof UpstreamError
+          ? 502
+          : error instanceof ZodError
+            ? 422
+            : 400;
     const message =
       error instanceof ZodError
         ? error.issues
@@ -709,8 +715,12 @@ async function handle(req: Request, context: Context) {
         : error instanceof Error
           ? error.message
           : "Something went wrong";
-    const retryAfterSeconds =
-      error instanceof HttpError ? error.retryAfterSeconds : undefined;
+    const retryAfterSeconds = (() => {
+      if (error instanceof HttpError) return error.retryAfterSeconds;
+      if (!(error instanceof UpstreamError) || !error.retryAfterMs)
+        return undefined;
+      return Math.max(1, Math.ceil(error.retryAfterMs / 1000));
+    })();
     return NextResponse.json(
       { error: message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) },
       {

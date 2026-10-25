@@ -1,15 +1,21 @@
 /**
- * Representative feed payloads. Shapes follow the documented Steam
- * `ISteamNews/GetNewsForApp/v2` response and common RSS 2.0 / Atom carriers.
- * They are local fixtures: no provider is contacted by tests.
+ * Small hand-built payloads for generic behaviour (HTML, entities, images,
+ * malformed input). The Steam entries below mirror the *real* field values
+ * observed on 2026-10-25 so they exercise the true branch conditions, but the
+ * recorded provider responses live in `tests/fixtures/steam/` and are what the
+ * Steam regression suite uses. No provider is contacted by tests.
  */
 
-/** Steam announcement mixing BBCode, HTML entities and a clan image token. */
+/**
+ * Steam announcement mixing BBCode, HTML entities and a clan image token.
+ * `is_external_url` is `true` and the URL is the Steam redirector, exactly as
+ * the live API returns them, so this fixture also proves the flag is ignored.
+ */
 export const steamAnnouncement = {
   gid: "5500000000000001",
   title: "Release Notes for 24 Oct 2026",
-  url: "https://store.steampowered.com/news/app/730/view/5500000000000001",
-  is_external_url: false,
+  url: "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/5500000000000001",
+  is_external_url: true,
   author: "Valve",
   contents:
     "[img]{STEAM_CLAN_IMAGE}/1234/abcdef012345.jpg[/img]\n" +
@@ -19,25 +25,28 @@ export const steamAnnouncement = {
     "[*] Camera controls now use click-and-drag\n" +
     "[*] Fixed a flicker when opening the buy menu[/list][/p]\n" +
     "[p]Removed console warnings and cleaned up a crash &amp; freeze.[/p]",
-  feedlabel: "Counter-Strike 2",
+  feedlabel: "Community Announcements",
   date: 1792836000,
   feedname: "steam_community_announcements",
   feed_type: 1,
   appid: 730,
 };
 
-/** Steam news item that is a syndicated third-party post. */
+/**
+ * Syndicated item. `feed_type: 0` and a publisher-named feed are the only
+ * metadata Steam supplies to distinguish it; the URL is still a Steam redirect.
+ */
 export const steamExternalItem = {
   gid: "5500000000000002",
   title: "A community tournament recap",
-  url: "https://example-esports.test/tournament",
+  url: "https://steamstore-a.akamaihd.net/news/externalpost/Esports Weekly/5500000000000002",
   is_external_url: true,
   author: "Esports Weekly",
   contents: "[p]Our weekly roundup of community matches.[/p]",
-  feedlabel: "Counter-Strike 2",
+  feedlabel: "Esports Weekly",
   date: 1792740000,
-  feedname: "steam_community_announcements",
-  feed_type: 1,
+  feedname: "Esports Weekly",
+  feed_type: 0,
   appid: 730,
 };
 
@@ -45,14 +54,14 @@ export const steamExternalItem = {
 export const steamUnknownAttribution = {
   gid: "5500000000000003",
   title: "Something appeared",
-  url: "https://store.steampowered.com/news/app/730/view/3",
-  is_external_url: false,
+  url: "https://steamstore-a.akamaihd.net/news/externalpost//5500000000000003",
+  is_external_url: true,
   author: "",
   contents: "Plain text without any markup at all.",
-  feedlabel: "Counter-Strike 2",
+  feedlabel: "",
   date: 1792650000,
-  feedname: "unknown_feed",
-  feed_type: 0,
+  feedname: "",
+  feed_type: 2,
   appid: 730,
 };
 

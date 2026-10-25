@@ -144,44 +144,225 @@ export function htmlToText(raw: string) {
 }
 
 /**
- * Steam announcement markup. Steam mixes BBCode-like constructs with real HTML
- * and legacy `{STEAM_CLAN_IMAGE}` tokens, so BBCode is expanded to plain text
- * first and the HTML pass runs afterwards on the same string.
+ * Steam announcement markup, parsed rather than replaced.
+ *
+ * A real `ISteamNews` item (captured 2026-10-25, appid 730) looks like this:
+ *
+ *   [p]\[ UI ][/p][p]Demo/Replay viewer improvements:[/p][list]
+ *   [*][p]Added a progress bar for demo/replay downloads[/p][/*]
+ *   [*][p]Camera controls now use click-and-drag scheme[/p][/*][/list]
+ *
+ * Three properties defeat a replacement chain:
+ * - `[/*]` closes an item and is followed directly by the next `[*]`, so a rule
+ *   that only consumes `[*]` leaks `[/*]` into the visible text,
+ * - lists nest inside list items (`[*]…[list][*]…[/list][/*]`), so `[/list]`
+ *   alone cannot decide where a line ends,
+ * - literal brackets are backslash-escaped (`\[ UI ]`) while `[/*]` is real
+ *   markup, so "strip every bracketed expression" deletes author headings.
+ *
+ * One left-to-right scanner keeps the list stack and the escape state, and only
+ * treats *known* tags as markup. Anything else stays literal.
  */
+type SteamLine = {
+  kind: "p" | "li";
+  depth: number;
+  marker: string;
+  text: string;
+};
+type ListFrame = { ordered: boolean; index: number };
+
+/** Inline tags: drop the tag, keep the text. */
+const STEAM_INLINE_TAGS = new Set([
+  "b",
+  "i",
+  "u",
+  "s",
+  "strike",
+  "del",
+  "em",
+  "strong",
+  "spoiler",
+  "sub",
+  "sup",
+  "url",
+]);
+
+/** Block tags: a boundary, and the enclosing text still belongs to the text. */
+const STEAM_BLOCK_TAGS = new Set([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "quote",
+  "code",
+  "pre",
+  "center",
+  "section",
+  "tr",
+  "td",
+  "th",
+  "table",
+  "br",
+  "hr",
+]);
+
+/** Tags whose content is a URL or an id, never article prose. */
+const STEAM_DROP_TAGS = new Set(["img", "video", "previewyoutube"]);
+
+/**
+ * Steam escapes a literal bracket or quote with a backslash (`\[ UI ]`,
+ * `\"-allow_round_backup_files\"`). Exactly these four characters are
+ * unescaped; blanket backslash removal would corrupt paths and Markdown.
+ */
+const STEAM_ESCAPABLE = new Set(["[", "]", "\\", '"']);
+
+const STEAM_IMAGE_TOKENS = /\{STEAM_CLAN(?:_LOC)?_IMAGE\}/gi;
+
+function scanSteamLines(raw: string): SteamLine[] {
+  const lines: SteamLine[] = [];
+  const stack: ListFrame[] = [];
+  let buf = "";
+  let skip: string | null = null;
+  let pending: { marker: string; depth: number } | null = null;
+
+  const flush = (kind: "p" | "li") => {
+    const text = buf.replace(/\s+/g, " ").trim();
+    buf = "";
+    if (!text) return;
+    lines.push({
+      kind,
+      depth: pending?.depth ?? Math.max(0, stack.length - 1),
+      marker: pending?.marker ?? "",
+      text,
+    });
+    pending = null;
+  };
+  // Inside a list every boundary ends a compact item; outside it ends a
+  // paragraph. That distinction is what keeps bullets from double-spacing.
+  const boundary = () => flush(stack.length ? "li" : "p");
+  // One glyph per nesting level: tidyText collapses runs of spaces (and every
+  // later plainText/excerpt pass does too), so indentation cannot survive.
+  // Distinct markers keep the hierarchy readable in a card and in Discord.
+  const NESTED_MARKERS = ["• ", "◦ ", "▪ "];
+  const nextMarker = () => {
+    const frame = stack[stack.length - 1];
+    if (!frame) return "";
+    if (frame.ordered) {
+      frame.index += 1;
+      return `${frame.index}. `;
+    }
+    return NESTED_MARKERS[
+      Math.min(stack.length - 1, NESTED_MARKERS.length - 1)
+    ];
+  };
+
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (skip) {
+      if (
+        ch === "[" &&
+        raw.slice(i, i + skip.length + 3).toLowerCase() === `[/${skip}]`
+      ) {
+        i += skip.length + 2;
+        skip = null;
+      }
+      continue;
+    }
+    if (ch === "\\" && i + 1 < raw.length && STEAM_ESCAPABLE.has(raw[i + 1])) {
+      buf += raw[i + 1];
+      i += 1;
+      continue;
+    }
+    if (ch === "\n" || ch === "\r") {
+      boundary();
+      continue;
+    }
+    if (ch !== "[") {
+      buf += ch;
+      continue;
+    }
+    const close = raw.indexOf("]", i);
+    if (close === -1) {
+      // Unterminated bracket: treat it as text rather than guessing.
+      buf += raw.slice(i);
+      break;
+    }
+    const body = raw.slice(i + 1, close).trim();
+    const closing = body.startsWith("/");
+    const name = (closing ? body.slice(1) : body.split("=")[0])
+      .trim()
+      .toLowerCase();
+    const known =
+      name === "*" ||
+      name === "list" ||
+      name === "olist" ||
+      name === "noparse" ||
+      STEAM_INLINE_TAGS.has(name) ||
+      STEAM_BLOCK_TAGS.has(name) ||
+      STEAM_DROP_TAGS.has(name);
+    if (!known) {
+      // `[ UI ]`, `[MISC]`, `[not markup]`: keep what the author wrote.
+      buf += raw.slice(i, close + 1);
+      i = close;
+      continue;
+    }
+    i = close;
+    if (name === "noparse") {
+      // The body is literal by definition: keep it, minus its escapes.
+      const end = raw.toLowerCase().indexOf("[/noparse]", i + 1);
+      if (end === -1) continue;
+      buf += raw.slice(i + 1, end).replace(/\\([[\]"])/g, "$1");
+      i = end + "[/noparse]".length - 1;
+      continue;
+    }
+    if (name === "list" || name === "olist") {
+      boundary();
+      if (!closing) stack.push({ ordered: name === "olist", index: 0 });
+      else if (stack.length) stack.pop();
+      continue;
+    }
+    if (name === "*") {
+      boundary();
+      if (!closing)
+        pending = {
+          marker: nextMarker(),
+          depth: Math.max(0, stack.length - 1),
+        };
+      continue;
+    }
+    if (STEAM_BLOCK_TAGS.has(name)) {
+      boundary();
+      continue;
+    }
+    if (STEAM_DROP_TAGS.has(name)) {
+      if (!closing) skip = name;
+      continue;
+    }
+    // Inline formatting and `[url=…]` keep their text and add no boundary.
+  }
+  boundary();
+  return lines;
+}
+
+/** Paragraphs get a blank line; list items stay on consecutive lines. */
+function renderSteamLines(lines: SteamLine[]) {
+  let out = "";
+  for (const line of lines) {
+    const item = line.kind === "li" || !!line.marker;
+    const block = `${line.marker}${line.text}`;
+    out += out ? `${item ? "\n" : "\n\n"}${block}` : block;
+  }
+  return out;
+}
+
+/** Steam `contents` (BBCode-ish markup plus occasional HTML) to plain text. */
 export function steamMarkupToText(raw: string) {
-  const expanded = raw
-    .replace(
-      /\{STEAM_CLAN_IMAGE\}/gi,
-      "https://clan.cloudflare.steamstatic.com/images"
-    )
-    .replace(
-      /\{STEAM_CLAN_LOC_IMAGE\}/gi,
-      "https://clan.cloudflare.steamstatic.com/images"
-    )
-    .replace(/(clan\.cloudflare\.steamstatic\.com\/images)\/+/gi, "$1/")
-    .replace(/\[img(?:=[^\]]*)?\][\s\S]*?\[\/img\]/gi, "\n")
-    .replace(/\[previewyoutube=[^\]]*\][\s\S]*?\[\/previewyoutube\]/gi, "\n")
-    .replace(/\[video\][\s\S]*?\[\/video\]/gi, "\n")
-    .replace(
-      /\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi,
-      (_m, href: string, label: string) => (label || href).trim()
-    )
-    .replace(/\[url\]([\s\S]*?)\[\/url\]/gi, (_m, href: string) => href.trim())
-    .replace(
-      /\[list(?:=[^\]]*)?\]([\s\S]*?)\[\/list\]/gi,
-      (_m, body: string) => `\n${body}\n`
-    )
-    .replace(/\s*\[\*\]\s*/gi, "\n• ")
-    .replace(
-      /\[\/?(?:h[1-6]|p|quote|table|tr|td|th|center|hr|code|pre|noparse|section)\]/gi,
-      "\n"
-    )
-    .replace(
-      /\[\/?(?:b|i|u|s|strike|spoiler|sub|sup|noparse|url|img|list)\]/gi,
-      ""
-    )
-    .replace(/\[[a-z][a-z0-9]*=[^\]]*\]/gi, "");
-  return tidyText(htmlToText(expanded));
+  if (!raw) return "";
+  const prepared = raw.replace(STEAM_IMAGE_TOKENS, "");
+  return tidyText(renderSteamLines(scanSteamLines(htmlToText(prepared))));
 }
 
 export function normalizeFeedText(raw: string, format: TextFormat) {
@@ -205,14 +386,74 @@ export function plainText(value: string, max = 4000) {
   ).slice(0, max);
 }
 
+/** A rendered list item: unordered glyphs or an ordered number. */
+const BULLET_LINE = /^\s*(?:[•◦▪]|\d+\.)\s/;
+
+export type ExcerptBounds = {
+  chars?: number;
+  paragraphs?: number;
+  bullets?: number;
+};
+
 /**
- * Readable excerpt: prefers paragraph/sentence boundaries over a hard slice so
- * a card never ends with half a word or a joined line.
+ * Readable excerpt. A raw character slice of a changelog produces a wall of
+ * bullets that fills half the card, so the shape is bounded first and the
+ * character limit is applied last (never the other way round: truncating
+ * mid-line would cut a bullet and look like corruption).
  */
-export function excerpt(value: string, max = 480) {
+export function excerpt(
+  value: string,
+  max = 480,
+  bounds: Omit<ExcerptBounds, "chars"> = {}
+) {
+  const maxParagraphs = bounds.paragraphs ?? 3;
+  const maxBullets = bounds.bullets ?? 6;
   const text = tidyText(value);
-  if (text.length <= max) return text;
-  const window = text.slice(0, max + 1);
+  if (!text) return "";
+  const kept: string[] = [];
+  let bullets = 0;
+  for (const paragraph of text.split(/\n{2,}/)) {
+    if (kept.length >= maxParagraphs) break;
+    const lines = paragraph.split("\n");
+    // A later section that cannot fit is dropped whole. Emitting "[ MISC ]" and
+    // one of its five bullets is worse than not mentioning the section.
+    if (
+      kept.length > 0 &&
+      lines.filter((line) => BULLET_LINE.test(line)).length >
+        maxBullets - bullets
+    )
+      break;
+    let exhausted = false;
+    const keptLines: string[] = [];
+    for (const line of lines) {
+      if (BULLET_LINE.test(line)) {
+        if (bullets >= maxBullets) {
+          exhausted = true;
+          break;
+        }
+        bullets += 1;
+      }
+      keptLines.push(line);
+    }
+    if (keptLines.length) kept.push(keptLines.join("\n"));
+    if (exhausted) break;
+  }
+  // Never end on a section heading whose bullets were cut by the budget.
+  while (kept.length > 1) {
+    const last = kept[kept.length - 1];
+    const singleLine = !last.includes("\n");
+    if (
+      singleLine &&
+      !BULLET_LINE.test(last) &&
+      last.length <= 60 &&
+      !/[.!?。…:]$/.test(last)
+    )
+      kept.pop();
+    else break;
+  }
+  const shaped = kept.join("\n\n");
+  if (shaped.length <= max) return shaped;
+  const window = shaped.slice(0, max + 1);
   const punctuated = Math.max(
     window.lastIndexOf("\n\n"),
     window.lastIndexOf(". "),
@@ -227,7 +468,7 @@ export function excerpt(value: string, max = 480) {
       : space >= max * 0.55
         ? space
         : max;
-  const trimmed = text.slice(0, cut).replace(/[\s,;:–—-]+$/, "");
+  const trimmed = shaped.slice(0, cut).replace(/[\s,;:–—-]+$/, "");
   if (!trimmed) return "";
   return /[.!?。…]$/.test(trimmed) ? trimmed : `${trimmed}…`;
 }
@@ -302,36 +543,69 @@ export function imageFromMarkup(raw: string) {
 }
 
 /**
- * Steam's news API mixes first-party announcements with external/syndicated
- * items. Classification uses only the metadata Steam returns; anything we
- * cannot attribute stays "unknown" instead of being labelled official.
+ * Steam's news API does not say "first party". What it *does* expose, verified
+ * against live responses on 2026-10-25:
+ *
+ * - `feed_type`: `1` for the app's own announcement hub, `0` for syndicated
+ *   partner/publisher feeds (Rock Paper Shotgun, PC Gamer, PlayGround.ru).
+ * - `feedname`/`feedlabel`: the producing feed (`steam_community_announcements`
+ *   → "Community Announcements", or the outlet's name).
+ * - `is_external_url`: `true` for *every* item we captured, including Valve's
+ *   own CS2 patch notes, because `url` is always a Steam redirector
+ *   (`steamstore-a.akamaihd.net/news/externalpost/<feed>/<gid>`). It therefore
+ *   says nothing about who wrote the item and is deliberately not used.
+ *
+ * `feed_type` is not in Valve's published `GetNewsForApp` documentation, so it
+ * is treated as observed provider metadata: it separates "posted on the app's
+ * announcement hub" from "syndicated publisher feed", and anything without
+ * that evidence stays `unknown` rather than being promoted to official.
  */
-const STEAM_OFFICIAL_FEEDS = new Set([
+export type SteamIdentity = {
+  attribution: NewsAttribution;
+  /** Producing feed, e.g. "Community Announcements" or "Rock, Paper, Shotgun". */
+  feedLabel: string;
+  /** Real outlet name when the item is syndicated, otherwise "". */
+  publisher: string;
+};
+
+const STEAM_APP_FEEDS = new Set([
   "steam_community_announcements",
   "steam_release_notes",
   "steam_news",
 ]);
 
-const STEAM_HOSTS =
-  /(^|\.)(steamcommunity\.com|steampowered\.com|steamstatic\.com)$/i;
-
-export function steamAttribution(item: {
-  is_external_url?: unknown;
+export function steamIdentity(item: {
+  feed_type?: unknown;
   feedname?: unknown;
+  feedlabel?: unknown;
+  /** Accepted and deliberately ignored: see the note above. */
+  is_external_url?: unknown;
+  url?: unknown;
+}): SteamIdentity {
+  const feedname = String(item.feedname ?? "")
+    .trim()
+    .toLowerCase();
+  const feedLabel = plainText(String(item.feedlabel ?? ""), 120).trim();
+  const feedType = Number(item.feed_type);
+  const appFeed = STEAM_APP_FEEDS.has(feedname);
+  const official = Number.isFinite(feedType) ? feedType === 1 : appFeed;
+  const label = feedLabel || (appFeed ? "Community Announcements" : feedname);
+  if (official)
+    return { attribution: "official", feedLabel: label, publisher: "" };
+  if (label)
+    return { attribution: "syndicated", feedLabel: label, publisher: label };
+  return { attribution: "unknown", feedLabel: "Steam", publisher: "" };
+}
+
+/** Attribution only; see `steamIdentity` for the evidence behind it. */
+export function steamAttribution(item: {
+  feed_type?: unknown;
+  feedname?: unknown;
+  feedlabel?: unknown;
+  is_external_url?: unknown;
   url?: unknown;
 }): NewsAttribution {
-  let host = "";
-  try {
-    host = new URL(String(item.url ?? "")).hostname;
-  } catch {
-    host = "";
-  }
-  if (item.is_external_url === true || item.is_external_url === "true")
-    return "external";
-  if (host && !STEAM_HOSTS.test(host)) return "external";
-  const feed = String(item.feedname ?? "").toLowerCase();
-  if (STEAM_OFFICIAL_FEEDS.has(feed)) return "official";
-  return "unknown";
+  return steamIdentity(item).attribution;
 }
 
 /** Stable identity fallback when a provider omits guid/id. */

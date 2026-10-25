@@ -1052,7 +1052,7 @@ export function ResourcesPage({
             delivery. Deliveries are still made only by the worker for new items
             that pass your filters and routing rules.
             {test?.officialOnly
-              ? " The official-only filter is on, so items Steam does not attribute to this app are hidden."
+              ? " The official-only filter is on: Steam was asked for this app's announcement feed, so posts from other publishers are not shown."
               : ""}
           </p>
           <div className="space-y-3">

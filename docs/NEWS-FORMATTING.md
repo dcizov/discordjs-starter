@@ -1,163 +1,182 @@
 # News formatting: provider → preview → delivery
 
-Date: 2026-10-25. Branch: `arena/99c6cf65-discordjs-starter` (continuation of
-`arena/e2b42b08-discordjs-starter`). Everything below describes the code in this
-branch; the incident it fixes is the flattened "test flight" preview (joined
-words, leftover markup, no images or article links).
+Date: 2026-10-25. Branch: `arena/99c6cf65-discordjs-starter`. Everything below
+describes the code in this branch. It supersedes the first news pass: that pass
+fixed joined words and missing images but was never checked against a **real**
+Steam response, and the reported screenshot showed why that mattered.
 
-## What was wrong
+## The real defect (reproduced, not guessed)
 
-| Symptom                                                               | Cause                                                                                                                            |
-| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `Added Instance.PreCacheReturns a CPrecache objectAdded CPrecache...` | One `safeText()` call stripped **all** tags with `sanitize-html`, so `<p>`, `<li>` and `<br>` boundaries disappeared.            |
-| `\Demo/Replay viewer improvements.Added a progress bar…`              | Steam `contents` is BBCode-ish (`[p]`, `[list]`, `[*]`, `[b]`, `[img]`), which no HTML sanitizer understands.                    |
-| `&amp;`, `&quot;` in delivered text                                   | `sanitize-html` re-encodes ampersands in its text output and nothing decoded them afterwards.                                    |
-| No images, no "read more"                                             | The item contract had `title/url/summary/tags` only; Steam's API has no header image and RSS `enclosure`/`media:*` were ignored. |
-| Everything labelled the same                                          | Steam's `is_external_url`/`feedname` metadata was unused, so syndicated posts looked like first-party announcements.             |
-| Preview and delivery could drift                                      | The dashboard rendered raw item fields; the worker built the embed inline with different limits.                                 |
+The reported article is
+`https://steamcommunity.com/games/CSGO/announcements/detail/687519694976975305`
+("Counter-Strike 2 Update", 14 Oct 2026 19:02 EDT). Its API record is
+`gid 1846651706675829` (the community permalink and the news `gid` are different
+namespaces; `date: 1792018968` matches the page). Captured 2026-10-25:
 
-## Contract
+```
+[p]\[ UI ][/p][p]Demo/Replay viewer improvements:[/p][list]
+[*][p]Added a progress bar for demo/replay downloads[/p][/*]
+[*][p]Camera controls now use click-and-drag scheme[/p][/*][/list]
+[p][/p][p]\[ MISC ][/p][list][*][p]Round backup files now require the game
+server startup flag \"-allow_round_backup_files\"[/p][/*]…[/list]
+```
 
-`FeedItem` (packages/core/src/types.ts) keeps its existing fields and adds only
-what presentation needs:
+| Symptom in the screenshot                    | Actual cause                                                                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Literal `[/*]` lines                          | The old replacement chain consumed `[*]` but never `[/*]`; Steam closes an item with `[/*]` and immediately opens the next one with `[*]`.        |
+| `\[ UI ]`, `\"…\"`                            | Steam backslash-escapes literal brackets and quotes. Nothing unescaped them, and the escaping is *per character* (`\[` escaped, `]` not).          |
+| Excess spacing between bullets                | Each leaked `[/*]` became its own text line, so `whitespace-pre-line` rendered a blank line between every bullet.                                  |
+| Very long card                                | 480 characters of changelog is a wall of bullets; the shape was never bounded, only the length.                                                   |
+| "External link, not a first-party post" on Valve's own patch notes | `is_external_url` is `true` on **every** item in the capture — Valve's own included — because `url` is always a Steam redirector (`steamstore-a.akamaihd.net/news/externalpost/<feed>/<gid>`). The old classifier treated that flag as "not first party". |
+| "CS2" as the article's source                | `newsCard()` let the administrator's subscription name override the provider's own label (`Community Announcements` / `Rock, Paper, Shotgun`).   |
+| "No provider-supplied image." in every card   | A per-item diagnostic rendered in the article body.                                                                                              |
 
-- `image?: string | null` – provider-supplied lead image.
-- `attribution?: "official" | "external" | "unknown"` – provider metadata only.
-- `sourceLabel?: string` – publisher label (Steam `feedlabel`, feed title).
+All of these are now covered by `tests/steam-news.test.ts` (24 tests) and
+`tests/steam-route.test.ts` (5 tests) running against the recorded payloads in
+`tests/fixtures/steam/`.
 
-`newsCard()` (packages/core/src/news-presentation.ts) is the single projection
-used by the dashboard and by `feedEmbed()`, which builds the raw Discord embed
-object the worker posts. Both apply the same excerpt, the same link validation
-and the same Discord limits (`NEWS_LIMITS`). A preview therefore cannot promise
-formatting that delivery will not produce.
+## Steam API: what is actually documented and what is observed
 
-Card fields: id, title, canonical URL, excerpt, image, publication time,
-source label, attribution + label, tags, and `notices` (what the provider did not
-supply). Nothing is invented: a missing date, image or link is reported, not
-guessed.
+Official starting point: <https://steamcommunity.com/dev> → Valve Developer
+Community `Steam_Web_API` (`GetNewsForApp (v0002)`).
+
+| Aspect                | Verified                                                                                                            |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Endpoint              | `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/`                                                          |
+| Credential            | Docs state all Web API use needs a key; **this endpoint answered without one** on 2026-10-25. Orbit neither sends nor requires a key. |
+| Documented parameters | `appid`, `count`, `maxlength`, `format`. Orbit sends `appid`, `count=10`, `maxlength=0`, `format=json`.               |
+| `maxlength`           | Upstream truncation. With `maxlength=700` Steam cut bodies mid-sentence and appended `…`. Orbit therefore requests full content (`maxlength=0`) and truncates for presentation itself; a trailing `…` from a stored payload is reported as an upstream truncation notice. |
+| Undocumented, observed | `feeds` (filters to one feed), `feed_type` (`1` = app announcement hub, `0` = syndicated publisher feed), `feedname`, `feedlabel`, `is_external_url`. |
+| Stable identity       | `gid` — used as the dedupe key.                                                                                     |
+| Article URL           | Always `steamstore-a.akamaihd.net/news/externalpost/<feed>/<gid>`, a Steam-hosted redirect to the publisher. Orbit links to it and does not follow it server-side. |
+
+Because `feed_type` is not documented, attribution is stated as what the
+metadata supports and no more.
+
+## Attribution and source labels
+
+`steamIdentity()` (packages/core/src/feed-content.ts):
+
+- `feed_type === 1` → `official`, label **"App announcement"** ("posted on this
+  app's Steam announcement hub").
+- `feed_type === 0` with a feed label → `syndicated`, label
+  **"Republished from Rock, Paper, Shotgun"**, `publisher` set.
+- No usable feed metadata → `unknown`, "Publisher not confirmed".
+- `is_external_url` is accepted and **ignored**; tests pin that both ways.
+
+The card separates identities: `sourceLabel` is the producing feed
+(`Community Announcements`), `subscriptionLabel` is the administrator's name
+(`CS2 updates`), and the link text follows the destination — "Read the
+announcement" for an app post, "Read the article at Rock, Paper, Shotgun" for a
+syndicated one, "Read article" when the publisher is unknown. "Read more from
+CS2" is gone: it implied the subscription authored the article.
+
+## Official-only filtering
+
+Steam has no "first party" field. The strongest supported signal is its
+app-announcement feed, so the switch now changes the **request**:
+`?feeds=steam_community_announcements` (verified: 10/10 items from that feed)
+instead of filtering ten mixed items locally, which could hide older matching
+posts. `mapSteamNews()` still filters locally as a safety net and reports how
+many items it dropped. Coverage is exactly "this app's Steam announcement feed",
+not "everything Valve published".
 
 ## Normalization (packages/core/src/feed-content.ts)
 
-- `normalizeFeedText(raw, "bbcode" | "html" | "plain")`:
-  - Steam: `{STEAM_CLAN_IMAGE}` tokens, `[img]`/`[video]`/`[previewyoutube]`
-    removed into their own line, `[list]`/`[*]` become `•` lines, `[url]`
-    becomes its label, block tags become newlines, then the HTML pass runs on the
-    result (Steam mixes both).
-  - HTML: scripts/styles/iframes are dropped **with** their contents, `<br>` and
-    `<li>` become line breaks and bullets, block open/close tags become newlines
-    _before_ tags are stripped, then entities are decoded.
-  - Entities: a small explicit decoder (named + numeric) runs _after_
-    sanitizing, so `&lt;em&gt;` is stripped as markup, never rendered as angle
-    brackets and never leaks `&amp;` into Discord.
-  - `tidyText()` collapses runs of spaces and blank lines but keeps paragraph
-    and bullet boundaries.
-- `excerpt(text, max)` cuts on a paragraph or sentence boundary when one exists
-  in the last 45% of the window, otherwise on a word boundary, and marks a
-  mid-sentence cut with `…`. It never returns half a word.
-- `plainText()` strips entity-encoded markup and neutralizes `@everyone`,
-  `@here` and `<@id>` mentions without truncating words.
-- `safeImageUrl()` accepts only absolute `https` images with no credentials, a
-  normal port, a hostname that is not an IP/private-looking name, and an image
-  file extension. It is a syntactic gate used by both the browser (plain `<img>`,
-  no proxy) and Discord's own image fetch.
-- `imageFromMarkup()` takes the first provider-supplied image from BBCode,
-  `<img src>`, or an image URL in the markup.
-- `steamAttribution()`: `external` when Steam marks the item external or the URL
-  leaves Steam's hosts; `official` only for first-party feed names
-  (`steam_community_announcements`, `steam_release_notes`, `steam_news`);
-  otherwise `unknown`, labelled "Publisher not confirmed by the feed".
+`steamMarkupToText()` is a scanner, not a replacement chain:
 
-## Filtering and source trust
+1. HTML structure is converted first (`htmlToText`: scripts/styles dropped with
+   contents, `<br>`/`<li>`/block tags to breaks, entities decoded once — after
+   stripping, so `&lt;em&gt;` can never become live markup).
+2. One left-to-right pass over the Steam markup keeps a list stack and an escape
+   state:
+   - `\[`, `\]`, `\\`, `\"` unescape to the literal character (and only those);
+   - `[list]`, `[olist]`, `[*]`, `[/*]`, `[/list]` maintain nesting; items become
+     `•` / `◦` / `▪` by depth, ordered lists `1. 2. 3.`;
+   - `[p]`, `[h*]`, `[quote]`, `[br]`, `[table]` and friends are boundaries;
+   - `[img]`, `[video]`, `[previewyoutube]` bodies are dropped (images are
+     extracted separately), `[noparse]` bodies are kept literally;
+   - `[b]`, `[i]`, `[u]`, `[url=…]` disappear and keep their text;
+   - **anything unrecognised stays as written**, so `[ UI ]` is a section
+     heading, not markup.
+3. Paragraphs are separated by a blank line; list items by a single newline, so
+   a bullet can never be double-spaced.
 
-- `mapSteamNews(items, { tags, officialOnly })` is pure and unit-tested.
-- The Steam source form gains **Official announcements only**. When it is on,
-  items Steam does not attribute to the app are hidden and the preview says how
-  many were hidden, plus a warning that Steam metadata can still label community
-  crossposts as app announcements. Steam's news API is not a verified-official
-  filter, and the UI says so instead of claiming otherwise.
-- RSS/Atom items stay `unknown`: publishers do not expose a machine-readable
-  "official" flag in the feed itself. The footer simply credits the source.
+## Excerpt shape
+
+`NEWS_LIMITS` = title 256, excerpt 480 characters, **3 paragraphs**, **5
+bullets**, description 4096, footer 2048, image URL 2000.
+
+`excerpt()` bounds the *shape* first and the character count last: it walks
+paragraphs, stops when the bullet budget is spent, drops a section that would
+only contribute a heading plus one bullet ("[ MISC ]" with a single line is
+worse than omitting it), and never ends on a bare heading. `feedEmbed()` uses
+the same function, so the card and the Discord description are identical.
+
+Rendered result for the reported article:
+
+```
+[ UI ]
+
+Demo/Replay viewer improvements:
+• Added a progress bar for demo/replay downloads
+• Camera controls now use click-and-drag scheme
+• Free and chase camera are usable during a paused demo
+• Fixed some minor issues when seeking to a different position in the file
+```
+
+Six lines instead of a dozen marker-strewn ones; the full text stays one click
+away.
+
+## Diagnostics instead of card noise
+
+Missing metadata appears in a collapsed **Preview details** disclosure inside the
+card (which also names the configured subscription and the provider feed), and
+provider-level notices stay in the test-flight dialog. A missing image is shown
+by simply not rendering an image. Genuine failures stay visible: the route now
+returns **502** with `Retry-After` for a provider outage (`UpstreamError`), so
+"Steam is having a bad day" is never presented as "your configuration is wrong".
 
 ## Images
 
-Only provider-supplied images are used:
+Only provider-supplied images: Steam `[img]`/`{STEAM_CLAN_IMAGE}` markup, RSS
+`enclosure`/`media:*`/`itunes:image`/inline `<img>`. `safeImageUrl()` accepts
+only absolute, credential-free `https` URLs on a public host with an image
+extension. Open Graph fetching remains unimplemented: it needs SSRF-safe
+resolution, redirect and DNS-rebinding checks, timeouts, body limits,
+content-type validation and rate limits. Steam's API supplies no header image,
+so many Steam items legitimately have none.
 
-- Steam: `[img]`/legacy clan-image tokens inside the announcement markup.
-- RSS/Atom: `enclosure`, `media:content`, `media:thumbnail`, `itunes:image`,
-  then an inline `<img>` from `content:encoded`.
+## Verification (fresh, this branch)
 
-Open Graph fetching is deliberately **not** implemented: it needs SSRF-safe
-resolution, redirect and DNS-rebinding checks, timeouts, body limits, content
-type validation, caching and rate limits (the feed reader in
-`packages/core/src/feeds.ts` has those protections, but they are scoped to feed
-documents, not arbitrary article pages). Consequence, surfaced as a preview
-notice: Steam's API supplies no header image, so many Steam items have none.
+- `tests/steam-news.test.ts` — 24 tests over the recorded captures: closing
+  markers, nested lists, escaped headings and quotes, compact bullets, excerpt
+  bounds, attribution both ways, official-only request and local filter,
+  upstream truncation detection, non-Latin text, preview/delivery parity,
+  malformed/truncated input, and a guard that the recorded browser payload
+  matches the current code.
+- `tests/steam-route.test.ts` — 5 tests through the real route handler with the
+  recorded response stubbed at `fetch`: endpoint/params/no key, normalized card
+  JSON, syndicated publisher in the preview, official-only request, 502 +
+  `Retry-After` on provider failure.
+- `tests/news-content.test.ts` — 17 generic tests (HTML, entities, malformed,
+  mentions, unsafe images, Discord limits).
+- `tests/e2e/news-preview.spec.ts` — browser regression replaying the recorded
+  payload: literal heading, no markers/escapes, one line per bullet, badge and
+  link text, collapsed diagnostics, retryable failure. **Executed in CI only**
+  (no Chromium in the authoring sandbox).
 
-## Preview parity
+Regenerate the recorded browser payload after changing the adapter or the
+presentation policy:
 
-`POST /api/guilds/:id/resources/source/:sourceId/test` now returns:
-
-```json
-{
-  "ok": true,
-  "count": 10,
-  "shown": 3,
-  "items": [
-    {
-      "id": "…",
-      "title": "…",
-      "url": "…",
-      "excerpt": "…",
-      "image": null,
-      "publishedAt": "2026-10-24T10:00:00.000Z",
-      "sourceLabel": "Counter-Strike 2",
-      "attribution": "official",
-      "attributionLabel": "Official announcement",
-      "tags": ["Steam"],
-      "notices": ["No provider-supplied image."]
-    }
-  ],
-  "notices": ["Steam's news API supplies no lead image for these items."],
-  "officialOnly": false,
-  "demo": false
-}
+```bash
+npx tsx scripts/build-steam-preview.ts   # tests/steam-news.test.ts fails if it drifts
 ```
-
-The dialog states that nothing was sent, shows representative cards (image,
-title as a link, paragraph/bullet-preserving excerpt, attribution, source, date,
-"Read more"), says how many items are shown of how many were found, and lists
-partial-failure notices. Demo mode returns one clearly simulated item with no
-metadata notices, because no provider was contacted.
-
-Delivery reuses `feedEmbed()` in `apps/worker/src/index.ts`; outbox payloads now
-carry `image`, `attribution` and `publishedAt`. Unchanged guarantees:
-deduplication (`reserveDelivery` + `fingerprint` nonce), schedules, routing,
-webhook signature checks, retries and source health.
-
-## Limits and verification
-
-`NEWS_LIMITS`: title 256, excerpt 480, description 4096, footer 2048, image URL
-2000 characters. `safeText()` still enforces the hard cap at the edge.
-
-Fresh evidence (this branch):
-
-- `tests/news-content.test.ts`: 17 tests over Steam BBCode, HTML, entities,
-  lists, malformed/unclosed markup, missing fields, unsafe images, mention
-  neutralization, attribution, official-only filtering, Discord limits and
-  preview/delivery parity.
-- `tests/fixtures/news.ts`: representative Steam JSON and RSS/Atom documents.
-- Demo API response verified by HTTP against a production build (see the
-  continuation report for the exact command).
-
-Not verified here: a real Steam or RSS fetch (no live credentials/network in the
-sandbox), Discord's rendering of the image/embed, and a visual browser check of
-the dialog; the browser specs run in CI, not in the authoring sandbox.
 
 ## Remaining work
 
-- Fetch an RSS feed's own Open Graph image only after a dedicated SSRF-reviewed
-  implementation.
-- Consider `og:image` support through the existing pinned-DNS fetcher, with
-  content-type and size limits, if publishing partners need thumbnails.
-- Steam header images would need a second provider (Steam store API) and a
-  cache; not attempted.
+- Open Graph / Steam store header images need a dedicated SSRF-reviewed fetcher.
+- `feeds`/`feed_type` are undocumented; if Valve removes them, attribution
+  degrades to `unknown` (labelled as such) rather than guessing.
+- Live Discord rendering of these embeds is unverified here (no token in the
+  sandbox); payloads are asserted as data.

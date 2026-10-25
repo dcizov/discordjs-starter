@@ -50,6 +50,8 @@ export async function dispatchItems(source: Resource, items: FeedItem[]) {
           tags: normalized.tags,
           image: item.image ?? null,
           attribution: item.attribution ?? "unknown",
+          providerLabel: item.sourceLabel ?? "",
+          publisher: item.publisher ?? "",
           publishedAt: item.publishedAt,
           notificationRoleId:
             settings.notificationRoleId || guild.config.notificationRoleId,

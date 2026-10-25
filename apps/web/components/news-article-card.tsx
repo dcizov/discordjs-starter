@@ -19,6 +19,10 @@ function publishedLabel(value: string | null) {
  * A preview card is plain DOM built from normalized text. Fetched content is
  * never rendered as HTML, and images are the provider's own URL loaded
  * directly by the browser (no server-side proxy).
+ *
+ * Provider metadata that is technically true but uninteresting (no lead image,
+ * which feed produced an item, why the link leaves Steam) lives in a collapsed
+ * details block instead of filling the article body with diagnostics.
  */
 export function NewsArticleCard({
   card,
@@ -30,7 +34,7 @@ export function NewsArticleCard({
   const attributionTone =
     card.attribution === "official"
       ? "green"
-      : card.attribution === "external"
+      : card.attribution === "syndicated"
         ? "amber"
         : "neutral";
   return (
@@ -72,7 +76,9 @@ export function NewsArticleCard({
             <h3 className="text-xs font-semibold">{card.title}</h3>
           )}
           {card.excerpt ? (
-            <p className="mt-2 whitespace-pre-line text-[12px] leading-relaxed text-muted-foreground">
+            // pre-line keeps the paragraph/bullet shape from the normalizer and
+            // adds no per-line margins, so a changelog stays compact.
+            <p className="mt-2 whitespace-pre-line text-[12px] leading-[1.45] text-muted-foreground">
               {card.excerpt}
             </p>
           ) : (
@@ -87,15 +93,26 @@ export function NewsArticleCard({
               rel="noreferrer noopener"
               className="mt-2 inline-block text-[11px] font-medium text-primary underline-offset-2 hover:underline"
             >
-              Read more from {card.sourceLabel}
+              {card.linkLabel}
             </a>
           ) : null}
-          {card.notices.length ? (
-            <ul className="mt-2 space-y-0.5 text-[10px] text-muted-foreground">
-              {card.notices.map((notice) => (
-                <li key={notice}>{notice}</li>
-              ))}
-            </ul>
+          {card.notices.length || card.subscriptionLabel ? (
+            <details className="group mt-2 text-[10px] text-muted-foreground">
+              <summary className="cursor-pointer select-none underline-offset-2 hover:underline">
+                Preview details
+              </summary>
+              <ul className="mt-1 space-y-0.5">
+                {card.subscriptionLabel ? (
+                  <li>
+                    Configured source: {card.subscriptionLabel} · feed:{" "}
+                    {card.sourceLabel}
+                  </li>
+                ) : null}
+                {card.notices.map((notice) => (
+                  <li key={notice}>{notice}</li>
+                ))}
+              </ul>
+            </details>
           ) : null}
         </div>
       </div>

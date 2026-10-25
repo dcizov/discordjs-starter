@@ -116,17 +116,30 @@ describe("provider-supplied images", () => {
 });
 
 describe("Steam attribution and filtering", () => {
-  it("classifies only metadata-backed first-party items as official", () => {
+  it("classifies by the producing feed, never by is_external_url", () => {
     expect(steamAttribution(steamAnnouncement)).toBe("official");
-    expect(steamAttribution(steamExternalItem)).toBe("external");
+    expect(steamAttribution(steamExternalItem)).toBe("syndicated");
     expect(steamAttribution(steamUnknownAttribution)).toBe("unknown");
+    // Live Steam data sets is_external_url:true on Valve's own posts (the URL
+    // is always a Steam redirect), so it must not demote an app announcement.
+    expect(
+      steamAttribution({
+        is_external_url: true,
+        feed_type: 1,
+        feedname: "steam_community_announcements",
+        url: "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1",
+      })
+    ).toBe("official");
+    // ...and a publisher feed is syndicated even if the flag were false.
     expect(
       steamAttribution({
         is_external_url: false,
-        feedname: "steam_community_announcements",
-        url: "https://example.org/post",
+        feed_type: 0,
+        feedlabel: "PC Gamer",
+        feedname: "PC Gamer",
+        url: "https://steamstore-a.akamaihd.net/news/externalpost/PC Gamer/1",
       })
-    ).toBe("external");
+    ).toBe("syndicated");
   });
 
   it("normalizes a Steam payload and explains official-only filtering", () => {
@@ -135,7 +148,9 @@ describe("Steam attribution and filtering", () => {
       { tags: ["CS2"] }
     );
     expect(all.items).toHaveLength(3);
-    expect(all.items[0].sourceLabel).toBe("Counter-Strike 2");
+    expect(all.items[0].sourceLabel).toBe("Community Announcements");
+    expect(all.items[0].publisher).toBe("");
+    expect(all.items[1].publisher).toBe("Esports Weekly");
     expect(all.items[0].publishedAt).toBe(
       new Date(steamAnnouncement.date * 1000).toISOString()
     );
@@ -219,8 +234,13 @@ describe("shared preview and delivery presentation", () => {
     expect(embed.url).toBe(card.url);
     expect(embed.image).toEqual({ url: card.image });
     expect(embed.timestamp).toBe(item.publishedAt);
-    expect(embed.footer.text).toContain("CS2 updates");
-    expect(embed.footer.text).toContain("Official announcement");
+    // The footer names the producing feed, not the administrator's label, so a
+    // syndicated item is never attributed to the subscription name.
+    expect(embed.footer.text).toContain("Community Announcements");
+    expect(embed.footer.text).toContain("App announcement");
+    expect(card.subscriptionLabel).toBe("CS2 updates");
+    expect(card.sourceLabel).toBe("Community Announcements");
+    expect(card.linkLabel).toBe("Read the announcement");
   });
 
   it("omits missing metadata instead of inventing it", () => {
@@ -242,9 +262,11 @@ describe("shared preview and delivery presentation", () => {
         "No description supplied by the source.",
         "No usable article link supplied by the source.",
         "The supplied publication time could not be parsed.",
-        "No provider-supplied image.",
       ])
     );
+    // A missing provider image is shown by the absence of an image, not as
+    // diagnostic text inside every article card.
+    expect(card.notices.join(" ")).not.toContain("image");
     const embed = feedEmbed({
       id: "x",
       title: "",

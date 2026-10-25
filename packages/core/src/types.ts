@@ -191,7 +191,12 @@ export type DashboardData = {
   }[];
 };
 /** Attribution inferred from provider metadata; "unknown" is never rendered as official. */
-export type NewsAttribution = "official" | "external" | "unknown";
+/**
+ * `official` = posted on the app's own Steam announcement hub (feed_type 1),
+ * `syndicated` = a named third-party feed the app republishes, `unknown` = the
+ * provider did not supply enough metadata to tell.
+ */
+export type NewsAttribution = "official" | "syndicated" | "unknown";
 export type FeedItem = {
   id: string;
   title: string;
@@ -202,7 +207,10 @@ export type FeedItem = {
   /** Provider-supplied lead image. Never fetched or guessed by Orbit. */
   image?: string | null;
   attribution?: NewsAttribution;
+  /** Producer of the item as named by the provider, e.g. "Community Announcements". */
   sourceLabel?: string;
+  /** Outlet name when the item is syndicated; empty for app announcements. */
+  publisher?: string;
   price?: number;
   currency?: string;
   discount?: number;

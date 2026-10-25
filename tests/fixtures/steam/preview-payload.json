@@ -1,0 +1,64 @@
+{
+  "ok": true,
+  "count": 4,
+  "shown": 3,
+  "items": [
+    {
+      "id": "1847286114034398",
+      "title": "Counter-Strike 2 Update",
+      "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1847286114034398",
+      "excerpt": "[ MAP SCRIPTING ]\n• Added Instance.Precache\n◦ Returns a CSPrecache object\n◦ Added CSPrecache.IsServerLoading\n◦ Added CSPrecache.IsServerLoaded\n◦ Added CSPrecache.IsClientLoading",
+      "image": null,
+      "publishedAt": "2026-10-22T22:56:10.000Z",
+      "sourceLabel": "Community Announcements",
+      "subscriptionLabel": "CS2 updates",
+      "attribution": "official",
+      "attributionLabel": "App announcement",
+      "linkLabel": "Read the announcement",
+      "publisher": "",
+      "tags": [
+        "Steam"
+      ],
+      "notices": []
+    },
+    {
+      "id": "1846651706675829",
+      "title": "Counter-Strike 2 Update",
+      "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1846651706675829",
+      "excerpt": "[ UI ]\n\nDemo/Replay viewer improvements:\n• Added a progress bar for demo/replay downloads\n• Camera controls now use click-and-drag scheme\n• Free and chase camera are usable during a paused demo\n• Fixed some minor issues when seeking to a different position in the demo file",
+      "image": null,
+      "publishedAt": "2026-10-14T23:02:48.000Z",
+      "sourceLabel": "Community Announcements",
+      "subscriptionLabel": "CS2 updates",
+      "attribution": "official",
+      "attributionLabel": "App announcement",
+      "linkLabel": "Read the announcement",
+      "publisher": "",
+      "tags": [
+        "Steam"
+      ],
+      "notices": []
+    },
+    {
+      "id": "1846018067931597",
+      "title": "Counter-Strike 2 Update",
+      "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1846018067931597",
+      "excerpt": "[ MISC ]\n• Added a ping icon for dropped defuse kits\n• Reduced the time for AUG reload by half second\n• Fixed the sound event during silent reload for Desert Eagle\n• Fixed a case of buzzing soundscape sounds during demo playback\n• Clipping fixes for Rush maps",
+      "image": null,
+      "publishedAt": "2026-10-08T22:36:49.000Z",
+      "sourceLabel": "Community Announcements",
+      "subscriptionLabel": "CS2 updates",
+      "attribution": "official",
+      "attributionLabel": "App announcement",
+      "linkLabel": "Read the announcement",
+      "publisher": "",
+      "tags": [
+        "Steam"
+      ],
+      "notices": []
+    }
+  ],
+  "notices": [],
+  "officialOnly": false,
+  "demo": false
+}

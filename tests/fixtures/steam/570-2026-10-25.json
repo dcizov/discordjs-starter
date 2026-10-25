@@ -1,0 +1,56 @@
+{
+  "_capture": {
+    "endpoint": "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/",
+    "query": "appid=570&count=6&maxlength=700",
+    "capturedAt": "2026-10-25",
+    "apiKey": "none sent; this endpoint answered without one",
+    "contentFidelity": "upstream-truncated by maxlength=700 (Steam appends U+2026); the last three items were dropped from this fixture",
+    "redactions": "none; announcement metadata is public",
+    "note": "Used to prove what maxlength does and that plain-text (feed_type 0) and markup (feed_type 1) items coexist."
+  },
+  "appnews": {
+    "appid": 570,
+    "newsitems": [
+      {
+        "gid": "1846018067925681",
+        "title": "В Dota 2 добавили сокровищницу Trove of Terror - новая аркана на Tidehunter и возвращение арканы Drow Ranger",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/PlayGround.ru - официальная группа/1846018067925681",
+        "is_external_url": true,
+        "author": "",
+        "contents": "В Dota 2 вышла сокровищница Trove of Terror. Она принесла 19 косметических предметов, включая 15 наборов уровня Immortal и две арканы — для Drow Ranger и Tidehunter. Разработчики также добавили механику, снижающую риск неудачных открытий. Обе арканы гарантированно выпадут на 50-м сундуке, а на 12-м и 40-м игрок получит дополнительные награды — облики для Терзателя и Рошана. Одна сокровищница стоит 424 рубля. Кроме аркан, в набор вошли скины для Tiny, Marci, Treant Protector, Terrorblade, Oracle, Primal Beast, Ancient Apparition, Broodmother, Anti-Mage, Undying, Pudge и Death Prophet. Ранее, 15 сентября, в Dota 2 вышел патч 7.41f, где разработчики скорректировали баланс героев и предметов. ",
+        "feedlabel": "PlayGround.ru - официальная группа",
+        "date": 1791368107,
+        "feedname": "PlayGround.ru - официальная группа",
+        "feed_type": 0,
+        "appid": 570
+      },
+      {
+        "gid": "1846018067924633",
+        "title": "Inside the Trove of Terror",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1846018067924633",
+        "is_external_url": true,
+        "author": "eugenep",
+        "contents": "Some time ago, a time now none of us can quite recall, we began to set our minds on matters of the monstrous. Our work has always concerned itself with the manufacture of frightening things, so there was no reason at that time for alarm.Until we began to fill a new treasure chest with item sets themed around eldritch and otherworldly designs.As each horrific creation took more defined shape, unsettling yet tantalizing inspirations took hold of us. Fantastical and Immortal glamours coalesced around each and every set; they grew more spellbinding, a vision that would remain, stuck fast in the mind's eye. Thoughts of monsters birthed thoughts of even more monstrous monsters. Our minds became ga…",
+        "feedlabel": "Community Announcements",
+        "date": 1791332561,
+        "feedname": "steam_community_announcements",
+        "feed_type": 1,
+        "appid": 570
+      },
+      {
+        "gid": "1841579228666735",
+        "title": "'Dude no joke looks like Hugh Jackman now': The internet is swooning over Gabe Newell's svelte new look at The International",
+        "url": "https://steamstore-a.akamaihd.net/news/externalpost/PC Gamer/1841579228666735",
+        "is_external_url": true,
+        "author": "Andy Chalk",
+        "contents": "Valve honcho Gabe Newell recorded a video to kick off The International 2026, the latest edition of Valve's annual Dota 2 championship tournament, and as noticed by GamesRadar, the reaction to it is pleasingly wholesome... Read more.",
+        "feedlabel": "PC Gamer",
+        "date": 1787257316,
+        "feedname": "PC Gamer",
+        "feed_type": 0,
+        "appid": 570
+      }
+    ],
+    "count": 3253
+  }
+}
