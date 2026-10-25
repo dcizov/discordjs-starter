@@ -17,7 +17,15 @@ const moduleRoots: Record<CommandModule, readonly string[]> = {
   general: ["ping"],
   roles: ["roles", "role-panel"],
   moderation: ["warn", "timeout", "kick", "ban", "purge", "cases"],
-  economy: ["balance", "daily", "transfer", "leaderboard", "shop", "inventory"],
+  economy: [
+    "balance",
+    "daily",
+    "transfer",
+    "leaderboard",
+    "shop",
+    "inventory",
+    "transactions",
+  ],
   music: [
     "play",
     "queue",
@@ -31,6 +39,8 @@ const moduleRoots: Record<CommandModule, readonly string[]> = {
   ],
   deals: ["deals"],
   news: ["news"],
+  polls: ["poll"],
+  announcements: ["announce"],
 };
 function moduleFor(root: string): CommandModule {
   const entry = Object.entries(moduleRoots).find(([, names]) =>
@@ -85,6 +95,12 @@ function permissionsFor(bitfield: string | null | undefined) {
 function runtimeNotes(path: string, module: CommandModule) {
   const notes: string[] = [];
   const runtimePermissions: string[] = [];
+  if (module === "polls" || module === "announcements") {
+    runtimePermissions.push("ManageGuild");
+    notes.push(
+      "Fresh Manage Server membership, manager channel visibility, installation, module, revision and destination permissions are checked at execution. Create/edit drafts in the dashboard. New modules default off, including legacy configurations. Lists, cancellation and poll refresh/close remain available while paused; publication does not. No blind resend after unconfirmed delivery."
+    );
+  }
   if (module === "roles")
     notes.push(
       "Role hierarchy, managed roles, panel settings, and the bot’s Manage Roles permission are checked when assigning or publishing roles."
@@ -95,7 +111,9 @@ function runtimeNotes(path: string, module: CommandModule) {
     );
   if (module === "economy")
     notes.push(
-      "The economy module must be enabled. Balances, cooldowns, transfer settings, purchase entitlements, and role delivery permissions are checked at execution."
+      path === "transactions"
+        ? "Private authenticated-user ledger only, within this server. Available while the economy is paused; no account selector and no new transactions are created."
+        : "The economy module must be enabled. Balances, cooldowns, transfer settings, purchase entitlements, and role delivery permissions are checked at execution."
     );
   if (module === "music")
     notes.push(

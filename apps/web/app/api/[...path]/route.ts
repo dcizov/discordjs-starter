@@ -1,3 +1,20 @@
+import { previewNewsRouting } from "@orbit/db/src/news-preview";
+import { getOwnEconomyHistory } from "@orbit/db";
+import { assertMusicQueueAdmission } from "@orbit/core/music-policy";
+import {
+  communityActionSchema,
+  CommunityConflict,
+} from "@orbit/core/community";
+import {
+  createCommunityPost,
+  getCommunityPost,
+  listCommunityPosts,
+  editCommunityPost,
+  deleteCommunityPost,
+  scheduleCommunityPost,
+  cancelCommunityPost,
+} from "@orbit/db";
+import { simulateCommunityAction } from "@orbit/db/src/community-demo";
 import { eq, and, sql } from "drizzle-orm";
 import { authorize, HttpError } from "@/lib/auth";
 import { loadDashboard } from "@/lib/dashboard";
@@ -85,7 +102,149 @@ async function handle(req: Request, context: Context) {
       }
     }
     if (path.length === 2 && req.method === "GET")
-      return NextResponse.json(await loadDashboard(guildId, auth));
+      return NextResponse.json(
+        await loadDashboard(guildId, auth, {
+          communityKind: z
+            .enum(["poll", "announcement"])
+            .optional()
+            .parse(new URL(req.url).searchParams.get("community") ?? undefined),
+          ownLedger: new URL(req.url).searchParams.get("ownLedger") === "true",
+        })
+      );
+    if (
+      path[2] === "my-transactions" &&
+      path.length === 3 &&
+      req.method === "GET"
+    ) {
+      const query = new URL(req.url).searchParams;
+      return NextResponse.json(
+        await getOwnEconomyHistory(guildId, actor.id, {
+          page: z.coerce
+            .number()
+            .int()
+            .min(1)
+            .max(10000)
+            .parse(query.get("page") ?? 1),
+          pageSize: 5,
+        })
+      );
+    }
+    if (
+      path[2] === "news-preview" &&
+      path.length === 3 &&
+      req.method === "POST"
+    )
+      return NextResponse.json(
+        await previewNewsRouting(guildId, await body(req))
+      );
+    if (path[2] === "community") {
+      if (path.length === 3 && req.method === "GET") {
+        const params = new URL(req.url).searchParams;
+        return NextResponse.json(
+          await listCommunityPosts(guildId, {
+            kind: params.get("kind"),
+            state: params.get("state") ?? "all",
+            page: params.get("page") ?? 1,
+            pageSize: params.get("pageSize") ?? 12,
+          })
+        );
+      }
+      if (path.length === 3 && req.method === "POST") {
+        const key = z.uuid().parse(req.headers.get("Idempotency-Key"));
+        return NextResponse.json(
+          await createCommunityPost(guildId, actor.id, await body(req), key),
+          { status: 201 }
+        );
+      }
+      const id = z.uuid().parse(path[3]);
+      const post = await getCommunityPost(guildId, id);
+      if (!post)
+        throw new HttpError(404, "Community post not found in this server");
+      if (path.length === 4 && req.method === "GET")
+        return NextResponse.json(post);
+      if (path.length === 4 && req.method === "PATCH") {
+        const input = z
+          .object({ version: z.number().int().positive(), input: z.unknown() })
+          .strict()
+          .parse(await body(req));
+        return NextResponse.json(
+          await editCommunityPost(
+            guildId,
+            id,
+            input.version,
+            actor.id,
+            input.input
+          )
+        );
+      }
+      if (path.length === 4 && req.method === "DELETE") {
+        const input = z
+          .object({ version: z.number().int().positive() })
+          .strict()
+          .parse(await body(req));
+        await deleteCommunityPost(guildId, id, input.version, actor.id);
+        return NextResponse.json({ ok: true, discordMessageDeleted: false });
+      }
+      if (path.length === 5 && path[4] === "actions" && req.method === "POST") {
+        const input = communityActionSchema.parse(await body(req));
+        if (input.action === "schedule") {
+          if (!input.scheduledFor)
+            throw new HttpError(422, "Choose a UTC send time");
+          return NextResponse.json({
+            post: await scheduleCommunityPost(
+              guildId,
+              id,
+              input.version,
+              actor.id,
+              input.scheduledFor
+            ),
+            demo: isDemo(),
+            deliveryConfirmed: false,
+          });
+        }
+        if (input.action === "cancel")
+          return NextResponse.json({
+            post: await cancelCommunityPost(
+              guildId,
+              id,
+              input.version,
+              actor.id
+            ),
+            demo: isDemo(),
+          });
+        if (post.version !== input.version)
+          throw new CommunityConflict(
+            "This record changed. Refresh before trying again."
+          );
+        if (isDemo())
+          return NextResponse.json({
+            post: await simulateCommunityAction(
+              guildId,
+              id,
+              input.version,
+              actor.id,
+              input.action
+            ),
+            demo: true,
+            simulated: true,
+          });
+        const intent = z
+          .uuid()
+          .parse(req.headers.get("Idempotency-Key") ?? randomUUID());
+        const job = await enqueueAction(
+          guildId,
+          actor.id,
+          "community",
+          { id, version: input.version, action: input.action },
+          `community-${id}-${input.version}-${input.action}-${intent}`
+        );
+        return NextResponse.json(
+          { accepted: true, jobId: job.id, demo: false },
+          { status: 202 }
+        );
+      }
+      throw new HttpError(404, "Endpoint not found");
+    }
     if (path[2] === "history" && req.method === "GET") {
       const u = new URL(req.url);
       const kind = z
@@ -441,8 +600,13 @@ async function handle(req: Request, context: Context) {
             break;
           case "play": {
             if (!input.query) throw new HttpError(400, "Enter a track title");
-            if (state.tracks.length >= g.config.music.maxQueue)
-              throw new HttpError(400, "Queue limit reached");
+            assertMusicQueueAdmission(
+              state,
+              actor.id,
+              1,
+              g.config.music.maxQueue,
+              g.config.music.maxPerMember ?? 0
+            );
             const t = {
               id: randomUUID(),
               title: input.query,
@@ -450,6 +614,7 @@ async function handle(req: Request, context: Context) {
               duration: 180000,
               uri: "",
               requestedBy: actor.name,
+              requestedById: actor.id,
             };
             if (!state.current) state.current = t;
             else state.tracks.push(t);
@@ -509,7 +674,9 @@ async function handle(req: Request, context: Context) {
     throw new HttpError(404, "Endpoint not found");
   } catch (error) {
     const status =
-      error instanceof HttpError || error instanceof BotActionUnavailableError
+      error instanceof HttpError ||
+      error instanceof BotActionUnavailableError ||
+      error instanceof CommunityConflict
         ? error.status
         : error instanceof ZodError
           ? 422
@@ -535,7 +702,12 @@ async function handle(req: Request, context: Context) {
     );
   }
 }
-export const GET = handle;
-export const POST = handle;
-export const PATCH = handle;
-export const DELETE = handle;
+async function privateHandle(req: Request, context: Context) {
+  const response = await handle(req, context);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}
+export const GET = privateHandle;
+export const POST = privateHandle;
+export const PATCH = privateHandle;
+export const DELETE = privateHandle;

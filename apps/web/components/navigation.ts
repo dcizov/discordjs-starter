@@ -1,4 +1,6 @@
 import {
+  Vote,
+  CalendarClock,
   Hash,
   Terminal,
   LayoutGrid,
@@ -24,6 +26,13 @@ export const navigation = [
   { id: "music", label: "Music", icon: Music2, group: "workspace" },
   { id: "deals", label: "Game deals", icon: Tags, group: "workspace" },
   { id: "news", label: "News & feeds", icon: Rss, group: "workspace" },
+  { id: "polls", label: "Native polls", icon: Vote, group: "workspace" },
+  {
+    id: "announcements",
+    label: "Announcements",
+    icon: CalendarClock,
+    group: "workspace",
+  },
   { id: "channels", label: "Channels & roles", icon: Hash, group: "server" },
   { id: "commands", label: "Commands", icon: Terminal, group: "server" },
   { id: "audit", label: "Audit log", icon: ScrollText, group: "server" },

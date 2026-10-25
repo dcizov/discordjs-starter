@@ -46,6 +46,7 @@ export async function syncGuild(guild: Guild) {
                 PermissionFlagsBits.SendMessages,
                 PermissionFlagsBits.EmbedLinks,
               ]),
+        supportsCommunityPosts: channel.type === ChannelType.GuildText,
         permissionBits: perms?.bitfield.toString(),
         permissionsSyncedAt: syncedAt,
       };

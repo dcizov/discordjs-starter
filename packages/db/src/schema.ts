@@ -127,6 +127,7 @@ export const ledger = pgTable(
   (t) => [
     uniqueIndex("ledger_idempotency").on(t.guildId, t.userId, t.key),
     index("ledger_guild_date_idx").on(t.guildId, t.createdAt),
+    index("ledger_owner_date_idx").on(t.guildId, t.userId, t.createdAt),
   ]
 );
 export const inventory = pgTable(
@@ -215,3 +216,52 @@ export const webhookSecrets = pgTable("webhook_secrets", {
     .references(() => guilds.id, { onDelete: "cascade" }),
   secret: text("secret").notNull(),
 });
+
+/** Explicit manager-authored content only. Native votes remain on Discord. */
+export const communityPosts = pgTable(
+  "community_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    kind: text("kind")
+      .$type<import("@orbit/core/community").CommunityKind>()
+      .notNull(),
+    title: text("title").notNull(),
+    channelId: text("channel_id").notNull(),
+    body: text("body").notNull().default(""),
+    poll: jsonb("poll").$type<import("@orbit/core/community").CommunityPoll>(),
+    state: text("state")
+      .$type<import("@orbit/core/community").CommunityState>()
+      .notNull()
+      .default("draft"),
+    version: integer("version").notNull().default(1),
+    actorId: text("actor_id").notNull(),
+    requestKey: text("request_key").notNull(),
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+    attemptedAt: timestamp("attempted_at", { withTimezone: true }),
+    messageId: text("message_id"),
+    lastError: text("last_error"),
+    result:
+      jsonb("result").$type<import("@orbit/core/community").CommunityResult>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("community_request_key").on(t.guildId, t.requestKey),
+    index("community_guild_kind_date_idx").on(t.guildId, t.kind, t.createdAt),
+    index("community_due_idx").on(t.state, t.scheduledFor),
+    index("community_retention_idx").on(t.updatedAt),
+    check("community_kind_valid", sql`${t.kind} in ('poll','announcement')`),
+    check(
+      "community_state_valid",
+      sql`${t.state} in ('draft','scheduled','sending','published','closed','failed','unconfirmed','cancelled','missed')`
+    ),
+    check("community_version_positive", sql`${t.version}>0`),
+  ]
+);

@@ -13,6 +13,7 @@
 - [ ] `ITAD_API_KEY` is present if deals are enabled, quotas allow the chosen intervals, and region/currency/store mappings are verified.
 - [ ] Publisher URLs are verified and authorized. Blizzard/Wowhead/Mojang starters are either configured or left paused/setup-required.
 - [ ] Music sources and the current voice protocol/encryption are verified against your installed Lavalink release and provider terms.
+- [ ] Apply additive `0002_community_posts.sql` before updated bot/web/worker services; do not reset/seed existing data. Polls/announcements default off, including legacy JSON. Register new command definitions in the intended scope, deliberately grant Send Polls only where needed, and keep the bot consumer plus worker running for scheduled execution/retention. Review [community privacy/recovery](COMMUNITY.md).
 - [ ] `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`, `npm audit --omit=dev`, and `npm run build` pass.
 
 ## Build and run without Docker

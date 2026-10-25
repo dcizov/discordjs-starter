@@ -138,3 +138,22 @@ describe("stopped bots never replay old music requests", () => {
     ).not.toThrow();
   });
 });
+
+it("never automatically retries community publication jobs", async () => {
+  await enqueueAction(
+    "120000000000000001",
+    "120000000000000099",
+    "community",
+    {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      version: 1,
+      action: "publish",
+    },
+    "intent"
+  );
+  expect(queue.add).toHaveBeenCalledWith(
+    "community",
+    expect.anything(),
+    expect.objectContaining({ attempts: 1 })
+  );
+});

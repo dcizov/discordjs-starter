@@ -128,6 +128,13 @@ describe("synced effective permission metadata", () => {
     expect(
       row.roles.find((role: any) => role.id === "admin").assignedToBot
     ).toBe(false);
+    expect(
+      row.channels.find((c: any) => c.id === "text").supportsCommunityPosts
+    ).toBe(true);
+    expect(
+      row.channels.find((c: any) => c.id === "announcements")
+        .supportsCommunityPosts
+    ).toBe(false);
     expect(g.roles.fetch).toHaveBeenCalledTimes(1);
     expect(g.channels.fetch).toHaveBeenCalledTimes(1);
   });

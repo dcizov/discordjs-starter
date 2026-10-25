@@ -453,6 +453,21 @@ export function MusicPage() {
                 />
               </Field>
             </div>
+            <Field
+              label="Upcoming tracks per member"
+              hint="0 = unlimited (the existing default). Current playback is excluded. An oversized playlist is rejected as a whole, before queue changes or a voice join. Lowering the limit does not remove existing tracks; repeat modes are not an eviction policy."
+            >
+              <Input
+                type="number"
+                min={0}
+                max={50}
+                step={1}
+                value={config.maxPerMember ?? 0}
+                onChange={(e) =>
+                  setConfig({ ...config, maxPerMember: Number(e.target.value) })
+                }
+              />
+            </Field>
             <p className="rounded-lg bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
               Lavalink connection settings and search-source prefixes are
               configured server-side. They never appear in the browser.

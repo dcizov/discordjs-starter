@@ -13,12 +13,12 @@ describe("implemented command catalog", () => {
     const result = catalog();
     expect(result.source).toBe("registration-definitions");
     expect(result.registrationVerified).toBe(false);
-    expect(result.rootCount).toBe(26);
-    expect(result.invocationCount).toBe(35);
+    expect(result.rootCount).toBe(29);
+    expect(result.invocationCount).toBe(44);
     expect(new Set(result.commands.map((c) => c.root))).toEqual(
       new Set(commandDefinitions.map((c) => c.name))
     );
-    expect(new Set(result.commands.map((c) => c.id)).size).toBe(35);
+    expect(new Set(result.commands.map((c) => c.id)).size).toBe(44);
     expect(result.commands.every((c) => c.serverOnly)).toBe(true);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });

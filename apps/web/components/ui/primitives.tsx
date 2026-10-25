@@ -33,17 +33,18 @@ export function Badge({
       className={cn(
         "inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium leading-none",
         {
-          "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400":
+          "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400":
             tone === "green",
           "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300":
             tone === "purple",
-          "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400":
+          "bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-400":
             tone === "amber",
-          "bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400":
+          "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400":
             tone === "red",
           "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400":
             tone === "blue",
-          "bg-muted text-muted-foreground": tone === "neutral",
+          "bg-muted text-slate-600 dark:text-muted-foreground":
+            tone === "neutral",
         },
         className
       )}

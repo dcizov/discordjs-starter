@@ -246,3 +246,81 @@ describe("music configuration, availability and session truthfulness", () => {
     expect(music.state(id).position).toBe(1000);
   });
 });
+
+it("serializes same-member admissions and rejects oversized playlists before queue changes/voice work", async () => {
+  const music = service(),
+    guildId = "120000000000000002",
+    memberId = "120000000000000099",
+    voiceId = "120000000000000208";
+  const config = structuredClone(defaultConfig);
+  config.music.maxPerMember = 1;
+  db.getGuild.mockResolvedValue({ config });
+  const member = {
+    id: memberId,
+    displayName: "Listener",
+    permissions: new PermissionsBitField(0n),
+    roles: { cache: new Map() },
+    guild: {
+      id: guildId,
+      members: { fetchMe: async () => ({ voice: { channelId: voiceId } }) },
+    },
+    voice: {
+      channel: {
+        id: voiceId,
+        type: ChannelType.GuildVoice,
+        full: false,
+        permissionsFor: () =>
+          new PermissionsBitField([
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+          ]),
+      },
+    },
+  } as unknown as GuildMember;
+  const state = music.state(guildId);
+  state.current = {
+    id: "now",
+    title: "Current",
+    author: "Artist",
+    duration: 1000,
+    uri: "",
+    requestedBy: "Listener",
+    requestedById: memberId,
+  };
+  music.backend!.players.set(guildId, {} as Player);
+  const resolve = vi
+    .spyOn(
+      music as unknown as { resolve: (q: string) => Promise<unknown[]> },
+      "resolve"
+    )
+    .mockResolvedValue([
+      {
+        encoded: "fixture",
+        info: {
+          title: "Clean recording",
+          author: "Artist",
+          length: 1000,
+          uri: "",
+        },
+      },
+    ]);
+  const results = await Promise.allSettled([
+    music.action(member, { action: "play", query: "first" }),
+    music.action(member, { action: "play", query: "second" }),
+  ]);
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(state.tracks).toHaveLength(1);
+  expect(state.tracks[0].requestedById).toBe(memberId);
+  resolve.mockResolvedValue(
+    Array.from({ length: 3 }, () => ({
+      encoded: "fixture",
+      info: { title: "Playlist", author: "Artist", length: 1000, uri: "" },
+    }))
+  );
+  const before = structuredClone(state.tracks);
+  await expect(
+    music.action(member, { action: "play", query: "playlist" })
+  ).rejects.toThrow(/entire request/);
+  expect(state.tracks).toEqual(before);
+});

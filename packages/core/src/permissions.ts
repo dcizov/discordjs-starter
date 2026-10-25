@@ -9,6 +9,7 @@ export const Permissions = {
   UseExternalEmojis: 262144n,
   Connect: 1048576n,
   Speak: 2097152n,
+  SendPolls: 562949953421312n,
   Administrator: 8n,
   ManageGuild: 32n,
   ManageRoles: 268435456n,
@@ -133,13 +134,49 @@ export const gatewayIntentNames = [
 export const permissionMatrix: Array<{
   key: string;
   title: string;
-  module?: "roles" | "moderation" | "economy" | "music" | "deals" | "news";
+  module?: import("./types").ModuleKey;
   scope: "channel" | "guild";
   channelType?: GuildChannel["type"];
   required: PermissionName[];
   condition: string;
   failure: string;
 }> = [
+  {
+    key: "native-polls",
+    title: "Native poll publication",
+    module: "polls",
+    scope: "channel",
+    channelType: "text",
+    required: ["ViewChannel", "SendMessages", "SendPolls"],
+    condition:
+      "Opt-in only; ordinary server text channels in this Orbit release. Fresh Manage Server and manager channel visibility are required. No voter-list collection or poll-vote intent.",
+    failure:
+      "Publication is blocked. Grant Send Polls only in the selected poll destination; the default invite mask is unchanged.",
+  },
+  {
+    key: "native-poll-results",
+    title: "Native poll refresh / early close",
+    module: "polls",
+    scope: "channel",
+    channelType: "text",
+    required: ["ViewChannel", "ReadMessageHistory"],
+    condition:
+      "Only Orbit-owned poll messages. A current manager may refresh/end a poll while the module is paused. Counts are unknown when Discord omits results.",
+    failure:
+      "The saved poll cannot be read or ended. Deleted messages are not replaced automatically.",
+  },
+  {
+    key: "announcements",
+    title: "One-time announcements",
+    module: "announcements",
+    scope: "channel",
+    channelType: "text",
+    required: ["ViewChannel", "SendMessages", "EmbedLinks"],
+    condition:
+      "Opt-in only; no webhook/crosspost/role ping. A scheduled approver must still be a manager at send time. Paused/expired/stale jobs cannot publish.",
+    failure:
+      "No new publication. Missed schedules expire after a 15-minute grace window, never a catch-up flood.",
+  },
   {
     key: "posting",
     title: "Baseline channel posting",

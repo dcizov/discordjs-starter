@@ -15,6 +15,13 @@
       "when": 1792802646430,
       "tag": "0001_moaning_hemingway",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792926490151,
+      "tag": "0002_community_posts",
+      "breakpoints": true
     }
   ]
 }

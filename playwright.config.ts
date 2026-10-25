@@ -19,8 +19,10 @@ export default defineConfig({
             "--no-sandbox",
             "--disable-dev-shm-usage",
             "--no-zygote",
-            "--in-process-gpu",
-            "--use-angle=swiftshader",
+            // The restricted custom headless build can block natively for six
+            // seconds on software-GPU dialog/screencast updates. The app uses
+            // no WebGL; keep this fallback CPU-only, not a longer test timeout.
+            "--disable-gpu",
           ],
         }
       : {},

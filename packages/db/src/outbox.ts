@@ -1,6 +1,7 @@
+import { routeFeedItem } from "@orbit/core/feed-routing";
 import type { FeedItem, Resource } from "@orbit/core";
 import { isDemo } from "@orbit/core";
-import { matchesFilters, safeLink } from "@orbit/core/feeds";
+import { safeLink } from "@orbit/core/feeds";
 import { dealQuality, eligibleDeal } from "@orbit/core/deal-policy";
 import { createQueue } from "@orbit/core/queue";
 import { getGuild, getResource, listResources, reserveDelivery } from "./store";
@@ -29,20 +30,13 @@ export async function dispatchItems(source: Resource, items: FeedItem[]) {
       (!item.deal || !eligibleDeal(item.deal, current.data))
     )
       continue;
-    const normalized = {
-      ...item,
-      tags: [...new Set([...item.tags, ...(current.data.tags ?? [])])],
-    };
-    if (!matchesFilters(normalized, current.data.keywords ?? [])) continue;
-    const destinations = new Map<string, Record<string, any>>();
-    if (current.data.channelId)
-      destinations.set(current.data.channelId, current.data);
-    for (const route of routes)
-      if (matchesFilters(normalized, route.data.keywords, route.data.tags))
-        destinations.set(route.data.channelId, route.data);
-    for (const [channelId, settings] of destinations) {
-      if (!guild.channels.some((c) => c.id === channelId && c.type === "text"))
-        continue;
+    const { normalized, destinations } = routeFeedItem(
+      current,
+      routes,
+      item,
+      guild.channels
+    );
+    for (const { channelId, settings } of destinations) {
       const delivery = await reserveDelivery({
         guildId: source.guildId,
         sourceId: source.id,

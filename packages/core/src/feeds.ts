@@ -176,18 +176,4 @@ export async function pollSource(source: Resource): Promise<FeedItem[]> {
     );
   return parseFeed(await fetchFeedText(d.url));
 }
-export function matchesFilters(
-  item: FeedItem,
-  keywords: string[] = [],
-  tags: string[] = []
-) {
-  const text = `${item.title} ${item.summary}`.toLocaleLowerCase();
-  return (
-    (!keywords.length ||
-      keywords.some((k) => text.includes(k.toLocaleLowerCase()))) &&
-    (!tags.length ||
-      tags.some((t) =>
-        item.tags.some((it) => it.toLowerCase() === t.toLowerCase())
-      ))
-  );
-}
+export { matchesFilters } from "./feed-routing";

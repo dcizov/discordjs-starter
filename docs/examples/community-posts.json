@@ -1,0 +1,31 @@
+{
+  "notice": "Documentation only. These examples do not send requests or bypass authenticated server/origin checks. New modules must be explicitly enabled. Use a fresh Idempotency-Key UUID for each new create intent; retain it for retries of that same intent. The sample channel must exist in the selected guild.",
+  "createPoll": {
+    "kind": "poll",
+    "title": "Friday game-night choice",
+    "channelId": "120000000000000201",
+    "body": "",
+    "poll": {
+      "question": "What should we play on Friday?",
+      "answers": ["Co-op adventure", "Board games", "Strategy"],
+      "durationHours": 24,
+      "allowMultiselect": false
+    }
+  },
+  "createAnnouncement": {
+    "kind": "announcement",
+    "title": "Community game night",
+    "channelId": "120000000000000201",
+    "body": "Game night starts at 18:00 UTC. Check the event details before joining. No purchase is required.",
+    "poll": null
+  },
+  "scheduleAction": {
+    "action": "schedule",
+    "version": 1,
+    "scheduledFor": "2026-11-01T18:00:00Z"
+  },
+  "cancelAction": { "action": "cancel", "version": 2 },
+  "publishAction": { "action": "publish", "version": 1 },
+  "refreshPollAction": { "action": "refresh", "version": 3 },
+  "warning": "Versions and schedule dates are examples, not reusable credentials or current record versions. Never blindly resend an unconfirmed publication; first inspect Discord and the stored state. Scheduled delivery is not simulated in the background."
+}

@@ -1,4 +1,5 @@
 "use client";
+import { OwnHistory } from "./own-history";
 import { ModuleSetupBanner } from "./module-setup";
 import { cn, number, relativeTime } from "@/lib/utils";
 import type { Resource, LedgerEntry } from "@orbit/core";
@@ -305,6 +306,7 @@ export function EconomyPage() {
                 </Button>
               </div>
             </Card>
+            <OwnHistory />
             <Card className="p-5">
               <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold">
                 <ShieldCheck size={14} className="text-emerald-500" />

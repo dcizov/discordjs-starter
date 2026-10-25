@@ -1,3 +1,6 @@
+import * as community from "../packages/db/src/community";
+import * as communityStore from "../packages/db/src/store";
+import * as ownHistory from "../packages/db/src/history";
 import { defaultConfig } from "@orbit/core";
 import {
   audit,
@@ -551,5 +554,419 @@ describe("complete zoned activity chart SQL", () => {
       { key: "2026-10-25", events: 252, members: 2 },
       { key: "2026-10-26", events: 1, members: 1 },
     ]);
+  });
+});
+
+// The same suite runs on isolated real PostgreSQL in CI, or SQL-capable PGlite locally.
+describe("opt-in community post lifecycle and own-account history", () => {
+  async function enabled() {
+    const config = structuredClone(defaultConfig);
+    config.modules.polls = true;
+    config.modules.announcements = true;
+    await database()
+      .db.update(s.guilds)
+      .set({
+        config,
+        channels: [
+          {
+            id: ids.channel1,
+            name: "updates",
+            type: "text",
+            canSend: true,
+            supportsCommunityPosts: true,
+          },
+        ],
+      })
+      .where(eq(s.guilds.id, g1));
+  }
+  const draft = () => ({
+    kind: "announcement",
+    title: "A one-time notice",
+    channelId: ids.channel1,
+    body: "Join us for game night.",
+    poll: null,
+  });
+  async function create() {
+    await enabled();
+    return community.createCommunityPost(g1, u1, draft(), randomUUID());
+  }
+  it("defaults legacy absent keys to false and blocks creation until enabled", async () => {
+    const config = structuredClone(defaultConfig) as any;
+    delete config.modules.polls;
+    delete config.modules.announcements;
+    delete config.music.maxPerMember;
+    await database()
+      .db.update(s.guilds)
+      .set({ config })
+      .where(eq(s.guilds.id, g1));
+    expect((await communityStore.getGuild(g1))?.config).toMatchObject({
+      modules: { polls: false, announcements: false },
+      music: { maxPerMember: 0 },
+    });
+    await expect(
+      community.createCommunityPost(g1, u1, draft(), randomUUID())
+    ).rejects.toThrow(/paused/);
+    expect(
+      (await community.listCommunityPosts(g1, { kind: "announcement" })).total
+    ).toBe(0);
+  });
+  it("makes duplicate create requests idempotent without sending", async () => {
+    await enabled();
+    const key = randomUUID();
+    const [a, b] = await Promise.all([
+      community.createCommunityPost(g1, u1, draft(), key),
+      community.createCommunityPost(g1, u1, draft(), key),
+    ]);
+    expect(a.id).toBe(b.id);
+    expect(a.state).toBe("draft");
+    expect(
+      (await community.listCommunityPosts(g1, { kind: "announcement" })).total
+    ).toBe(1);
+    await expect(
+      community.createCommunityPost(
+        g1,
+        u1,
+        { ...draft(), body: "Different" },
+        key
+      )
+    ).rejects.toThrow(/idempotency key/);
+  });
+  it("scopes reads, editing, claims and deletion to the selected guild", async () => {
+    const p = await create();
+    expect(await community.getCommunityPost(g2, p.id)).toBeNull();
+    expect(
+      (await community.listCommunityPosts(g2, { kind: "announcement" })).items
+    ).toEqual([]);
+    await expect(
+      community.editCommunityPost(g2, p.id, 1, u2, draft())
+    ).rejects.toThrow(/not found/);
+    await expect(
+      community.deleteCommunityPost(g2, p.id, 1, u2)
+    ).rejects.toThrow(/not found/);
+    await expect(
+      community.editCommunityPost(g1, p.id, 1, u1, {
+        ...draft(),
+        channelId: ids.channel2,
+      })
+    ).rejects.toThrow(/in this server/);
+    expect((await community.getCommunityPost(g1, p.id))?.version).toBe(1);
+  });
+  it("rejects malformed post identifiers before PostgreSQL UUID casts", async () => {
+    await enabled();
+    expect(await community.getCommunityPost(g1, "not-a-uuid")).toBeNull();
+    await expect(
+      community.deleteCommunityPost(g1, "not-a-uuid", 1, u1)
+    ).rejects.toThrow();
+    await expect(
+      community.cancelCommunityPost(g1, "not-a-uuid", 1, u1)
+    ).rejects.toThrow();
+    expect(await communityStore.getResource(g1, "not-a-uuid")).toBeNull();
+  });
+  it("checks an expired publication deadline inside the atomic claim", async () => {
+    const p = await create();
+    await expect(
+      community.claimCommunityPost(
+        g1,
+        p.id,
+        1,
+        u1,
+        false,
+        undefined,
+        Date.now() - 1
+      )
+    ).rejects.toThrow(/expired/);
+    expect((await community.getCommunityPost(g1, p.id))?.state).toBe("draft");
+  });
+  it("rejects known-unsupported announcement channel subtypes instead of saving an unusable draft", async () => {
+    await enabled();
+    await database()
+      .db.update(s.guilds)
+      .set({
+        channels: [
+          {
+            id: ids.channel1,
+            name: "news channel",
+            type: "text",
+            canSend: true,
+            supportsCommunityPosts: false,
+          },
+        ],
+      })
+      .where(eq(s.guilds.id, g1));
+    await expect(
+      community.createCommunityPost(g1, u1, draft(), randomUUID())
+    ).rejects.toThrow(/supported server text channel/);
+    expect(
+      (await community.listCommunityPosts(g1, { kind: "announcement" })).total
+    ).toBe(0);
+  });
+  it("atomically grants only one concurrent publication claim", async () => {
+    const p = await create();
+    const results = await Promise.allSettled([
+      community.claimCommunityPost(g1, p.id, 1, u1, false),
+      community.claimCommunityPost(g1, p.id, 1, u1, false),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect((await community.getCommunityPost(g1, p.id))?.state).toBe("sending");
+    await expect(
+      community.deleteCommunityPost(g1, p.id, 2, u1)
+    ).rejects.toThrow(/settle/);
+  });
+  it("serializes cancellation against a claim and invalidates queued revisions", async () => {
+    const p = await create();
+    const results = await Promise.allSettled([
+      community.cancelCommunityPost(g1, p.id, 1, u1),
+      community.claimCommunityPost(g1, p.id, 1, u1, false),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const current = await community.getCommunityPost(g1, p.id);
+    expect(["sending", "cancelled"]).toContain(current?.state);
+    await expect(
+      community.claimCommunityPost(g1, p.id, 1, u1, false)
+    ).rejects.toThrow(/changed/);
+  });
+  it("preserves unconfirmed state and never permits a blind retry", async () => {
+    const p = await create(),
+      claim = await community.claimCommunityPost(g1, p.id, 1, u1, false);
+    const ambiguous = await community.finishCommunityPost(
+      g1,
+      p.id,
+      claim.version,
+      u1,
+      { state: "unconfirmed", error: "No acknowledgement" }
+    );
+    await expect(
+      community.claimCommunityPost(g1, p.id, ambiguous.version, u1, false)
+    ).rejects.toThrow(/blindly/);
+    await expect(
+      community.editCommunityPost(g1, p.id, ambiguous.version, u1, draft())
+    ).rejects.toThrow(/unsent drafts/);
+  });
+  it("rechecks paused/removed guilds at the atomic claim, not just admission", async () => {
+    const p = await create();
+    await database()
+      .db.update(s.guilds)
+      .set({ config: defaultConfig })
+      .where(eq(s.guilds.id, g1));
+    await expect(
+      community.claimCommunityPost(g1, p.id, 1, u1, false)
+    ).rejects.toThrow(/paused/);
+    const cancelled = await community.cancelCommunityPost(g1, p.id, 1, u1);
+    expect(cancelled.state).toBe("cancelled");
+    await database()
+      .db.update(s.guilds)
+      .set({ installed: false })
+      .where(eq(s.guilds.id, g1));
+    await expect(
+      community.cancelCommunityPost(g1, p.id, cancelled.version, u1)
+    ).rejects.toThrow(/Install Orbit/);
+  });
+  it("tracks the actual scheduling approver, expires old notices and never catches up", async () => {
+    const p = await create(),
+      due = Date.now() + 120_000;
+    const scheduled = await community.scheduleCommunityPost(
+      g1,
+      p.id,
+      1,
+      u2,
+      new Date(due).toISOString()
+    );
+    expect(scheduled.actorId).toBe(u2);
+    const dueRows = await community.maintainCommunityPosts(due + 1000);
+    expect(dueRows.map((r) => r.id)).toContain(p.id);
+    await expect(
+      community.claimCommunityPost(
+        g1,
+        p.id,
+        scheduled.version,
+        u1,
+        true,
+        due + 1000
+      )
+    ).rejects.toThrow(/approving manager/);
+    await community.maintainCommunityPosts(due + 15 * 60000 + 1);
+    expect((await community.getCommunityPost(g1, p.id))?.state).toBe("missed");
+    expect(await community.maintainCommunityPosts(due + 86400000)).toEqual([]);
+  });
+  it("recovers abandoned sends as unconfirmed without changing the claim token", async () => {
+    const p = await create(),
+      claim = await community.claimCommunityPost(g1, p.id, 1, u1, false);
+    await database()
+      .db.update(s.communityPosts)
+      .set({ attemptedAt: new Date(Date.now() - 180000) })
+      .where(eq(s.communityPosts.id, p.id));
+    await community.maintainCommunityPosts();
+    expect(await community.getCommunityPost(g1, p.id)).toMatchObject({
+      state: "unconfirmed",
+      version: claim.version,
+    });
+    // If the original in-flight caller finally receives a definite acceptance, record it, never create again.
+    await community.finishCommunityPost(g1, p.id, claim.version, u1, {
+      state: "published",
+      messageId: "990000000000000901",
+    });
+    expect((await community.getCommunityPost(g1, p.id))?.state).toBe(
+      "published"
+    );
+  });
+  it("bounds publication volume even after stored post records are deleted", async () => {
+    await enabled();
+    for (let i = 0; i < 10; i++) {
+      const p = await community.createCommunityPost(
+        g1,
+        u1,
+        draft(),
+        randomUUID()
+      );
+      const claim = await community.claimCommunityPost(g1, p.id, 1, u1, false);
+      const sent = await community.finishCommunityPost(
+        g1,
+        p.id,
+        claim.version,
+        u1,
+        {
+          state: "published",
+          messageId: `9900000000000009${String(i).padStart(2, "0")}`,
+        }
+      );
+      await community.deleteCommunityPost(g1, p.id, sent.version, u1);
+    }
+    const next = await community.createCommunityPost(
+      g1,
+      u1,
+      draft(),
+      randomUUID()
+    );
+    await expect(
+      community.claimCommunityPost(g1, next.id, 1, u1, false)
+    ).rejects.toThrow(/10 posts/);
+  });
+  it("removes inactive stored content after retention without retaining its text in audit", async () => {
+    const p = await create();
+    await database()
+      .db.update(s.communityPosts)
+      .set({ updatedAt: new Date(Date.now() - 91 * 86400000) })
+      .where(eq(s.communityPosts.id, p.id));
+    await community.maintainCommunityPosts();
+    expect(await community.getCommunityPost(g1, p.id)).toBeNull();
+    const rows = await database()
+      .db.select()
+      .from(s.auditLogs)
+      .where(eq(s.auditLogs.guildId, g1));
+    expect(JSON.stringify(rows)).not.toContain(p.body);
+    expect(JSON.stringify(rows)).not.toContain(p.title);
+  });
+  it("bounds stored posts and validates SQL pagination/state filters", async () => {
+    await enabled();
+    await database()
+      .db.insert(s.communityPosts)
+      .values(
+        Array.from({ length: 200 }, (_, i) => ({
+          guildId: g1,
+          kind: "announcement" as const,
+          title: `Notice ${i}`,
+          channelId: ids.channel1,
+          body: "Unsent",
+          actorId: u1,
+          requestKey: randomUUID(),
+        }))
+      );
+    await expect(
+      community.createCommunityPost(g1, u1, draft(), randomUUID())
+    ).rejects.toThrow(/200-post/);
+    expect(
+      await community.listCommunityPosts(g1, {
+        kind: "announcement",
+        page: 10,
+        pageSize: 20,
+      })
+    ).toMatchObject({ total: 200, items: expect.any(Array) });
+    expect(
+      (
+        await community.listCommunityPosts(g1, {
+          kind: "announcement",
+          page: 10,
+          pageSize: 20,
+        })
+      ).items
+    ).toHaveLength(20);
+  });
+  it("does not enqueue overdue schedules beyond the bounded maintenance batch", async () => {
+    await enabled();
+    const now = Date.now();
+    await database()
+      .db.insert(s.communityPosts)
+      .values(
+        Array.from({ length: 101 }, (_, i) => ({
+          guildId: g1,
+          kind: "announcement" as const,
+          title: `Overdue ${i}`,
+          channelId: ids.channel1,
+          body: "Unsent",
+          actorId: u1,
+          requestKey: randomUUID(),
+          state: "scheduled" as const,
+          scheduledFor: new Date(now - 20 * 60000),
+        }))
+      );
+    expect(await community.maintainCommunityPosts(now)).toEqual([]);
+    const [remaining] = await database()
+      .db.select({ n: sql<number>`count(*)::int` })
+      .from(s.communityPosts)
+      .where(
+        and(
+          eq(s.communityPosts.guildId, g1),
+          eq(s.communityPosts.state, "scheduled")
+        )
+      );
+    expect(remaining.n).toBe(1); // next minute processes the remaining record, never sends it
+  });
+  it("returns only the authenticated user's ledger in that guild with stable paging", async () => {
+    for (const [gid, uid, note] of [
+      [g1, u1, "Own"],
+      [g1, u2, "Other member"],
+      [g2, u1, "Other guild"],
+    ])
+      await database().db.insert(s.ledger).values({
+        guildId: gid,
+        userId: uid,
+        amount: 10,
+        type: "daily",
+        key: randomUUID(),
+        note,
+      });
+    for (let i = 0; i < 12; i++)
+      await database()
+        .db.insert(s.ledger)
+        .values({
+          guildId: g1,
+          userId: u1,
+          amount: i,
+          type: "activity",
+          key: randomUUID(),
+          note: `Own ${i}`,
+        });
+    const first = await ownHistory.getOwnEconomyHistory(g1, u1, {
+        page: 1,
+        pageSize: 5,
+      }),
+      second = await ownHistory.getOwnEconomyHistory(g1, u1, {
+        page: 2,
+        pageSize: 5,
+      });
+    expect(first.total).toBe(13);
+    expect(first.rows).toHaveLength(5);
+    expect(first.rows.every((r) => r.guildId === g1 && r.userId === u1)).toBe(
+      true
+    );
+    expect(first.rows.some((a) => second.rows.some((b) => a.id === b.id))).toBe(
+      false
+    );
+    expect(JSON.stringify([...first.rows, ...second.rows])).not.toMatch(
+      /Other member|Other guild/
+    );
+    await expect(
+      ownHistory.getOwnEconomyHistory(g1, u1, { pageSize: 21 })
+    ).rejects.toThrow();
   });
 });

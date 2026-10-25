@@ -1,3 +1,5 @@
+import type { CommunityKind } from "@orbit/core/community";
+import { listCommunityPosts, getOwnEconomyHistory } from "@orbit/db";
 import type { DashboardData } from "@orbit/core";
 import { activitySnapshot } from "@orbit/core/activity";
 import { activityCounts } from "@orbit/db";
@@ -7,8 +9,10 @@ import "server-only";
 import { authorize, HttpError } from "./auth";
 export async function loadDashboard(
   guildId: string,
-  authorized?: Awaited<ReturnType<typeof authorize>>
+  authorized?: Awaited<ReturnType<typeof authorize>>,
+  scope: { communityKind?: CommunityKind; ownLedger?: boolean } = {}
 ): Promise<DashboardData> {
+  const { communityKind, ownLedger } = scope;
   const referenceAt = new Date().toISOString();
   const { user, guild, guilds } = authorized ?? (await authorize(guildId));
   if (guild.id !== guildId)
@@ -39,6 +43,11 @@ export async function loadDashboard(
       };
   return {
     ...data,
+    ...(communityKind && guild.installed
+      ? {
+          community: await listCommunityPosts(guildId, { kind: communityKind }),
+        }
+      : {}),
     presentation: {
       referenceAt,
       activity: activitySnapshot(
@@ -55,6 +64,9 @@ export async function loadDashboard(
       ),
     },
     wallet: guild.installed ? await getAccount(guildId, user.id) : null,
+    ...(ownLedger && guild.installed
+      ? { walletHistory: await getOwnEconomyHistory(guildId, user.id) }
+      : {}),
     integrations: {
       itad: !!process.env.ITAD_API_KEY,
       lavalink: !!process.env.LAVALINK_URL && !!process.env.LAVALINK_PASSWORD,

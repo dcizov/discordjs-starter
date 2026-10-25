@@ -12,7 +12,15 @@ export default async function Page({
   const { guildId, section } = await params;
   let data;
   try {
-    data = await loadDashboard(guildId);
+    data = await loadDashboard(guildId, undefined, {
+      communityKind:
+        section?.[0] === "polls"
+          ? "poll"
+          : section?.[0] === "announcements"
+            ? "announcement"
+            : undefined,
+      ownLedger: section?.[0] === "economy",
+    });
   } catch (e) {
     if (e instanceof HttpError && e.status === 401) redirect("/login");
     if (e instanceof HttpError)

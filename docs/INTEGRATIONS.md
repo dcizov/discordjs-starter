@@ -30,6 +30,12 @@ Use the source list's **Needs setup** filter to find unconfigured starters. Modu
 
 In demo mode, both test actions are simulated and clearly labeled. No publisher is contacted.
 
+## Preview routing without fetching or sending
+
+The News page includes **Preview news routing — no fetch, no send**. Choose this guild's saved source and provide a bounded sample headline/summary/tags. It shares the actual outbox matcher, merges source tags, applies keyword-any AND tag-any, explains matching routes, deduplicates destinations and preserves last-matching-route settings. Inputs changing invalidate the old snapshot; controls are disabled while a request is pending.
+
+The protected `/news-preview` action accepts no arbitrary URL, performs no feed/Discord/credential test, persists no sample, enqueues nothing and never pings the configured role. One source / at most 100 routes / title 300 / summary 1,200 / 20 tags of 40 characters. Synced posting permissions can be present, missing or unknown; they are **not a live delivery check**. Source enabled/setup and module paused states are explained rather than treated as success. Use the distinct explicit source test/send workflows above only when intended.
+
 ## Incoming webhooks
 
 Create a source with adapter **Signed incoming webhook**, save it, then choose **Webhook credentials**. The secret is shown once. Generating it again invalidates the old secret. Deleting the source deletes its credential via a foreign-key cascade.

@@ -12,6 +12,7 @@ import type {
 import { DEMO_GUILD_ID, DEMO_USER_ID, defaultConfig } from "@orbit/core";
 import { randomUUID } from "node:crypto";
 export type DemoState = {
+  communityPosts?: import("@orbit/core/community").CommunityPost[];
   version: number;
   guilds: Guild[];
   resources: Resource[];
@@ -127,6 +128,7 @@ export function createDemo(): DemoState {
     })),
     channels: channels.map((item) => ({
       ...item,
+      supportsCommunityPosts: item.type === "text",
       permissionBits:
         item.name === "staff-only"
           ? "0"
@@ -136,6 +138,7 @@ export function createDemo(): DemoState {
                 P.ViewChannel |
                 P.SendMessages |
                 P.EmbedLinks |
+                P.SendPolls |
                 P.ReadMessageHistory |
                 P.AddReactions |
                 P.ManageMessages

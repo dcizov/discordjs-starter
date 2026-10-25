@@ -31,6 +31,8 @@ export const configSchema = z
         music: z.boolean(),
         deals: z.boolean(),
         news: z.boolean(),
+        polls: z.boolean().default(false),
+        announcements: z.boolean().default(false),
       })
       .default({
         roles: true,
@@ -39,6 +41,8 @@ export const configSchema = z
         music: true,
         deals: true,
         news: true,
+        polls: false,
+        announcements: false,
       }),
     economy: z
       .object({
@@ -62,8 +66,14 @@ export const configSchema = z
         djRoleId: optionalId,
         defaultVolume: z.number().int().min(0).max(100),
         maxQueue: z.number().int().min(1).max(200),
+        maxPerMember: z.number().int().min(0).max(50).default(0),
       })
-      .default({ djRoleId: "", defaultVolume: 65, maxQueue: 100 }),
+      .default({
+        djRoleId: "",
+        defaultVolume: 65,
+        maxQueue: 100,
+        maxPerMember: 0,
+      }),
     moderation: z
       .object({
         exemptRoleIds: z.array(snowflake).max(20),

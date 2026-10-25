@@ -29,6 +29,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { CommunityPage } from "./community-page";
 import { CommandsPage } from "./commands-page";
 import { EconomyPage } from "./economy-page";
 import { MusicPage } from "./music-page";
@@ -101,9 +102,17 @@ export function Dashboard({
     [data.guild.id]
   );
   const refresh = useCallback(async () => {
-    const d = await api<DashboardData>("");
+    const d = await api<DashboardData>(
+      section === "polls"
+        ? "?community=poll"
+        : section === "announcements"
+          ? "?community=announcement"
+          : section === "economy"
+            ? "?ownLedger=true"
+            : ""
+    );
     setData(d);
-  }, [api]);
+  }, [api, section]);
   const navigate = useCallback(
     (s: string) => {
       router.push(`/dashboard/${data.guild.id}/${s}`);
@@ -534,6 +543,10 @@ export function Dashboard({
                   <EconomyPage />
                 ) : section === "music" ? (
                   <MusicPage />
+                ) : section === "polls" || section === "announcements" ? (
+                  <CommunityPage
+                    kind={section === "polls" ? "poll" : "announcement"}
+                  />
                 ) : section === "commands" ? (
                   <CommandsPage />
                 ) : section === "channels" ? (

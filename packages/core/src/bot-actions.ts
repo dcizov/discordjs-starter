@@ -39,7 +39,7 @@ export class BotActionPendingError extends Error {
     readonly state: string
   ) {
     super(
-      "The bot has not confirmed this request yet. It may still be processing; do not resubmit it blindly. Check the queue/Audit log or the bot's logs. Playback is not confirmed."
+      "The bot has not confirmed this request yet. It may still be processing; do not resubmit it blindly. Check the queue/Audit log or the bot's logs. Execution is not confirmed."
     );
     this.name = "BotActionPendingError";
   }

@@ -1,8 +1,21 @@
+import {
+  communityModule,
+  communityDate,
+  communityIdSchema,
+} from "@orbit/core/community";
+import {
+  listCommunityPosts,
+  getCommunityPost,
+  scheduleCommunityPost,
+  cancelCommunityPost,
+} from "@orbit/db";
+import { executeCommunity } from "./community";
 import { safeText } from "@orbit/core";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { pollSource } from "@orbit/core/feeds";
 import { logger } from "@orbit/core/logger";
 import {
+  getOwnEconomyHistory,
   audit,
   database,
   economyTransaction,
@@ -18,6 +31,7 @@ import {
   PermissionFlagsBits,
   type Client,
   type Interaction,
+  type REST,
 } from "discord.js";
 import { and, eq } from "drizzle-orm";
 import { logCase, moderate } from "./moderation";
@@ -39,7 +53,8 @@ import {
 export async function onInteraction(
   client: Client,
   music: MusicService,
-  i: Interaction
+  i: Interaction,
+  communityRest?: Pick<REST, "get" | "post">
 ) {
   if (!i.guild) return;
   try {
@@ -48,6 +63,27 @@ export async function onInteraction(
       return;
     }
     if (i.isAutocomplete()) {
+      if (["poll", "announce"].includes(i.commandName)) {
+        if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+          await i.respond([]);
+          return;
+        }
+        const kind = i.commandName === "poll" ? "poll" : "announcement";
+        const page = await listCommunityPosts(i.guild.id, {
+          kind,
+          pageSize: 20,
+        });
+        const q = i.options.getFocused().toLowerCase();
+        await i.respond(
+          page.items
+            .filter((p) => p.title.toLowerCase().includes(q))
+            .map((p) => ({
+              name: `${p.title} · ${p.state}`.slice(0, 100),
+              value: p.id,
+            }))
+        );
+        return;
+      }
       if (i.commandName === "deals") {
         const focused = i.options.getFocused(true);
         const sub = i.options.getSubcommand(false);
@@ -99,6 +135,77 @@ export async function onInteraction(
     const reply = (content: string | ReplyCard) =>
       i.editReply(commandReply(i.commandName, content));
     const key = `interaction-${i.id}`;
+    if (["poll", "announce"].includes(i.commandName)) {
+      await guild.fetch(); // Refresh ownership before trusting manager permissions.
+      await guild.roles.fetch();
+      if (!member.permissions.has(PermissionFlagsBits.ManageGuild))
+        throw new Error("Manage Server is required for community publishing.");
+      const kind = i.commandName === "poll" ? "poll" : "announcement";
+      const action = i.options.getSubcommand();
+      if (action === "list") {
+        const page = await listCommunityPosts(guild.id, { kind, pageSize: 10 });
+        await reply({
+          title: kind === "poll" ? "Native polls" : "Announcements",
+          description: page.items.length
+            ? page.items
+                .map(
+                  (p) =>
+                    `• ${p.title} — ${p.state}${p.scheduledFor ? ` · ${communityDate(p.scheduledFor, stored.config.timezone)} (${stored.config.timezone})` : ""}`
+                )
+                .join("\n")
+            : "No saved posts. Create a draft in the Orbit dashboard. Nothing is sent by listing posts.",
+          footer:
+            "Private manager view · autocomplete selects stored posts · use the dashboard for older records",
+        });
+        return;
+      }
+      const id = communityIdSchema.parse(i.options.getString("post", true));
+      const post = await getCommunityPost(guild.id, id);
+      if (!post || post.kind !== kind)
+        throw new Error("Post not found in this server.");
+      if (action === "schedule") {
+        const saved = await scheduleCommunityPost(
+          guild.id,
+          id,
+          post.version,
+          member.id,
+          i.options.getString("utc", true)
+        );
+        await reply(
+          `Scheduled for ${communityDate(saved.scheduledFor, stored.config.timezone)} (${stored.config.timezone}); UTC ${saved.scheduledFor}. Delivery is not yet confirmed. Workers send only within a 15-minute grace window.`
+        );
+        return;
+      }
+      if (action === "cancel") {
+        await cancelCommunityPost(guild.id, id, post.version, member.id);
+        await reply(
+          "Schedule/draft cancelled. No Discord message was recalled."
+        );
+        return;
+      }
+      if (!["publish", "refresh", "close"].includes(action))
+        throw new Error("Unsupported action.");
+      if (action === "publish" && !stored.config.modules[communityModule(kind)])
+        throw new Error("This module is paused.");
+      if (!communityRest)
+        throw new Error(
+          "Community publishing transport is unavailable. No message was sent."
+        );
+      const result = await executeCommunity(client, communityRest, {
+        guildId: guild.id,
+        id,
+        version: post.version,
+        actorId: member.id,
+        action: action as "publish" | "refresh" | "close",
+        requestedAt: i.createdTimestamp,
+      });
+      await reply({
+        title:
+          kind === "poll" ? "Native poll updated" : "Announcement published",
+        description: `Recorded state: ${result.state}.${result.messageId ? ` https://discord.com/channels/${guild.id}/${post.channelId}/${result.messageId}` : ""}${action === "refresh" ? " Results remain approximate until Discord finalizes them; unavailable counts are not zero. View the aggregate breakdown in the dashboard." : ""}`,
+      });
+      return;
+    }
     if (["warn", "timeout", "kick", "ban"].includes(i.commandName)) {
       const user = i.options.getUser("member", true);
       const target = await guild.members
@@ -132,6 +239,25 @@ export async function onInteraction(
     )
       throw new Error("The community economy is paused.");
     switch (i.commandName) {
+      case "transactions": {
+        const result = await getOwnEconomyHistory(guild.id, member.id, {
+          page: i.options.getInteger("page") ?? 1,
+          pageSize: 10,
+        });
+        await reply({
+          title: "Your transaction history",
+          description: result.rows.length
+            ? result.rows
+                .map(
+                  (r) =>
+                    `${r.amount > 0 ? "+" : ""}${r.amount} ${stored.config.economy.currency} · ${r.type} · ${communityDate(r.createdAt, stored.config.timezone)}\n${safeText(r.note, 100)}`
+                )
+                .join("\n\n")
+            : "No transactions on this page. No reward, transfer or purchase was created by reading this history.",
+          footer: `Only your ledger in this server · page ${result.page}/${Math.max(1, Math.ceil(result.total / result.pageSize))} · /transactions page:<number>`,
+        });
+        break;
+      }
       case "ping":
         await reply(
           `Orbit is here. Gateway: ${client.ws.ping}ms. Configuration is live.`

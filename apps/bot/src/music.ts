@@ -1,3 +1,4 @@
+import { assertMusicQueueAdmission } from "@orbit/core/music-policy";
 import type { MusicState, Track } from "@orbit/core";
 import { safeText } from "@orbit/core";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
@@ -301,8 +302,13 @@ export class MusicService {
         if (!input.query)
           throw new Error("Enter a track title or supported source URL.");
         const tracks = await this.resolve(input.query);
-        if (state.tracks.length + tracks.length > stored.config.music.maxQueue)
-          throw new Error("This request would exceed the queue limit.");
+        assertMusicQueueAdmission(
+          state,
+          member.id,
+          tracks.length,
+          stored.config.music.maxQueue,
+          stored.config.music.maxPerMember ?? 0
+        );
         if (!player) {
           player = await joinMusicVoice(
             this.backend,
@@ -362,6 +368,7 @@ export class MusicService {
             uri: t.info.uri ?? "",
             encoded: t.encoded,
             requestedBy: safeText(member.displayName, 80),
+            requestedById: member.id,
           }))
         );
         if (!state.current) await this.next(guild.id, player);

@@ -1,4 +1,5 @@
 import { and, desc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm";
+import { z } from "zod";
 import { isDemo } from "@orbit/core";
 import { database } from "./client";
 import { demoRead } from "./demo";
@@ -14,9 +15,28 @@ export type HistoryResult = {
 export async function queryHistory(
   guildId: string,
   kind: HistoryKind,
-  options: { page: number; pageSize: number; query: string; filter: string }
+  options: {
+    page: number;
+    pageSize: number;
+    query: string;
+    filter: string;
+    userId?: string;
+  }
 ): Promise<HistoryResult> {
-  const { page, pageSize, query, filter } = options;
+  const { page, pageSize, query, filter, userId } = z
+    .object({
+      page: z.number().int().min(1).max(100000),
+      pageSize: z.number().int().min(1).max(100),
+      query: z.string().max(200),
+      filter: z.string().max(60),
+      userId: z
+        .string()
+        .regex(/^\d{17,20}$/)
+        .optional(),
+    })
+    .parse(options);
+  if (userId && kind !== "ledger")
+    throw new Error("Owner scoping applies to ledger history only.");
   const offset = (page - 1) * pageSize;
   if (isDemo()) {
     const d = await demoRead();
@@ -29,7 +49,9 @@ export async function queryHistory(
             ? d.deliveries
             : d.resources.filter((r) => r.kind === "case");
     const rows = source
-      .filter((r: any) => r.guildId === guildId)
+      .filter(
+        (r: any) => r.guildId === guildId && (!userId || r.userId === userId)
+      )
       .filter((r: any) => {
         const name =
           kind === "ledger"
@@ -108,6 +130,7 @@ export async function queryHistory(
     );
     const condition = and(
       eq(s.ledger.guildId, guildId),
+      userId ? eq(s.ledger.userId, userId) : undefined,
       query
         ? or(
             ilike(s.ledger.note, term),
@@ -198,4 +221,29 @@ export async function queryHistory(
       .where(condition),
   ]);
   return serialize({ rows, total: total[0].n, page, pageSize });
+}
+
+/** Caller MUST supply the authenticated/interaction user, never a user-selected account ID. */
+export async function getOwnEconomyHistory(
+  guildId: string,
+  userId: string,
+  input: { page?: number; pageSize?: number } = {}
+) {
+  const q = z
+    .object({
+      page: z.number().int().min(1).max(10000).default(1),
+      pageSize: z.number().int().min(1).max(20).default(5),
+    })
+    .strict()
+    .parse(input);
+  const result = await queryHistory(guildId, "ledger", {
+    ...q,
+    query: "",
+    filter: "all",
+    userId,
+  });
+  return {
+    ...result,
+    rows: result.rows as import("@orbit/core").LedgerEntry[],
+  };
 }

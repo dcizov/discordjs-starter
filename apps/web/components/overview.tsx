@@ -103,6 +103,22 @@ const modules: {
     color: "text-[#7c9dce]",
     bg: "bg-[#edf3fc] dark:bg-blue-500/10",
   },
+  {
+    key: "polls",
+    name: "Native polls",
+    description: "A clear question, native Discord votes.",
+    icon: UsersRound,
+    color: "text-violet-500",
+    bg: "bg-violet-50 dark:bg-violet-500/10",
+  },
+  {
+    key: "announcements",
+    name: "Announcements",
+    description: "One notice, deliberately scheduled.",
+    icon: Rss,
+    color: "text-blue-500",
+    bg: "bg-blue-50 dark:bg-blue-500/10",
+  },
 ];
 export function Overview() {
   const { data, navigate, saveConfig } = useWorkspace();
@@ -126,6 +142,8 @@ export function Overview() {
   const gateway = data.health.find((health) => health.name === "Discord API");
   const online = gateway?.status === "healthy";
   const counts = {
+    polls: "Native votes stay on Discord",
+    announcements: "One-time notices, explicit approval",
     roles: `${data.resources.filter((r) => r.kind === "panel" && r.enabled).length} active panels`,
     moderation: `${data.resources.filter((r) => r.kind === "rule" && r.enabled).length} rules keeping watch`,
     economy: `${number(data.stats?.circulation ?? data.accounts.reduce((n, a) => n + a.balance, 0))} ${config.economy.currency.toLowerCase()} in circulation`,

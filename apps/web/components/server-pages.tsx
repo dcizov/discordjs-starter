@@ -723,6 +723,18 @@ export function SettingsPage() {
                 icon: Tags,
               },
               {
+                id: "polls",
+                name: "Native polls",
+                desc: "Opt-in native Discord votes; no voter identities stored.",
+                icon: UsersRound,
+              },
+              {
+                id: "announcements",
+                name: "Announcements",
+                desc: "Opt-in one-time notices, never recurring spam.",
+                icon: Rss,
+              },
+              {
                 id: "news",
                 name: "News & feeds",
                 desc: "Stay in the know, together.",

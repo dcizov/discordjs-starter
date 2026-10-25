@@ -29,6 +29,7 @@ import {
   PermissionFlagsBits,
 } from "discord.js";
 import "dotenv/config";
+import { executeCommunity, createCommunityRest } from "./community";
 import { onMessage } from "./automod";
 import { onInteraction } from "./interactions";
 import { MusicService } from "./music";
@@ -43,6 +44,7 @@ async function main() {
     return;
   }
   validateEnvironment("bot");
+  const communityRest = createCommunityRest(required("DISCORD_TOKEN"));
   const client = new Client({
     intents: gatewayIntentNames.map((name) => GatewayIntentBits[name]),
     partials: [
@@ -58,7 +60,7 @@ async function main() {
   let syncTimer: NodeJS.Timeout | undefined;
   client.on(
     Events.InteractionCreate,
-    (i) => void onInteraction(client, music, i)
+    (i) => void onInteraction(client, music, i, communityRest)
   );
   client.on(
     Events.MessageCreate,
@@ -192,6 +194,11 @@ async function main() {
                 "The Discord gateway is reconnecting. No action was executed; retry when the bot is ready."
               );
             assertFreshBotAction(job.name, job.timestamp);
+            if (job.name === "community")
+              return await executeCommunity(client, communityRest, {
+                ...job.data,
+                requestedAt: job.timestamp,
+              });
             const { guildId, actorId } = job.data;
             const guild = await client.guilds.fetch(guildId),
               actor = await guild.members.fetch({ user: actorId, force: true });
@@ -203,6 +210,7 @@ async function main() {
               throw new Error(
                 "The requester no longer has Manage Server permission"
               );
+
             if (job.name === "publish-panel")
               return await publishPanel(
                 client,

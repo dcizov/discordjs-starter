@@ -35,6 +35,16 @@ const dealCountry = (o: SlashCommandStringOption) =>
       { name: "Australia · AUD", value: "AU" }
     );
 export const commandDefinitions = [
+  command(
+    "transactions",
+    "Privately view your own economy history in this server"
+  ).addIntegerOption((o) =>
+    o
+      .setName("page")
+      .setDescription("History page (10 entries per page)")
+      .setMinValue(1)
+      .setMaxValue(10000)
+  ),
   command("ping", "Check Orbit’s gateway connection"),
   command("roles", "Find your community’s self-role panels"),
   command("role-panel", "Publish or refresh a role panel")
@@ -358,4 +368,47 @@ export const commandDefinitions = [
             .setAutocomplete(true)
         )
     ),
+  ...(["poll", "announce"] as const).map((name) => {
+    const root = command(
+      name,
+      name === "poll"
+        ? "Manage native Discord polls created in Orbit"
+        : "Manage one-time community announcements"
+    ).setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
+    root.addSubcommand((s) =>
+      s
+        .setName("list")
+        .setDescription("List this server's stored posts (private response)")
+    );
+    const actions =
+      name === "poll"
+        ? ["publish", "refresh", "close"]
+        : ["publish", "schedule", "cancel"];
+    for (const action of actions)
+      root.addSubcommand((s) => {
+        s.setName(action)
+          .setDescription(
+            `${action[0].toUpperCase() + action.slice(1)} a saved ${name === "poll" ? "native poll" : "announcement"}`
+          )
+          .addStringOption((o) =>
+            o
+              .setName("post")
+              .setDescription("Choose a saved post from this server")
+              .setRequired(true)
+              .setAutocomplete(true)
+          );
+        if (action === "schedule")
+          s.addStringOption((o) =>
+            o
+              .setName("utc")
+              .setDescription(
+                "UTC ISO time, e.g. 2026-11-01T18:00:00Z (1 min–30 days ahead)"
+              )
+              .setMaxLength(30)
+              .setRequired(true)
+          );
+        return s;
+      });
+    return root;
+  }),
 ];

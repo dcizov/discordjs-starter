@@ -1,4 +1,5 @@
 "use client";
+import { NewsRoutingPreview } from "./news-routing-preview";
 import { ModuleSetupBanner } from "./module-setup";
 import { cn, number, relativeTime } from "@/lib/utils";
 import type { Resource, ResourceKind, Delivery } from "@orbit/core";
@@ -240,6 +241,7 @@ export function ResourcesPage({
         </Button>
       </PageHeader>
       <ModuleSetupBanner module={section} />
+      {section === "news" && <NewsRoutingPreview />}
       {!data.guild.config.modules[section] && (
         <div className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-amber-200/60 bg-amber-50 px-4 py-3 dark:border-amber-500/20 dark:bg-amber-500/10">
           <span className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">

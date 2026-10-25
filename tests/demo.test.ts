@@ -1,3 +1,5 @@
+import * as community from "../packages/db/src/community";
+import { simulateCommunityAction } from "../packages/db/src/community-demo";
 import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
 import { rm, mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -89,4 +91,67 @@ ${"nested details ".repeat(120)}`;
       (await demoRead()).ledger.filter((l) => l.key === i.key)
     ).toHaveLength(2);
   });
+});
+
+it("adds community state to a legacy demo file, serializes duplicate creates and labels a no-I/O simulation", async () => {
+  const guild = (await getGuild(DEMO_GUILD_ID))!;
+  guild.config.modules.polls = true;
+  await saveConfig(DEMO_GUILD_ID, guild.config, {
+    id: DEMO_USER_ID,
+    name: "Demo manager",
+  });
+  const key = crypto.randomUUID(),
+    input = {
+      kind: "poll",
+      title: "Demo poll",
+      channelId: guild.channels[0].id,
+      body: "",
+      poll: {
+        question: "What shall we play?",
+        answers: ["Co-op", "Board games"],
+        durationHours: 24,
+        allowMultiselect: false,
+      },
+    };
+  const [a, b] = await Promise.all([
+    community.createCommunityPost(DEMO_GUILD_ID, DEMO_USER_ID, input, key),
+    community.createCommunityPost(DEMO_GUILD_ID, DEMO_USER_ID, input, key),
+  ]);
+  expect(a.id).toBe(b.id);
+  const published = await simulateCommunityAction(
+    DEMO_GUILD_ID,
+    a.id,
+    a.version,
+    DEMO_USER_ID,
+    "publish"
+  );
+  expect(published).toMatchObject({ state: "published", messageId: null });
+  expect(published.result?.answers.every((a) => a.votes === null)).toBe(true);
+  expect(
+    (await community.listCommunityPosts(DEMO_GUILD_ID, { kind: "poll" })).total
+  ).toBe(1);
+  const closed = await simulateCommunityAction(
+    DEMO_GUILD_ID,
+    a.id,
+    published.version,
+    DEMO_USER_ID,
+    "close"
+  );
+  expect(closed.state).toBe("closed");
+});
+it("never runs the simulation against the live datastore", async () => {
+  vi.stubEnv("DEMO_MODE", "false");
+  try {
+    await expect(
+      simulateCommunityAction(
+        DEMO_GUILD_ID,
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        1,
+        DEMO_USER_ID,
+        "publish"
+      )
+    ).rejects.toThrow(/only in isolated demo/);
+  } finally {
+    vi.stubEnv("DEMO_MODE", "true");
+  }
 });

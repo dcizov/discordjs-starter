@@ -1,4 +1,5 @@
 /** Configuration/synced-metadata guidance, deliberately NOT a live readiness audit. */
+import { isCommunityChannel } from "./community";
 import type { DashboardData, ModuleKey, Resource } from "./types";
 import {
   botGuildPermissions,
@@ -78,6 +79,34 @@ export function moduleSetup(data: Context, module: ModuleKey): ModuleSetup {
               : "Permission snapshots are missing. Start the bot and wait for sync; existing settings are not proof of live access."
           )
         : result("configured", detail);
+  if (module === "polls" || module === "announcements") {
+    const candidates = guild.channels.filter((c) =>
+      isCommunityChannel(c, data.demo)
+    );
+    if (!candidates.length)
+      return result(
+        guild.channels.some((c) => c.type === "text")
+          ? "not-verified"
+          : "needs-setup",
+        "Choose an ordinary server text channel for each draft. Start Orbit and wait for a channel sync if supported community destinations are unknown. New modules never send merely because they are enabled."
+      );
+    const permissions: PermissionName[] =
+      module === "polls"
+        ? ["ViewChannel", "SendMessages", "SendPolls", "ReadMessageHistory"]
+        : ["ViewChannel", "SendMessages", "EmbedLinks"];
+    const states = candidates.map((c) =>
+      permissionState(c.permissionBits, permissions)
+    );
+    return states.includes("present")
+      ? result(
+          "configured",
+          "At least one synced destination has the feature permissions. Select a destination in each draft; fresh manager membership and channel permissions are rechecked at execution. This is not proof of publication."
+        )
+      : checked(
+          states,
+          "Destination metadata is available; execution is not verified."
+        );
+  }
   if (module === "roles") {
     const panels = enabled("panel");
     if (!panels.length)

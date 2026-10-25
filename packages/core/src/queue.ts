@@ -21,16 +21,10 @@ export function createQueue(name: string) {
     },
   });
 }
-let actionQueue: Queue | undefined;
-export async function enqueueAction(
-  guildId: string,
-  actorId: string,
-  action: string,
-  data: Record<string, any>,
-  key: string
+/** Shared bounded admission check for dashboard requests and durable announcement reconciliation. */
+export async function assertBotActionConsumer(
+  queue: Pick<Queue, "getWorkersCount">
 ) {
-  if (isDemo()) throw new Error("Live job queues are disabled in demo mode");
-  const queue = (actionQueue ??= createQueue("discord-actions"));
   // Read the actual BullMQ consumer connections, not a stale dashboard heartbeat.
   // A healthy Lavalink/web container cannot consume these Discord gateway jobs.
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -58,12 +52,24 @@ export async function enqueueAction(
   } finally {
     clearTimeout(timeout);
   }
+}
+let actionQueue: Queue | undefined;
+export async function enqueueAction(
+  guildId: string,
+  actorId: string,
+  action: string,
+  data: Record<string, any>,
+  key: string
+) {
+  if (isDemo()) throw new Error("Live job queues are disabled in demo mode");
+  const queue = (actionQueue ??= createQueue("discord-actions"));
+  await assertBotActionConsumer(queue);
   return queue.add(
     action,
     { ...data, guildId, actorId },
     {
       jobId: `${guildId}-${actorId}-${key.replace(/:/g, "-")}`,
-      attempts: action === "music" ? 1 : 5,
+      attempts: action === "music" || action === "community" ? 1 : 5,
     }
   );
 }

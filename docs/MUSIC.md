@@ -342,3 +342,9 @@ These demonstrate concrete edge/race defects and protect the installed library c
 Compose and the editor were inspected: the `bot` service owns the gateway, the editor is idle, and registration/doctor processes do not log in. The sandbox cannot inventory separately launched processes on another host or another Compose stack; verify only one intended gateway for this token. No duplicate external process was killed and no global distributed gateway-lease claim is made.
 
 Use [PERMISSIONS.md](PERMISSIONS.md) for installation scopes, exact selected-channel permissions, actor/DJ restrictions and Docker-only setup. The read-only doctor diagnoses backend/track loading, **not** a successful Discord voice join. No live guild credentials or authorized audible test were available for this change set.
+
+## Optional requester fairness limit
+
+Settings and the Music page expose `music.maxPerMember`: **0 (the backward-compatible default) is unlimited**, otherwise 1–500 upcoming tracks per requester. The current track does not count. The existing per-guild mutation lock checks both global and per-requester queue admission before mutating the queue or joining voice; an over-limit playlist is rejected in full, including concurrent requests. The demo uses the same pure admission policy and the authenticated requester identity.
+
+This is a queue policy, not a new provider, permission, voice ownership strategy or playback guarantee. DJ/same-room restrictions, supported-source/SFW rules, global queue cap and owned voice ACK/cleanup behavior remain unchanged. No new gateway intent or Move Members/Administrator grant is needed. Existing attributed queue rows count toward the requester; unknown legacy attribution is not guessed from a display name.

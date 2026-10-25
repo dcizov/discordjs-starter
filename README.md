@@ -41,22 +41,28 @@ The demo banner and player identify simulation. Activity charts and health are s
 For a production-built demo:
 
 ```sh
-npm run build
+DEMO_MODE=true npm run build
 DEMO_MODE=true npm start
 ```
 
 ## What’s implemented
 
-| Area        | Workflows                                                                                                                                                                                                                                   |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Self roles  | Buttons, selects, reaction panels; single/multi selection; prerequisites; exclusive roles; role limits; preview, publication, and safe reassignment                                                                                         |
-| Moderation  | Warnings, timeouts, kicks, bans, recent-message purges, case history, spam/repetition/mention/blocked-term rules, exemptions, escalation, audit channel                                                                                     |
-| Economy     | Per-guild balances, rolling daily rewards, activity rewards/cooldowns, transfers, leaderboard, role/item shop, inventory, reclaimable role entitlements, atomic PostgreSQL ledger                                                           |
-| Music       | Discord voice playback through Lavalink, supported-source search, persistent dashboard snapshots, queue, pause/resume/skip/stop, volume, shuffle, repeat, DJ restrictions                                                                   |
-| Game deals  | IsThereAnyDeal search, shared game watchlists and general deal feeds; region/currency/shop/price/discount/historical-low filters; deduplicated alerts                                                                                       |
-| News        | Official Steam app-news adapter; configurable RSS/Atom and signed webhooks; honest setup-required Blizzard/Wowhead/Mojang starters; keyword/tag routing, interval schedules, health, tests, delivery history                                |
-| Dashboard   | OAuth2, manageable-server switcher, installed/invite distinction, responsive light/dark UI, configuration CRUD, validation, confirmations, search, server-paginated histories, loading/error/empty states, toasts, safe optimistic switches |
-| Reliability | Separate services, migrations, transactional outbox, retry backoff, stable delivery keys, Discord nonce suppression, structured logs, configuration audits, SSRF protection, bounded XML/body parsing, sanitized content, explicit mentions |
+| Area        | Workflows                                                                                                                                                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Self roles  | Buttons, selects, reaction panels; single/multi selection; prerequisites; exclusive roles; role limits; preview, publication, and safe reassignment                                                                                            |
+| Moderation  | Warnings, timeouts, kicks, bans, recent-message purges, case history, spam/repetition/mention/blocked-term rules, exemptions, escalation, audit channel                                                                                        |
+| Economy     | Per-guild balances, rolling daily rewards, activity rewards/cooldowns, transfers, leaderboard, role/item shop, inventory, reclaimable role entitlements, atomic PostgreSQL ledger; private own-account transaction history                     |
+| Music       | Discord voice playback through Lavalink, supported-source search, persistent dashboard snapshots, queue, pause/resume/skip/stop, volume, shuffle, repeat, DJ restrictions, optional requester queue cap                                        |
+| Game deals  | IsThereAnyDeal search, shared game watchlists and general deal feeds; region/currency/shop/price/discount/historical-low filters; deduplicated alerts                                                                                          |
+| News        | Official Steam app-news adapter; configurable RSS/Atom and signed webhooks; honest setup-required Blizzard/Wowhead/Mojang starters; keyword/tag routing, interval schedules, health, tests, delivery history, no-fetch/no-send routing preview |
+| Dashboard   | OAuth2, manageable-server switcher, installed/invite distinction, responsive light/dark UI, configuration CRUD, validation, confirmations, search, server-paginated histories, loading/error/empty states, toasts, safe optimistic switches    |
+| Reliability | Separate services, migrations, transactional outbox, retry backoff, stable delivery keys, Discord nonce suppression, structured logs, configuration audits, SSRF protection, bounded XML/body parsing, sanitized content, explicit mentions    |
+
+## New opt-in community tools
+
+**Native polls** and **one-time announcements** are implemented as complete dashboard/Discord/queue/database slices, both **off by default**. Create an unsent draft, review its destination, then explicitly publish or schedule. Native polls support aggregate refresh and early close, not anonymous custom voting. Announcements use explicit UTC dates, cancellation, a bounded lateness window and restart-safe claims; demo never delivers them in the background.
+
+See [setup, permissions, privacy, recovery and examples](docs/COMMUNITY.md), [official-source feature research](docs/FEATURE-RESEARCH.md), and [fresh verification](docs/COMMUNITY-REVIEW.md). The additive `0002_community_posts.sql` migration also indexes own-account history. Register the updated command definitions in the intended scope; viewing the Commands catalog does not register them. The minimal invite remains `19456`; **Send Polls is a deliberate channel-level opt-in**, not an automatic permission expansion.
 
 ## Run live
 

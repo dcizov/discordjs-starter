@@ -21,6 +21,7 @@ import {
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import { database } from "./client";
 import { demoRead, demoTransaction } from "./demo";
 import { demoHealth } from "./demo-seed";
@@ -36,13 +37,17 @@ export const emptyMusic = (): MusicState => ({
   updatedAt: new Date().toISOString(),
 });
 export async function getGuild(id: string): Promise<Guild | null> {
-  if (isDemo())
-    return (await demoRead()).guilds.find((g) => g.id === id) ?? null;
+  if (isDemo()) {
+    const g = (await demoRead()).guilds.find((g) => g.id === id);
+    return g ? { ...g, config: configSchema.parse(g.config) } : null;
+  }
   const [g] = await database()
     .db.select()
     .from(s.guilds)
     .where(eq(s.guilds.id, id));
-  return g ? serialize<Guild>(g) : null;
+  return g
+    ? serialize<Guild>({ ...g, config: configSchema.parse(g.config) })
+    : null;
 }
 export async function getAccount(
   guildId: string,
@@ -66,26 +71,46 @@ export async function listInstalledGuilds() {
 }
 export async function listResources(
   guildId: string,
-  kind?: ResourceKind
+  kind?: ResourceKind,
+  limit?: number
 ): Promise<Resource[]> {
-  if (isDemo())
-    return (await demoRead()).resources.filter(
+  if (
+    limit !== undefined &&
+    (!Number.isInteger(limit) || limit < 1 || limit > 10000)
+  )
+    throw new Error("Invalid resource query limit");
+  if (isDemo()) {
+    const rows = (await demoRead()).resources.filter(
       (r) => r.guildId === guildId && (!kind || r.kind === kind)
     );
+    return limit === undefined ? rows : rows.slice(0, limit);
+  }
+  const query = database()
+    .db.select()
+    .from(s.resources)
+    .where(
+      kind
+        ? and(eq(s.resources.guildId, guildId), eq(s.resources.kind, kind))
+        : eq(s.resources.guildId, guildId)
+    )
+    .orderBy(desc(s.resources.createdAt), desc(s.resources.id));
   return serialize<Resource[]>(
-    await database()
-      .db.select()
-      .from(s.resources)
-      .where(
-        kind
-          ? and(eq(s.resources.guildId, guildId), eq(s.resources.kind, kind))
-          : eq(s.resources.guildId, guildId)
-      )
-      .orderBy(desc(s.resources.createdAt))
+    await (limit === undefined ? query : query.limit(limit))
   );
 }
 export async function getResource(guildId: string, id: string) {
-  return (await listResources(guildId)).find((r) => r.id === id) ?? null;
+  if (!z.uuid().safeParse(id).success) return null;
+  if (isDemo())
+    return (
+      (await demoRead()).resources.find(
+        (r) => r.guildId === guildId && r.id === id
+      ) ?? null
+    );
+  const [row] = await database()
+    .db.select()
+    .from(s.resources)
+    .where(and(eq(s.resources.guildId, guildId), eq(s.resources.id, id)));
+  return row ? serialize<Resource>(row) : null;
 }
 export type Actor = { id: string; name: string };
 function newAudit(

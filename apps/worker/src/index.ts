@@ -1,3 +1,4 @@
+import { reconcileCommunityPosts } from "./community";
 import type { Resource } from "@orbit/core";
 import {
   fingerprint,
@@ -36,6 +37,7 @@ async function main() {
   }
   validateEnvironment("worker");
   const queue = createQueue("community-jobs");
+  const actionQueue = createQueue("discord-actions");
   const rest = new REST({ version: "10", timeout: 15000, retries: 3 }).setToken(
     required("DISCORD_TOKEN")
   );
@@ -286,6 +288,7 @@ async function main() {
     if (reconciling) return;
     reconciling = true;
     try {
+      const queuedAnnouncements = await reconcileCommunityPosts(actionQueue);
       const active = new Set<string>();
       const guilds = await listInstalledGuilds();
       for (const guild of guilds) {
@@ -349,7 +352,7 @@ async function main() {
         "Background workers",
         "healthy",
         0,
-        `${active.size} scheduled source checks`
+        `${active.size} scheduled source checks; ${queuedAnnouncements} announcement requests queued (delivery not confirmed)`
       );
     } finally {
       reconciling = false;
@@ -371,6 +374,7 @@ async function main() {
     clearInterval(timer);
     await worker.close();
     await queue.close();
+    await actionQueue.close();
     await setHealth(
       "Background workers",
       "offline",

@@ -1,7 +1,14 @@
 import type { ActivitySnapshot } from "./activity";
 import type { GameDeal } from "./deal-types";
 export type ModuleKey =
-  "roles" | "moderation" | "economy" | "music" | "deals" | "news";
+  | "roles"
+  | "moderation"
+  | "economy"
+  | "music"
+  | "deals"
+  | "news"
+  | "polls"
+  | "announcements";
 export type ResourceKind =
   "panel" | "rule" | "case" | "shop" | "deal" | "source" | "route";
 export type Resource = {
@@ -32,6 +39,8 @@ export type GuildChannel = {
   /** Effective bot permissions including channel/category overwrites at sync. */
   permissionBits?: string;
   permissionsSyncedAt?: string;
+  /** Orbit currently publishes native polls/announcements only in ordinary guild text channels. */
+  supportsCommunityPosts?: boolean;
 };
 export type GuildConfig = {
   locale: string;
@@ -47,7 +56,12 @@ export type GuildConfig = {
     activityCooldown: number;
     transferEnabled: boolean;
   };
-  music: { djRoleId: string; defaultVolume: number; maxQueue: number };
+  music: {
+    djRoleId: string;
+    defaultVolume: number;
+    maxQueue: number;
+    maxPerMember: number;
+  };
   moderation: {
     exemptRoleIds: string[];
     escalationThreshold: number;
@@ -118,6 +132,7 @@ export type Track = {
   uri: string;
   encoded?: string;
   requestedBy: string;
+  requestedById?: string;
 };
 export type MusicState = {
   tracks: Track[];
@@ -137,6 +152,7 @@ export type ServiceHealth = {
 };
 export type DashboardData = {
   presentation: { referenceAt: string; activity: ActivitySnapshot };
+  community?: import("./community").CommunityPage;
   guild: Guild;
   resources: Resource[];
   audit: AuditEntry[];
@@ -148,6 +164,12 @@ export type DashboardData = {
   demo: boolean;
   stats?: { accountCount: number; circulation: number };
   wallet?: Account | null;
+  walletHistory?: {
+    rows: LedgerEntry[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
   integrations?: { itad: boolean; lavalink: boolean };
   user: { id: string; name: string; avatar: string | null };
   guilds: {
