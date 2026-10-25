@@ -32,9 +32,9 @@ test("commands are discoverable, derived from registration, searchable, and filt
   await expect(
     page.getByRole("heading", { name: "One command away." })
   ).toBeVisible();
-  await expect(page.getByRole("article")).toHaveCount(44);
+  await expect(page.getByRole("article")).toHaveCount(46);
   await expect(
-    page.getByText("Showing 44 of 44 command invocations", { exact: false })
+    page.getByText("Showing 46 of 46 command invocations", { exact: false })
   ).toBeVisible();
   await expect(
     page.getByText(
@@ -69,8 +69,8 @@ test("commands are discoverable, derived from registration, searchable, and filt
   expect(await catalog.json()).toMatchObject({
     source: "registration-definitions",
     registrationVerified: false,
-    rootCount: 29,
-    invocationCount: 44,
+    rootCount: 31,
+    invocationCount: 46,
   });
   expect(
     (await page.request.get("/api/guilds/990000000000000999/commands")).status()
@@ -114,7 +114,7 @@ test("command reference handles a failed load and retries instead of showing an 
     page.getByText("The command reference couldn’t load.", { exact: true })
   ).toBeVisible();
   await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await expect(page.getByRole("article")).toHaveCount(44);
+  await expect(page.getByRole("article")).toHaveCount(46);
 });
 test("audit detail copies the exact stored multiline error and full event JSON", async ({
   page,
