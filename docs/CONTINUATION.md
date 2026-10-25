@@ -425,22 +425,30 @@ build rather than being "protected" by a role check.
 
 ## Checks actually run (this pass)
 
-| Check                         | Command                                 | Result                                                                                                                                                                                                              |
-| ----------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit/integration              | `npx vitest run`                        | **724 tests / 61 files passed** (baseline before this pass: 692 / 58)                                                                                                                                               |
-| Music + permissions slice     | targeted vitest suites                  | `music-service` 14, `music-search` 7, `music-progress` 6, `permissions` 12, `music-api` 7                                                                                                                           |
-| Transport hardening           | `tests/integration-http.test.ts`        | 6 tests (classification, timeout, redirect/cache policy, bounded body, no retry, Retry-After)                                                                                                                       |
-| Documentation pipeline        | `tests/docs-content.test.ts`            | 5 tests (file existence, unique slugs, anchors/TOC, sanitized raw HTML, link rewriting, path escape)                                                                                                                |
-| Types                         | `tsc --noEmit` (root + `apps/web`)      | passed                                                                                                                                                                                                              |
-| Lint / formatting             | `npm run lint`, `npm run format:check`  | passed (Prettier clean)                                                                                                                                                                                             |
-| Production build              | `npm run build`                         | passed (Next + 6 tsup bundles); `/docs` static, `/docs/[slug]` with 20 prerendered pages                                                                                                                            |
-| Demo smoke (production build) | `curl` on `npm start`, `DEMO_MODE=true` | `/docs` 200; `/docs/music` 200 with rewritten in-app links; dashboard music page contains the seek control; `POST {action:"seek",position:12}` → `{"ok":true,"demo":true}` and the snapshot position became `12000` |
-| Browser suites                | CI only                                 | A new `tests/e2e/docs.spec.ts` covers index, anchors/TOC and a 390 px viewport; it has not been run locally (no Chromium in this sandbox)                                                                           |
+| Check                          | Command                                 | Result                                                                                                                                                                                                              |
+| ------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit/integration               | `npx vitest run`                        | **724 tests / 61 files passed** (baseline before this pass: 692 / 58)                                                                                                                                               |
+| Music + permissions slice      | targeted vitest suites                  | `music-service` 14, `music-search` 7, `music-progress` 6, `permissions` 12, `music-api` 7                                                                                                                           |
+| Transport hardening            | `tests/integration-http.test.ts`        | 6 tests (classification, timeout, redirect/cache policy, bounded body, no retry, Retry-After)                                                                                                                       |
+| Documentation pipeline         | `tests/docs-content.test.ts`            | 5 tests (file existence, unique slugs, anchors/TOC, sanitized raw HTML, link rewriting, path escape)                                                                                                                |
+| Types                          | `tsc --noEmit` (root + `apps/web`)      | passed                                                                                                                                                                                                              |
+| Lint / formatting              | `npm run lint`, `npm run format:check`  | passed (Prettier clean)                                                                                                                                                                                             |
+| Production build               | `npm run build`                         | passed (Next + 6 tsup bundles); `/docs` static, `/docs/[slug]` with 20 prerendered pages                                                                                                                            |
+| Demo smoke (production build)  | `curl` on `npm start`, `DEMO_MODE=true` | `/docs` 200; `/docs/music` 200 with rewritten in-app links; dashboard music page contains the seek control; `POST {action:"seek",position:12}` → `{"ok":true,"demo":true}` and the snapshot position became `12000` |
+| Browser suites (CI, this pass) | `npm run test:e2e` on the pushed branch | **56 passed** (1.1 min) including the new `tests/e2e/docs.spec.ts` (index, in-page anchors, 390 px layout); `verify` and `containers` jobs green on run `40243107496`. Locally not runnable (no Chromium binary)    |
 
 Not executed here, and why: live Discord authorization and audible playback (no
 credentials/Lavalink), live Steam/ITAD traffic (no outbound access), Docker
 Compose, a real database for migrations (no `TEST_DATABASE_URL`), and Playwright
-locally (no browser binary).
+locally (no browser binary). CI did run the browser suites on the pushed
+commits: 56 passed, with `verify` (lint, typecheck, unit, build, e2e) and
+`containers` green.
+
+CI caught two real regressions that local runs could not: the command-reference
+literals (31 roots / 46 invocations, 11 music invocations) had drifted when
+`/search` and `/seek` were added, and the documentation heading renderer escaped
+inline-code tags into the visible text and the anchor id. Both are fixed in
+follow-up commits on this branch.
 
 ## Decisions recorded
 
