@@ -24,15 +24,15 @@ The question was not "which docs site looks nicest", but "what fits an existing
 Next.js 16 App Router product whose docs are already Markdown in the same
 repository, deployed as static assets inside the existing container".
 
-| Option                          | What it actually is                                                                      | Deploy implication                                                  | Fit here                                                                  |
-| ------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `@next/mdx` (official Next.js)  | A plugin that compiles `.md`/`.mdx` files into routes or imports                         | Same Next.js build; no new host; needs `mdx-components.tsx`         | Good, but MDX pages would duplicate `docs/*.md` unless content moves      |
-| Fumadocs                        | A React documentation **framework** (headless core + UI + MDX tooling) built for Next.js | Same app or its own; requires `fumadocs-core/ui` + MDX pipeline     | Capable, but a framework with its own routing/content layer for ~18 pages |
-| Nextra                          | Opinionated Next.js docs theme; v4 rewrote for the App Router                            | Same app; owns routing/layout                                       | Heavier than needed; also historically coupled to specific Next versions  |
-| Docusaurus                      | Standalone React docs site with its own build and versioning                             | **A second deployment** and a content location outside the product  | Rejected: extra service, duplicated content, no benefit for one app       |
-| Starlight (Astro)               | Static docs site on Astro                                                                | New toolchain and host                                              | Rejected for the same reason                                              |
-| GitHub Pages (static export)    | Host Markdown/MDX from `gh-pages` or Actions                                             | Second publishing pipeline, base-path links, no product integration | Rejected                                                                  |
-| Render repo Markdown in the app | `marked` + `sanitize-html`, prerendered at build time                                    | Reuses the existing Next build and container; no new host           | **Chosen**                                                                |
+| Option                          | What it actually is                                                                      | Deploy implication                                                  | Fit here                                                                 |
+| ------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `@next/mdx` (official Next.js)  | A plugin that compiles `.md`/`.mdx` files into routes or imports                         | Same Next.js build; no new host; needs `mdx-components.tsx`         | Good, but MDX pages would duplicate `docs/*.md` unless content moves     |
+| Fumadocs                        | A React documentation **framework** (headless core + UI + MDX tooling) built for Next.js | Same app or its own; requires `fumadocs-core/ui` + MDX pipeline     | Capable, but a framework with its own routing/content layer for 20 pages |
+| Nextra                          | Opinionated Next.js docs theme; v4 rewrote for the App Router                            | Same app; owns routing/layout                                       | Heavier than needed; also historically coupled to specific Next versions |
+| Docusaurus                      | Standalone React docs site with its own build and versioning                             | **A second deployment** and a content location outside the product  | Rejected: extra service, duplicated content, no benefit for one app      |
+| Starlight (Astro)               | Static docs site on Astro                                                                | New toolchain and host                                              | Rejected for the same reason                                             |
+| GitHub Pages (static export)    | Host Markdown/MDX from `gh-pages` or Actions                                             | Second publishing pipeline, base-path links, no product integration | Rejected                                                                 |
+| Render repo Markdown in the app | `marked` + `sanitize-html`, prerendered at build time                                    | Reuses the existing Next build and container; no new host           | **Chosen**                                                               |
 
 Sources for the framework comparison (official sites where possible):
 
@@ -66,7 +66,7 @@ elsewhere" would be unverified.
    folder and a request never touches the disk. A content change ships with the
    next build — normal for static documentation, and documented here so nobody
    expects a runtime edit to appear.
-4. **Search: not justified yet.** With ~18 pages, grouped navigation plus the
+4. **Search: not justified yet.** With 20 pages, grouped navigation plus the
    browser's own find is faster than a search index, and a client-side search
    would add JavaScript and a second index to keep correct. Revisit if the page
    count grows or versioned API references are added.

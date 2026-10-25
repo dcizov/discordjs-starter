@@ -49,6 +49,20 @@ describe("in-app documentation is generated from the repository", () => {
     expect(rendered.html).toContain('href="/docs/music#start"');
   });
 
+  it("renders inline code in headings instead of leaking markup", () => {
+    const rendered = renderDoc(
+      { ...DOC_INDEX[0], file: "inline" },
+      "# T\n\n## Shared responsibilities (`integration-http.ts`)\n\nbody"
+    );
+    expect(rendered.html).not.toContain("&lt;code");
+    expect(rendered.html).not.toMatch(/id="[^"]*\bcode\b/);
+    expect(rendered.html).toContain("integration-http.ts");
+    expect(rendered.toc[0]).toMatchObject({
+      text: "Shared responsibilities (integration-http.ts)",
+      id: "shared-responsibilities-integration-http-ts",
+    });
+  });
+
   it("keeps external and in-app links distinct and blocks off-site beacons", () => {
     const html = rewriteDocLinks(
       '<a href="https://example.com/x">x</a><a href="SECURITY.md">s</a><a href="NOTES.md">n</a>'

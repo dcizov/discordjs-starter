@@ -245,6 +245,21 @@ const escapeHtml = (value: string) =>
  * Inline Markdown in a summary/title only ever produces escaped text: the
  * navigation is not a place to render arbitrary HTML.
  */
+/**
+ * Inline Markdown is rendered to HTML (inline code becomes `<code>`), so a
+ * heading id or a label must strip those tags instead of leaking the word
+ * "code" into the anchor or showing literal `&lt;code&gt;` text.
+ */
+function textFromHtml(html: string) {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 function plain(value: string) {
   return value
     .replace(/`([^`]+)`/g, "$1")
@@ -394,7 +409,7 @@ export function renderDoc(entry: DocEntry, markdown: string): RenderedDoc {
   const seen = new Map<string, number>();
   const renderer = new marked.Renderer();
   renderer.heading = ({ tokens, depth }) => {
-    const text = plain(renderer.parser.parseInline(tokens));
+    const text = plain(textFromHtml(renderer.parser.parseInline(tokens)));
     const base = slugifyHeading(text) || `section-${depth}`;
     const count = seen.get(base) ?? 0;
     seen.set(base, count + 1);
