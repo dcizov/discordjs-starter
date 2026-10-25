@@ -121,6 +121,8 @@ New focused lifecycle/routing/event/maintenance/Redis coverage: **86/8 PASS**. F
 
 The worker's existing transaction/outbox/reconciliation body remains deliberately unrewritten; only qualified env imports/non-creating shutdown are changed. This is not a claim to have modularized every remaining service.
 
+A follow-up behavioral regression deliberately made login resolve before `ClientReady`; it failed against a captured initially-resolved promise. Bootstrap now exposes one stable readiness promise completed only by initialization, with safe abort/failure observation. Focused lifecycle/action/event/maintenance coverage **28/4 PASS** and typecheck pass. This does not infer audible playback from startup.
+
 ### Stage 4 — dashboard ownership (implemented)
 
 Three new browser characterizations passed **before UI extraction**: header search/notification independence and navigation; overview preference rollback on an actual 503 response; and failed profile refresh retaining the real decoded identity image. The existing 45 browser scenarios were also green at baseline.

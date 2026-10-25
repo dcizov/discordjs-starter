@@ -14,6 +14,7 @@ const f = vi.hoisted(() => ({
     | undefined
     | (EventEmitter & { user: { id: string }; destroy: () => Promise<void> }),
   options: undefined as ClientOptions | undefined,
+  emitReady: true,
   login: vi.fn(),
   destroy: vi.fn(),
   detach: vi.fn(),
@@ -73,7 +74,7 @@ vi.mock("discord.js", async (original) => {
       }
       async login() {
         await f.login();
-        this.emit(sdk.Events.ClientReady);
+        if (f.emitReady) this.emit(sdk.Events.ClientReady);
         return "test-only-login";
       }
       destroy = f.destroy;
@@ -92,6 +93,7 @@ beforeEach(() => {
   runtime = undefined;
   f.client = undefined;
   f.options = undefined;
+  f.emitReady = true;
   beforeSignals = {
     SIGINT: process.listeners("SIGINT"),
     SIGTERM: process.listeners("SIGTERM"),
@@ -253,4 +255,20 @@ describe("explicit bot startup/stop ownership (no Discord/Redis connections)", (
     expect(f.closeWorker).toHaveBeenCalledTimes(1);
     expect(f.fatal).toHaveBeenCalled();
   });
+});
+
+it("does not report ready when login resolves before the SDK client-ready event", async () => {
+  f.emitReady = false;
+  runtime = await startBot();
+  let completed = false;
+  const ready = runtime!.ready.then(() => {
+    completed = true;
+  });
+  await Promise.resolve();
+  expect(completed).toBe(false);
+  expect(f.createWorker).not.toHaveBeenCalled();
+  f.client!.emit(Events.ClientReady);
+  await ready;
+  expect(completed).toBe(true);
+  expect(f.run).toHaveBeenCalledOnce();
 });

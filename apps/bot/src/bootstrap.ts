@@ -43,6 +43,15 @@ export async function startBot() {
   let consumerStarted = false;
   let stopMaintenance: Awaited<ReturnType<typeof startMaintenance>>;
   let initialization: Promise<void> = Promise.resolve();
+  let resolveReady!: () => void;
+  let rejectReady!: (error: unknown) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  // Entrypoints need not await this observer: initialization still logs/fails
+  // through its owner, and stopping before ClientReady is an expected rejection.
+  void ready.catch(() => {});
   let stopping: Promise<void> | undefined;
 
   async function initialize() {
@@ -93,7 +102,8 @@ export async function startBot() {
   }
   function onReady() {
     initialization = initialize();
-    void initialization.catch((error) => {
+    void initialization.then(resolveReady, (error) => {
+      rejectReady(error);
       if (!abort.signal.aborted) fail(error);
     });
   }
@@ -110,6 +120,7 @@ export async function startBot() {
   };
   function stop(): Promise<void> {
     if (stopping) return stopping;
+    rejectReady(new Error("Bot stopped before readiness completed."));
     abort.abort();
     detach();
     client.off(Events.ClientReady, onReady);
@@ -164,5 +175,5 @@ export async function startBot() {
       throw error;
     }
   }
-  return { stop, ready: initialization };
+  return { stop, ready };
 }
