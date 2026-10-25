@@ -63,25 +63,24 @@ describe("Compose startup and upgrade safety", () => {
       expect(compose.services[name].depends_on ?? {}).not.toHaveProperty(
         "lavalink"
       );
-    const health = compose.services.lavalink.healthcheck;
-    expect(health.test[0]).toBe("CMD-SHELL");
-    expect(health.test[1]).toContain("unset _JAVA_OPTIONS");
-    expect(health.test[1]).toContain("/opt/Lavalink/healthcheck Healthcheck");
-    expect(health.test[1]).not.toMatch(/curl|wget|node|password/i);
-    const source = readFileSync(
-      new URL("../docker/lavalink/Healthcheck.java", import.meta.url),
-      "utf8"
-    );
-    expect(source).toContain("http://127.0.0.1:2333/v4/info");
-    expect(source).toContain('System.getenv("LAVALINK_SERVER_PASSWORD")');
-    expect(source).toContain('setRequestProperty("Authorization", password)');
-    expect(source).toContain("getResponseCode() == 200");
+    // The derived image owns readiness, including plain-Docker deployments.
+    // Actual compiled HTTP/auth/refusal/redirect/recovery tests run in its JDK build.
+    expect(compose.services.lavalink).not.toHaveProperty("healthcheck");
     const docker = readFileSync(
       new URL("../docker/lavalink/Dockerfile", import.meta.url),
       "utf8"
     );
-    expect(docker).toContain("javac --release 17");
-    expect(docker).toContain("/tmp/healthcheck/ /opt/Lavalink/healthcheck/");
+    expect(docker).toMatch(
+      /HEALTHCHECK --interval=5s --timeout=5s --start-period=20s --retries=12/
+    );
+    expect(docker).toContain('CMD ["/opt/Lavalink/healthcheck/run"]');
+    const run = readFileSync(
+      new URL("../docker/lavalink/healthcheck.sh", import.meta.url),
+      "utf8"
+    );
+    expect(run).toContain("unset _JAVA_OPTIONS");
+    expect(run).toContain("exec java -Xms8m -Xmx32m");
+    expect(run).not.toMatch(/curl|wget|node|Authorization|PASSWORD/);
   });
 
   it("keeps the headless CI readiness wait alive between unrefed backend retries, then cancels its deadline", () => {

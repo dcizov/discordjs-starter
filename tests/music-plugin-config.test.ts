@@ -41,8 +41,10 @@ describe("reviewed non-adult Lavalink plugin profile", () => {
     expect(docker).not.toContain("--review-unpinned");
     expect(config.lavalink.plugins).toBeUndefined();
     expect(
-      docker.split("FROM ghcr.io/lavalink-devs/lavalink:4.2.2")[1]
-    ).not.toMatch(/USER root|ENTRYPOINT|CMD /);
+      docker
+        .split("FROM ghcr.io/lavalink-devs/lavalink:4.2.2")[1]
+        .replace(/\\\r?\n\s*/g, " ")
+    ).not.toMatch(/^(?:USER root|ENTRYPOINT|CMD)\b/m);
   });
   it("has exactly one audio-source owner and no mirroring, HTTP, local, or second TTS", () => {
     expect(config.lavalink.server.sources).toMatchObject({

@@ -169,16 +169,7 @@ services:
     # Host-run development bots need this; never bind the audio API publicly.
     ports:
       - "127.0.0.1:2333:2333"
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - >-
-          unset _JAVA_OPTIONS; exec java -Xms8m -Xmx32m -XX:+UseSerialGC
-          -cp /opt/Lavalink/healthcheck Healthcheck
-      interval: 5s
-      timeout: 5s
-      start_period: 20s
-      retries: 12
+    # Authenticated HTTP readiness is owned by the image's HEALTHCHECK.
     logging:
       driver: json-file
       options:

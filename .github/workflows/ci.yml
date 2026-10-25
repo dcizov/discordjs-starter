@@ -86,6 +86,22 @@ jobs:
               print(f"::error title=Pinned music backend build failed {index}::{escaped}")
           PYTHON
           exit 1
+      - name: Inspect image-owned Lavalink readiness contract
+        run: |
+          docker image inspect --format '{{json .Config.Healthcheck}}' orbit:lavalink-ci > "$RUNNER_TEMP/lavalink-healthcheck.json"
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import fs from "node:fs";
+            const health = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + "/lavalink-healthcheck.json", "utf8"));
+            assert.deepEqual(health.Test, ["CMD", "/opt/Lavalink/healthcheck/run"]);
+            assert.equal(health.Interval, 5000000000);
+            assert.equal(health.Timeout, 5000000000);
+            assert.equal(health.StartPeriod, 20000000000);
+            assert.equal(health.Retries, 12);
+          '
+          # Inspect the actual final image instead of assuming curl/wget is present.
+          tools="$(docker run --rm --network none --entrypoint sh orbit:lavalink-ci -c 'for tool in java curl wget node python; do if command -v "$tool" >/dev/null 2>&1; then printf "%s=yes " "$tool"; else printf "%s=no " "$tool"; fi; done')"
+          printf '::notice title=Lavalink runtime tool inventory::%s\n' "$tools"
       - name: Verify plugins, backend WebSocket and readiness without Discord/provider access
         run: |
           cleanup_backend() {
@@ -181,8 +197,8 @@ jobs:
             console.log("All nine pinned plugins + Soundy registered; supervised WebSocket/REST connected; only approved unique sources/filters active.");
           '
           # Exercise the exact image-side readiness probe, including bad auth.
-          docker exec orbit-lavalink-ci sh -c 'unset _JAVA_OPTIONS; exec java -Xms8m -Xmx32m -XX:+UseSerialGC -cp /opt/Lavalink/healthcheck Healthcheck'
-          if docker exec -e LAVALINK_SERVER_PASSWORD=ci-only-wrong-password orbit-lavalink-ci sh -c 'unset _JAVA_OPTIONS; exec java -Xms8m -Xmx32m -XX:+UseSerialGC -cp /opt/Lavalink/healthcheck Healthcheck'; then
+          docker exec orbit-lavalink-ci /opt/Lavalink/healthcheck/run
+          if docker exec -e LAVALINK_SERVER_PASSWORD=ci-only-wrong-password orbit-lavalink-ci /opt/Lavalink/healthcheck/run; then
             echo 'Readiness must fail with an incorrect password.' >&2
             exit 1
           fi

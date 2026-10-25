@@ -133,3 +133,128 @@ Three new browser characterizations passed **before UI extraction**: header sear
 - The public workspace contract, parent guild+user key, URL-keyed image fallback, scoped navigation, exact markup/style/accessibility labels and no-JS SSR are retained. Genuine same-workspace reconciliation effects remain; no new synchronization effect or browser-clock initialization.
 
 After extraction: **624/51 unit PASS, 44.55s**, typecheck/lint and fresh production/service build pass. **48/48 real Chromium browser PASS (1.3m)**, including old timezone/SSR/no-JS/mobile/image/permission/publishing regressions plus the three new layout cases. Standard CI/browser remains a separate final check, not inferred from this custom Chromium run.
+
+### Stage 5 — readiness ownership (implemented; container execution checked separately)
+
+The supplied [Lavalink 4.2.2 image source](https://github.com/lavalink-devs/Lavalink/blob/4.2.2/LavalinkServer/docker/Dockerfile) guarantees an unprivileged JVM/Java entrypoint, not a stable curl/wget feature contract. This task does **not** infer those binaries are absent: new CI records the actual final-image tool inventory. A small standard-library Java probe already exists and compiles in the JDK stage required by Soundy; retaining it avoids a runtime package installation or shell parsing of status/header output. It has exact-200 semantics, bounded connect/read timeouts, no redirects, and no credential output. A process-exists check is not equivalent.
+
+The improvement is one **image-owned `HEALTHCHECK`** invoking `/opt/Lavalink/healthcheck/run`, used unchanged by Compose, plain Docker and CI. Removed the Compose override and repeated Java command/heap arguments. The 4-line POSIX launcher clears the existing server `_JAVA_OPTIONS` before setting the small probe heap. No ports/dependencies/toolchains are added to the final image, and non-Compose deployments can execute the same probe. Java tests stay in the existing build-only JDK, not the final JRE.
+
+Added a real loopback Java harness with **9 checks**: missing/empty password, unavailable listener, successful recovery/readiness, wrong password, HTTP 503, redirect refusal, no redirect-target request, and recovery to 200. CI builds/runs it, inspects the actual image healthcheck metadata and invokes the same probe against actual Lavalink with valid and invalid auth. Replaced the obsolete Java-source-string assertions with those behavioral checks plus supplementary deployment-contract checks; existing tests are not deleted. The Dockerfile instruction check now distinguishes a `HEALTHCHECK ... CMD` from overriding the server's CMD/entrypoint.
+
+Local execution so far: **41/4 focused tests PASS**, Python installer **7 PASS**, YAML/format and `sh -n` PASS. **No local JDK/Docker execution is claimed.** Exact-head CI must establish the compiled probe and image behavior.
+
+## Remaining checks: consumers and meaning
+
+| Check / consumer                                                | Detects / does not prove                                                                     | Decision                                                     |
+| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Web `/api/healthz`, Compose + editor HTTP smoke                 | Web route liveness/mode; not DB/Redis/bot readiness                                          | Keep lightweight, no unrelated downstream I/O                |
+| PostgreSQL authenticated TCP `SELECT 1`, migration gate         | Credentials/database/TCP availability, not application schema                                | Keep; migration completion is a separate gate                |
+| Migration service completion, app/editor startup                | Required schema steps completed, not future DB health                                        | Keep; no resets or changed volumes                           |
+| Redis `PING`, bot/worker dependencies                           | Redis process responsiveness, not a job consumer or delivery                                 | Keep; AOF/noeviction unchanged                               |
+| Image `/v4/info` authenticated HTTP probe, Compose/plain Docker | Reachable authenticated endpoint with HTTP 200; no redirect; not plugins, WebSocket or voice | Consolidate into image, retain minimal JVM probe             |
+| Bot maintenance heartbeat / dashboard                           | Gateway `isReady` + current latency, music state; missing/stale isn't healthy                | Keep independent service signals; drain before final offline |
+| BullMQ consumer admission + scoped completion receipts          | Actual consumer availability; accepted/pending != completed                                  | Keep bounded admission, stale rejection and existing retries |
+| MusicBackend supervised WebSocket/reconnect                     | Connected application transport and recovery after downtime, not source/audio                | Keep; service_healthy only orders initial startup            |
+| CI plugin metadata/source/filter checks                         | Exact pinned versions, one owner per approved source and packaged capabilities               | Keep; not duplicated by generic HTTP 200                     |
+| Read-only music doctor                                          | Authenticated metadata and optional allowed track resolution                                 | Keep separate; no gateway join/queue/audio                   |
+| Owned Discord voice ACK/player lifecycle                        | Correct guild/bot/shard/channel pairing and owned cleanup                                    | Keep; unit transport fixtures != authorized live handshake   |
+| Actual audible track / production delivery                      | Requires authorized real provider + guild checks                                             | Not performed; no health indicator substitutes for this      |
+
+## Actual source map and dependency direction
+
+```text
+apps/bot/src/
+  index.ts                        dotenv + fatal boundary (9 lines)
+  bootstrap.ts                    resource construction, ready promise, stop ownership
+  commands/
+    register.ts / registration.ts  CLI / explicit REST registration
+    dispatch.ts / context.ts       fixed routing / acknowledged member+config snapshot
+    community.ts economy.ts moderation.ts music.ts news.ts roles.ts
+  interactions/
+    dispatch.ts                    type dispatch, early private defer, sanitized errors
+    autocomplete.ts replies.ts     scoped suggestions / response presentation
+  events/gateway.ts                explicit typed registration + owned disposal
+  features/
+    community.ts                   native publication/claim/settlement transport
+    deals/{commands,replies,selection}.ts
+    moderation/{actions,messages}.ts
+    roles/{panels,shop}.ts
+    music/{service,backend,voice,node,source,plugins,diagnostics}.ts
+  infrastructure/
+    action-consumer.ts              dashboard job execution/consumer
+    maintenance.ts guild-sync.ts    owned periodic work / Discord→DB snapshots
+  tools/{export-channels,channel-export,music-doctor}.ts
+apps/web/components/
+  dashboard.tsx                    workspace data/API and composition
+  layout/                         sidebar, header, guidance, notice, installation, navigation
+  identity/                       image lifecycle and account controls
+  features/community/             page, draft editor, record, review
+  features/overview/              overview, toolkit, preferences, connection status
+  activity-chart.tsx ui/ ...       retained shared chart/primitives and mature feature pages
+packages/core/src/
+  commands.ts command-catalog.ts   single definitions and derived reference metadata
+  config.ts environment.ts        feature schemas / qualified server runtime policy
+  activity.ts permissions.ts ...  shared pure invariants and explicit integrations
+packages/db/src/                  persistence, tenant predicates and transactions
+apps/worker/src/                  retained outbox/reconciliation, no second framework
+```
+
+Entrypoints → bootstrap/adapters → feature services → core policy + DB. DB depends on core, never bot/web. No feature imports bootstrap, no implicit command/event discovery, no new barrel chain or plugin/client superclass. **Command source of truth stays core**: registration sends its exact JSON; the dashboard catalog derives from it; behavioral tests cover every registered root's route. No command builder, usage/permission metadata or public name is recreated in the new folders.
+
+## Concrete before/after examples
+
+```ts
+// Before: role/channel events inspected untyped positional arguments in startup.
+client.on(event, (...args: any[]) => {
+  const role = args.at(-1);
+  void (syncGuild(role.guild).catch(/* another inline logger */));
+});
+// After: SDK-typed argument, shared sync operation, owned listener disposal.
+listen(Events.GuildRoleUpdate, (_before, role) => sync(role.guild));
+```
+
+```ts
+// Before: hundreds of lines of event bodies and a queue processor inside main().
+// After: only orchestration knows lifecycle; handlers own implementation.
+stopMaintenance = await startMaintenance(client, music, abort.signal);
+if (abort.signal.aborted) return;
+worker = createActionConsumer(client, music, rest); // autorun false until ready
+```
+
+```tsx
+// Before: Dashboard owned profileBusy + OAuth action, search/notifications,
+// theme controls, navigation, every chrome dialog and workspace mutations.
+// After: explicit ownership, existing workspace boundary, no manager hook.
+<DashboardHeader
+  section={section}
+  onOpenNavigation={openMenu}
+  onModeInfo={openInfo}
+/>
+// AccountMenu owns profileBusy; header owns search/notifications; Dashboard
+// keeps only data/optimistic reconciliation and genuinely shared layout state.
+```
+
+```dockerfile
+# Before: consumers repeated heap/unset/class invocation; Compose-only health.
+# After: image owns the command and policy; consumers call the same executable.
+HEALTHCHECK --interval=5s --timeout=5s --start-period=20s --retries=12 \
+    CMD ["/opt/Lavalink/healthcheck/run"]
+```
+
+These are responsibility/contract reductions, not a claim that total source lines decrease. New lifecycle/security characterizations are intentional. Client boundaries remain interactive where the workspace requires them; server loading/auth and serialized chart data remain server-side.
+
+## Compatibility and update procedure
+
+- No DB schema migration, reset, volume deletion, credential rotation, permission/scope broadening, public command JSON or queue protocol change. Existing hashed sessions/encrypted tokens/profile refresh remain. **No Better Auth or t3-env migration is implemented.**
+- Existing npm script names and six `dist/*.js` names stay stable. Direct source imports moved; internal tests/tooling/CI use the new paths. Consumers importing private source paths should follow the source map, not retain compatibility barrels.
+- Rebuild/recreate normal app and Lavalink images with the existing **direct Compose** workflow; no host npm or Docker wrapper scripts. Refresh a populated dev dependency volume using the existing documented container-side `npm ci` procedure. Re-register only if your deployment actually changed command definitions—not for this refactor.
+- The custom audio image now carries health metadata. Rebuild it; merely removing a Compose override while keeping an old image would not supply the new healthcheck. Non-Compose hosts keep their supervisor and can call `/opt/Lavalink/healthcheck/run` inside that image.
+- Production dependencies/framework versions are unchanged. Vitest is the only installed major tool change; its supported Node 22/24 environment is verified separately. Drizzle Kit's declared minimum changed, but its resolved version was already 0.31.11. No runtime dependency was added; obsolete Tinypool/old mocker transitives disappeared with Vitest's supported graph.
+
+## Deferred complexity and evidence limits
+
+- Better Auth/token/session migration, t3-env, worker transaction/outbox decomposition, large resource editor overhaul and broad dependency/framework upgrades remain deferred with reasons above. They are not described as implemented.
+- Economy locking/idempotency, publication claims/revisions/ambiguous sends, paused cleanup, voice ownership/stale events, SSRF/mentions, guild authorization and deterministic chart snapshots remain explicit. Similar checks at different trust/transaction boundaries are not merged merely for fewer lines.
+- Existing background dashboard refresh error presentation and multi-replica OAuth refresh concurrency are not redesigned. No new live credential, gateway lease/status registry, periodic provider polling or auto-replay is introduced.
+- No authorized Discord OAuth/guild/CDN/audio/provider check is claimed. Browser image fixtures demonstrate decoding and failure recovery, not live CDN success. Local SQL uses PGlite unless a dedicated TEST_DATABASE_URL is supplied; real PostgreSQL/Redis/backend/container checks are reported only from observed exact-head CI.

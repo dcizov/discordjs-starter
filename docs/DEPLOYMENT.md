@@ -91,6 +91,7 @@ No operation is authorized with expired cached guild permissions when verificati
 - Bot heartbeats occur every 30 seconds; worker reconciliation/heartbeat every minute.
 - Inspect structured stdout logs, failed BullMQ jobs, source health, audit events, and delivery history. Alert on missing heartbeats, repeated 429s, permission failures, database pool pressure, and outbox backlog.
 - A disabled optional music backend should not be mistaken for a failed web/database service.
+- The supplied Lavalink image owns its authenticated HTTP `HEALTHCHECK`; Compose inherits it. Plain Docker can use the same metadata; other supervisors can exec `/opt/Lavalink/healthcheck/run`. Rebuild the custom image when upgrading this contract. HTTP ready is not WebSocket/plugin/voice/playback proof; see the [health ownership matrix](STRUCTURE-REFACTOR.md#remaining-checks-consumers-and-meaning).
 
 PostgreSQL is the source of truth for settings, money, entitlements, audits, and delivery uniqueness. Redis is the transport/scheduling system, with AOF and no eviction. Durable outbox recovery repairs a database-reserved delivery that could not be enqueued, but exhausted failures should be investigated rather than blindly replayed. Stable event IDs and nonces should be preserved when retrying operationally.
 
