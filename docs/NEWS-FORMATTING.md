@@ -21,15 +21,15 @@ namespaces; `date: 1792018968` matches the page). Captured 2026-10-25:
 server startup flag \"-allow_round_backup_files\"[/p][/*]…[/list]
 ```
 
-| Symptom in the screenshot                    | Actual cause                                                                                                                                     |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Literal `[/*]` lines                          | The old replacement chain consumed `[*]` but never `[/*]`; Steam closes an item with `[/*]` and immediately opens the next one with `[*]`.        |
-| `\[ UI ]`, `\"…\"`                            | Steam backslash-escapes literal brackets and quotes. Nothing unescaped them, and the escaping is *per character* (`\[` escaped, `]` not).          |
-| Excess spacing between bullets                | Each leaked `[/*]` became its own text line, so `whitespace-pre-line` rendered a blank line between every bullet.                                  |
-| Very long card                                | 480 characters of changelog is a wall of bullets; the shape was never bounded, only the length.                                                   |
+| Symptom in the screenshot                                          | Actual cause                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Literal `[/*]` lines                                               | The old replacement chain consumed `[*]` but never `[/*]`; Steam closes an item with `[/*]` and immediately opens the next one with `[*]`.                                                                                                                |
+| `\[ UI ]`, `\"…\"`                                                 | Steam backslash-escapes literal brackets and quotes. Nothing unescaped them, and the escaping is _per character_ (`\[` escaped, `]` not).                                                                                                                 |
+| Excess spacing between bullets                                     | Each leaked `[/*]` became its own text line, so `whitespace-pre-line` rendered a blank line between every bullet.                                                                                                                                         |
+| Very long card                                                     | 480 characters of changelog is a wall of bullets; the shape was never bounded, only the length.                                                                                                                                                           |
 | "External link, not a first-party post" on Valve's own patch notes | `is_external_url` is `true` on **every** item in the capture — Valve's own included — because `url` is always a Steam redirector (`steamstore-a.akamaihd.net/news/externalpost/<feed>/<gid>`). The old classifier treated that flag as "not first party". |
-| "CS2" as the article's source                | `newsCard()` let the administrator's subscription name override the provider's own label (`Community Announcements` / `Rock, Paper, Shotgun`).   |
-| "No provider-supplied image." in every card   | A per-item diagnostic rendered in the article body.                                                                                              |
+| "CS2" as the article's source                                      | `newsCard()` let the administrator's subscription name override the provider's own label (`Community Announcements` / `Rock, Paper, Shotgun`).                                                                                                            |
+| "No provider-supplied image." in every card                        | A per-item diagnostic rendered in the article body.                                                                                                                                                                                                       |
 
 All of these are now covered by `tests/steam-news.test.ts` (24 tests) and
 `tests/steam-route.test.ts` (5 tests) running against the recorded payloads in
@@ -40,15 +40,15 @@ All of these are now covered by `tests/steam-news.test.ts` (24 tests) and
 Official starting point: <https://steamcommunity.com/dev> → Valve Developer
 Community `Steam_Web_API` (`GetNewsForApp (v0002)`).
 
-| Aspect                | Verified                                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Endpoint              | `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/`                                                          |
-| Credential            | Docs state all Web API use needs a key; **this endpoint answered without one** on 2026-10-25. Orbit neither sends nor requires a key. |
-| Documented parameters | `appid`, `count`, `maxlength`, `format`. Orbit sends `appid`, `count=10`, `maxlength=0`, `format=json`.               |
-| `maxlength`           | Upstream truncation. With `maxlength=700` Steam cut bodies mid-sentence and appended `…`. Orbit therefore requests full content (`maxlength=0`) and truncates for presentation itself; a trailing `…` from a stored payload is reported as an upstream truncation notice. |
-| Undocumented, observed | `feeds` (filters to one feed), `feed_type` (`1` = app announcement hub, `0` = syndicated publisher feed), `feedname`, `feedlabel`, `is_external_url`. |
-| Stable identity       | `gid` — used as the dedupe key.                                                                                     |
-| Article URL           | Always `steamstore-a.akamaihd.net/news/externalpost/<feed>/<gid>`, a Steam-hosted redirect to the publisher. Orbit links to it and does not follow it server-side. |
+| Aspect                 | Verified                                                                                                                                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Endpoint               | `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/`                                                                                                                                                                                                               |
+| Credential             | Docs state all Web API use needs a key; **this endpoint answered without one** on 2026-10-25. Orbit neither sends nor requires a key.                                                                                                                                     |
+| Documented parameters  | `appid`, `count`, `maxlength`, `format`. Orbit sends `appid`, `count=10`, `maxlength=0`, `format=json`.                                                                                                                                                                   |
+| `maxlength`            | Upstream truncation. With `maxlength=700` Steam cut bodies mid-sentence and appended `…`. Orbit therefore requests full content (`maxlength=0`) and truncates for presentation itself; a trailing `…` from a stored payload is reported as an upstream truncation notice. |
+| Undocumented, observed | `feeds` (filters to one feed), `feed_type` (`1` = app announcement hub, `0` = syndicated publisher feed), `feedname`, `feedlabel`, `is_external_url`.                                                                                                                     |
+| Stable identity        | `gid` — used as the dedupe key.                                                                                                                                                                                                                                           |
+| Article URL            | Always `steamstore-a.akamaihd.net/news/externalpost/<feed>/<gid>`, a Steam-hosted redirect to the publisher. Orbit links to it and does not follow it server-side.                                                                                                        |
 
 Because `feed_type` is not documented, attribution is stated as what the
 metadata supports and no more.
@@ -107,7 +107,7 @@ not "everything Valve published".
 `NEWS_LIMITS` = title 256, excerpt 480 characters, **3 paragraphs**, **5
 bullets**, description 4096, footer 2048, image URL 2000.
 
-`excerpt()` bounds the *shape* first and the character count last: it walks
+`excerpt()` bounds the _shape_ first and the character count last: it walks
 paragraphs, stops when the bullet budget is spent, drops a section that would
 only contribute a heading plus one bullet ("[ MISC ]" with a single line is
 worse than omitting it), and never ends on a bare heading. `feedEmbed()` uses

@@ -1,9 +1,14 @@
 # Continuation report
 
-Date: 2026-10-25 · Branch `arena/99c6cf65-discordjs-starter` · Recovered HEAD
-`eeb0e68a533d653daa14015465b6e6760e41c49d` (identical to the tip of
-`origin/arena/e2b42b08-discordjs-starter`, 57 commits ahead of `origin/main`;
-clean worktree, no stashes, no local-only or remote-only commits).
+Date: 2026-10-25 · Branch `arena/99c6cf65-discordjs-starter`.
+
+- **Starting point of the dashboard work:**
+  `eeb0e68a533d653daa14015465b6e6760e41c49d` (tip of
+  `origin/arena/e2b42b08-discordjs-starter`).
+- **Starting point of this Steam pass:** `2c4b3c0` (verified to be seven commits
+  ahead of `eeb0e68`, with no commits unique to the older branch).
+- **Ending HEAD:** see `git log -1` on the branch; the Steam work is
+  `8ce2dc9` plus the two follow-up test-locator commits.
 
 Fetched (`git fetch --depth=50 origin 'refs/heads/*:refs/remotes/origin/*'`)
 without merging, rebasing or resetting. `origin/main` is an ancestor of this
@@ -12,16 +17,16 @@ recovered from a new workspace.
 
 ## Recovered status matrix
 
-| Area                                     | State before this session                                                                                   | Evidence                                                                                     | Now                                                                                                              |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Monorepo structure / Turborepo           | npm workspaces (`apps/*`, `packages/*`), tsup for services, one Next app                                    | `package.json`, `tsup.config.ts`, `.github/workflows/ci.yml`, `docs/STRUCTURE-REFACTOR.md`   | Researched and **retained unchanged** (see decision record)                                                      |
-| News formatting, images, excerpts, links | Broken: one-tag-stripping normalizer, no BBCode handling, no images, no attribution, preview ≠ delivery     | `packages/core/src/feeds.ts`, `safety.ts`, screenshot 1                                      | **Implemented and freshly verified** (`docs/NEWS-FORMATTING.md`)                                                 |
-| Audit / activity identity images         | Initials only, no avatar data recorded                                                                      | `overview.tsx`, `server-pages.tsx`, screenshot 2                                             | **Implemented** (recorded avatar hashes + migration); unit-verified, browser-unverified                          |
-| Music state, channel, progress, volume   | Pause-styled control while empty; snapshot-only position; volume committed per event and snapped back       | `music-page.tsx`, screenshot 3                                                               | **Implemented** (`docs/DASHBOARD-UX.md`); unit-verified, browser-unverified                                      |
-| First-visit dashboard tour               | None                                                                                                        | no tour code, no storage policy                                                              | **Implemented + verified** (`tour-model.ts`, dialog, `tests/tour.test.ts`, `tests/e2e/tour.spec.ts` green in CI) |
-| Overview banner animation                | Animation on the filtered `<img>` itself                                                                    | `overview.tsx`, `globals.css`                                                                | **Implemented** compositor-only wrapper + reduced-motion/mobile opt-out; no frame-time measurement possible      |
-| Ticket system                            | Not implemented (documented as high privacy burden in `FEATURE-RESEARCH.md`)                                | no tickets table/command/dashboard                                                           | **Deferred** — see below                                                                                         |
-| Operational / server health              | Honest separation of container liveness, saved config, backend readiness and delivery health already exists | `apps/bot/src/features/music/diagnostics.ts`, `service_health`, dashboard `ConnectionStatus` | **Unchanged this session**; extension deferred                                                                   |
+| Area                                     | State before this session                                                                                   | Evidence                                                                                     | Now                                                                                                                                                                                                           |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Monorepo structure / Turborepo           | npm workspaces (`apps/*`, `packages/*`), tsup for services, one Next app                                    | `package.json`, `tsup.config.ts`, `.github/workflows/ci.yml`, `docs/STRUCTURE-REFACTOR.md`   | Researched and **retained unchanged** (see decision record)                                                                                                                                                   |
+| News formatting, images, excerpts, links | Broken: one-tag-stripping normalizer, no BBCode handling, no images, no attribution, preview ≠ delivery     | `packages/core/src/feeds.ts`, `safety.ts`, screenshot 1                                      | **Implemented + verified against recorded provider data** (`docs/NEWS-FORMATTING.md`); the first pass was re-opened after a second screenshot showed surviving `[/*]`/`\[` markers — see "Steam rework" below |
+| Audit / activity identity images         | Initials only, no avatar data recorded                                                                      | `overview.tsx`, `server-pages.tsx`, screenshot 2                                             | **Implemented** (recorded avatar hashes + migration); unit-verified, browser-unverified                                                                                                                       |
+| Music state, channel, progress, volume   | Pause-styled control while empty; snapshot-only position; volume committed per event and snapped back       | `music-page.tsx`, screenshot 3                                                               | **Implemented** (`docs/DASHBOARD-UX.md`); unit-verified, browser-unverified                                                                                                                                   |
+| First-visit dashboard tour               | None                                                                                                        | no tour code, no storage policy                                                              | **Implemented + verified** (`tour-model.ts`, dialog, `tests/tour.test.ts`, `tests/e2e/tour.spec.ts` green in CI)                                                                                              |
+| Overview banner animation                | Animation on the filtered `<img>` itself                                                                    | `overview.tsx`, `globals.css`                                                                | **Implemented** compositor-only wrapper + reduced-motion/mobile opt-out; no frame-time measurement possible                                                                                                   |
+| Ticket system                            | Not implemented (documented as high privacy burden in `FEATURE-RESEARCH.md`)                                | no tickets table/command/dashboard                                                           | **Deferred** — see below                                                                                                                                                                                      |
+| Operational / server health              | Honest separation of container liveness, saved config, backend readiness and delivery health already exists | `apps/bot/src/features/music/diagnostics.ts`, `service_health`, dashboard `ConnectionStatus` | **Unchanged this session**; extension deferred                                                                                                                                                                |
 
 ## Prioritisation used this session
 
@@ -104,7 +109,9 @@ News (`docs/NEWS-FORMATTING.md`):
   metadata complaints.
 - `apps/web/components/news-article-card.tsx`, `resources-page.tsx`,
   `resource-editor.tsx` — cards with image/title link/excerpt/attribution/date/
-  "Read more"/notices; Steam "Official announcements only" switch.
+  destination-aware link text; technical notices in a collapsed disclosure;
+  Steam "Official announcements only" switch (requests the app announcement
+  feed).
 - `apps/bot/src/commands/news.ts` — `/news test` renders the same cards as one
   embed with source links and notices.
 
@@ -120,21 +127,102 @@ Identity (`docs/DASHBOARD-UX.md`):
 
 Music, tour, animation: see `docs/DASHBOARD-UX.md`.
 
+## Steam rework (this pass, commits `8ce2dc9` → HEAD)
+
+**Reproduction.** The reported article is
+`steamcommunity.com/games/CSGO/announcements/detail/687519694976975305`. Its API
+record is `gid 1846651706675829` at
+`date 1792018968` (2026-10-14T23:02:48Z, i.e. 19:02 EDT as the page shows).
+The raw body was captured from the live API on 2026-10-25:
+
+```
+[p]\[ UI ][/p][p]Demo/Replay viewer improvements:[/p][list]
+[*][p]Added a progress bar for demo/replay downloads[/p][/*]…[/list]
+```
+
+**Confirmed causes.**
+
+| Symptom                                 | Cause                                                                                                                     |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Literal `[/*]` lines                    | The replacement chain consumed `[*]` but not `[/*]`; Steam closes with `[/*]` and reopens with `[*]`.                     |
+| `\[ UI ]`, `\"flag\"`                   | Steam backslash-escapes literal brackets/quotes, per character; nothing unescaped them.                                   |
+| Blank line per bullet                   | Each leaked `[/*]` became its own text line and `whitespace-pre-line` rendered the gap.                                   |
+| "External link, not a first-party post" | `is_external_url` is `true` on **every** captured item, Valve's own included, because the URL is a Steam redirector.      |
+| "CS2" credited as the source            | `newsCard()` preferred the administrator's subscription name over the provider's `feedlabel`.                             |
+| Card looked far longer than 480 chars   | It was within 480 characters, but the shape was unbounded and the leaked markers added lines. Bounds are now shape-first. |
+| "No provider-supplied image." in body   | A per-item diagnostic rendered inside the article card.                                                                   |
+
+**API facts verified** (see `docs/NEWS-FORMATTING.md`):
+`https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/` answered **without an
+API key** on 2026-10-25 even though Valve's docs say a key is required; Orbit
+sends none and requires none. Documented params are `appid`, `count`,
+`maxlength`, `format`. `maxlength` truncates upstream and appends `…` (observed
+with `maxlength=700`), so Orbit asks for `maxlength=0`. `feeds`, `feed_type`,
+`feedname`, `feedlabel` and `is_external_url` are observed but undocumented.
+Item identity is `gid`.
+
+**Fixture provenance.** `tests/fixtures/steam/` holds two recorded responses,
+the generated preview payload the browser test replays, and a README with the
+exact URLs, date, credential status, redactions (none needed) and fidelity
+(`maxlength=0` full vs `maxlength=700` upstream-truncated).
+
+**Before → after for the reported article.**
+
+```
+before (reported screenshot)                 after
+[/*]                                         [ UI ]
+[/*]                                         (blank line)
+•                                            Demo/Replay viewer improvements:
+Added CSHostage…                             • Added a progress bar for demo/replay downloads
+[/*]                                         • Camera controls now use click-and-drag scheme
+\[ UI ]                                      • Free and chase camera are usable during a paused demo
+…                                            • Fixed some minor issues when seeking to a different position…
+badge: "External link, not a first-party post"   badge: "App announcement"
+link:  "Read more from CS2"                      link:  "Read the announcement"
+```
+
+**Representative delivered payload** (`feedEmbed` for the same item):
+
+```json
+{
+  "title": "Counter-Strike 2 Update",
+  "url": "https://steamstore-a.akamaihd.net/news/externalpost/steam_community_announcements/1846651706675829",
+  "description": "[ UI ]\n\nDemo/Replay viewer improvements:\n• Added a progress bar for demo/replay downloads\n• Camera controls now use click-and-drag scheme\n• Free and chase camera are usable during a paused demo\n• Fixed some minor issues when seeking to a different position in the demo file",
+  "color": 10189530,
+  "footer": {
+    "text": "Community Announcements · App announcement · via Orbit"
+  },
+  "timestamp": "2026-10-14T23:02:48.000Z"
+}
+```
+
+**Behaviour changes to be aware of:**
+
+- `newsCard().sourceLabel` is now the provider's feed; the administrator's name
+  moves to `subscriptionLabel` (shown in the card's details). Outbox payloads
+  gained `providerLabel`/`publisher`; older pending payloads fall back to
+  `sourceName`, so no migration is needed.
+- `NewsAttribution` is `official | syndicated | unknown` (`external` renamed).
+- A provider outage now returns **502** with `Retry-After` instead of 400.
+
 ## Checks actually run (this branch, this session)
 
-| Check                          | Command                                          | Result                                                                                                                                                           |
-| ------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Fresh baseline before changes  | `npm ci` + `npm test`                            | 627 tests / 52 files passed (31.45 s)                                                                                                                            |
-| Unit/integration after changes | `npm test`                                       | **655 tests / 55 files passed** (28.7 s) — includes 17 news, 5 music-progress, 5 tour tests and extended identity/image suites                                   |
-| Types                          | `npm run typecheck` (`next typegen` + two `tsc`) | passed                                                                                                                                                           |
-| Lint                           | `npm run lint`                                   | passed (0 warnings)                                                                                                                                              |
-| Formatting                     | `npm run format` / `prettier --check`            | applied; clean                                                                                                                                                   |
-| Production build               | `npm run build`                                  | passed (Next + 6 tsup bundles)                                                                                                                                   |
-| Demo API smoke                 | `curl` against `npm start` with `DEMO_MODE=true` | `/api/guilds/:id` returns `actorAvatarUrl`; test-flight returns normalized cards/notices                                                                         |
-| SSR smoke                      | `curl` `/dashboard/:id/overview`                 | 200, hero wrapper present, tour dialog absent from SSR (client-only, as intended)                                                                                |
-| Schema generation              | `npx drizzle-kit generate`                       | `0003_audit_actor_avatar.sql` = a single `ADD COLUMN` (a first attempt with a corrupted schema file produced `DROP TABLE`s and was reverted before anything ran) |
+| Check                         | Command                                          | Result                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fresh baseline before changes | `npm ci` + `npm test`                            | 627 tests / 52 files passed (31.45 s)                                                                                                                            |
+| Unit/integration, first pass  | `npm test`                                       | 655 tests / 55 files passed                                                                                                                                      |
+| Unit/integration, Steam pass  | `npm test`                                       | **684 tests / 57 files passed** — adds 24 capture-driven Steam tests and 5 route tests                                                                           |
+| Steam captures                | `tests/steam-news.test.ts`                       | 24/24 against the recorded 2026-10-25 payloads                                                                                                                   |
+| Steam route                   | `tests/steam-route.test.ts`                      | 5/5 through the real handler with `fetch` stubbed; asserts endpoint, no key, cards, 502 + Retry-After                                                            |
+| Types                         | `npm run typecheck` (`next typegen` + two `tsc`) | passed                                                                                                                                                           |
+| Lint                          | `npm run lint`                                   | passed (0 warnings)                                                                                                                                              |
+| Formatting                    | `npm run format` / `prettier --check`            | applied; clean                                                                                                                                                   |
+| Production build              | `npm run build`                                  | passed (Next + 6 tsup bundles)                                                                                                                                   |
+| Demo API smoke                | `curl` against `npm start` with `DEMO_MODE=true` | `/api/guilds/:id` returns `actorAvatarUrl`; test-flight returns normalized cards/notices                                                                         |
+| SSR smoke                     | `curl` `/dashboard/:id/overview`                 | 200, hero wrapper present, tour dialog absent from SSR (client-only, as intended)                                                                                |
+| Schema generation             | `npx drizzle-kit generate`                       | `0003_audit_actor_avatar.sql` = a single `ADD COLUMN` (a first attempt with a corrupted schema file produced `DROP TABLE`s and was reverted before anything ran) |
 
-| Browser suites (CI) | `npm run test:e2e` on the pushed branch | **51 passed** (1.2 min), verify job green |
+| Browser suites (CI) | `npm run test:e2e` on the pushed branch | **53 passed** (1.3 min), verify + containers jobs green |
 
 Not executed in the authoring sandbox, and why:
 
@@ -142,8 +230,10 @@ Not executed in the authoring sandbox, and why:
   available in the authoring sandbox (`npx playwright install chromium` cannot
   download there), so the specs were executed by CI on push instead: the
   `verify` job ran `npx playwright install --with-deps chromium` and
-  `npm run test:e2e` with **51 passing tests**, covering the first-visit tour,
-  the honest transport state, snapshot progress and volume commit. That run
+  `npm run test:e2e` with **53 passing tests**, covering the first-visit tour,
+  the honest transport state, snapshot progress, volume commit, and the Steam
+  preview (real recorded payload, no markers, one line per bullet, collapsed
+  diagnostics, retryable failure). That run
   caught one genuine defect the code review missed: the volume slider sent two
   identical jobs per keyboard interaction (the debounce ref was not cleared
   when its timer fired, so the blur caused by disabling the slider mid-save
@@ -166,24 +256,35 @@ Not executed in the authoring sandbox, and why:
 - No new environment variables, scopes, intents or permissions.
 - Optional: enable **Official announcements only** per Steam source.
 
+## Feature completion matrix (accurate, not aspirational)
+
+| Item from the original brief                   | Status                                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| News formatting / images / links / attribution | **Done and verified against recorded provider data**                                         |
+| Audit identity images                          | Done (unit + browser suites)                                                                 |
+| Music state / progress / volume                | Done (unit + browser suites)                                                                 |
+| First-visit tour                               | Done (unit + browser suites)                                                                 |
+| Overview banner animation                      | Done; improvement argued from paint/filter cost, **not measured** (no device profiling here) |
+| Monorepo / Turborepo assessment                | Done: retain npm workspaces (decision record earlier in this file)                           |
+| Ticket system                                  | **Not implemented — deferred** (criteria in "next steps")                                    |
+| Operational-health extension                   | **Not implemented — deferred** (criteria in "next steps")                                    |
+
 ## Known gaps / next concrete steps
 
-1. Run `npm run test:e2e` in CI (or a machine with Chromium) and fix any selector
-   drift in `tests/e2e/tour.spec.ts` and `tests/e2e/music-actions.spec.ts`.
-2. Visual check of the news test-flight dialog and of the hero animation on a
-   low-powered device; remove `will-change` if the measurement shows no benefit.
-3. Ticket vertical slice (deferred): needs a `tickets` table, panel resource,
+1. Visual check of the hero animation on a low-powered device; remove
+   `will-change` if a measurement shows no benefit.
+2. Ticket vertical slice (deferred): needs a `tickets` table, panel resource,
    overwrite model validated before any content is exposed, per-member open
    limits, claim/close interactions, restart/deleted-channel reconciliation,
    dashboard configuration and list, audit events, and an explicit
    no-transcripts-by-default retention policy. Design review required before
    implementation; do not promise privacy from administrators.
-4. Health extension (deferred): add measured bot heartbeat/gateway state, queue
+3. Health extension (deferred): add measured bot heartbeat/gateway state, queue
    depth and feed freshness to the existing health view, keeping liveness,
    readiness, saved configuration and confirmed execution separate. Do not
    invent a score.
-5. Community audit rows still store the actor's snowflake as the display name
+4. Community audit rows still store the actor's snowflake as the display name
    (`packages/db/src/community.ts`); fixing it means passing an actor name/avatar
    through `change()`, which is a separate, reviewable change.
-6. Consider Open Graph images for RSS only after an SSRF-reviewed fetcher with
+5. Consider Open Graph images for RSS only after an SSRF-reviewed fetcher with
    timeouts, size/content-type limits, cache and failure isolation.
