@@ -206,6 +206,14 @@ export type FeedItem = {
   tags: string[];
   /** Provider-supplied lead image. Never fetched or guessed by Orbit. */
   image?: string | null;
+  /**
+   * Where `image` came from. `article` is a picture the article itself carried;
+   * `app-artwork` is a store image for the game the article is about (a
+   * labelled fallback, never presented as article imagery).
+   */
+  imageKind?: "article" | "app-artwork";
+  /** Human-readable credit for a fallback image, e.g. "Dota 2 · Steam store artwork". */
+  imageAttribution?: string;
   attribution?: NewsAttribution;
   /** Producer of the item as named by the provider, e.g. "Community Announcements". */
   sourceLabel?: string;

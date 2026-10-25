@@ -1,4 +1,6 @@
 "use client";
+import { useState } from "react";
+import { ImageOff } from "lucide-react";
 import { Badge } from "./ui/primitives";
 import type { NewsCard } from "@orbit/core/news-presentation";
 import { cn } from "@/lib/utils";
@@ -13,6 +15,40 @@ function publishedLabel(value: string | null) {
     year: "numeric",
     timeZone: "UTC",
   }).format(date);
+}
+
+/**
+ * Fixed-size thumbnail: the box is reserved whether or not the third-party
+ * image loads, so a broken or blocked image cannot shift the card, and a
+ * failed load shows a neutral placeholder instead of a broken-image glyph.
+ */
+function NewsThumb({ card }: { card: NewsCard }) {
+  const [failed, setFailed] = useState(false);
+  if (!card.image) return null;
+  return (
+    <div className="size-16 shrink-0 overflow-hidden rounded-lg border bg-muted sm:size-20">
+      {failed ? (
+        <div
+          className="flex size-full items-center justify-center text-muted-foreground"
+          title="The image supplied by the source did not load."
+        >
+          <ImageOff aria-hidden className="size-5" />
+          <span className="sr-only">Image unavailable</span>
+        </div>
+      ) : (
+        // Deliberately a plain img: next/image would proxy third-party URLs
+        // through this server, which turns a feed into an SSRF surface.
+        <img
+          src={card.image}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+          className="size-full object-cover"
+        />
+      )}
+    </div>
+  );
 }
 
 /**
@@ -45,23 +81,20 @@ export function NewsArticleCard({
       )}
     >
       <div className="flex gap-4 p-4">
-        {card.image ? (
-          // Deliberately a plain img: next/image would proxy third-party URLs
-          // through this server, which turns a feed into an SSRF surface.
-          <img
-            src={card.image}
-            alt=""
-            loading="lazy"
-            referrerPolicy="no-referrer"
-            className="size-16 shrink-0 rounded-lg border object-cover sm:size-20"
-          />
-        ) : null}
+        <NewsThumb card={card} />
         <div className="min-w-0 flex-1">
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
             <Badge tone={attributionTone}>{card.attributionLabel}</Badge>
             <span className="text-[10px] text-muted-foreground">
               {card.sourceLabel} · {publishedLabel(card.publishedAt)}
             </span>
+            {card.imageKind === "app-artwork" ? (
+              // Visible label, not a tooltip: a store image must never read as
+              // a picture the article carried, on desktop or mobile.
+              <span className="text-[10px] text-muted-foreground">
+                · {card.imageAttribution || "Store artwork"}
+              </span>
+            ) : null}
           </div>
           {card.url ? (
             <a

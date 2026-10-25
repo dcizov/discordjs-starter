@@ -37,6 +37,13 @@ export type NewsCard = {
   url: string;
   excerpt: string;
   image: string | null;
+  /**
+   * Where the image came from, so a store image is never mistaken for a picture
+   * the article carried. `null` when there is no image.
+   */
+  imageKind: "article" | "app-artwork" | null;
+  /** Credit line for a fallback image; empty for article imagery. */
+  imageAttribution: string;
   publishedAt: string | null;
   /** The feed that produced the item, not the administrator's label. */
   sourceLabel: string;
@@ -95,6 +102,8 @@ export function newsCard(
       Pick<
         FeedItem,
         | "image"
+        | "imageKind"
+        | "imageAttribution"
         | "attribution"
         | "publishedAt"
         | "tags"
@@ -124,6 +133,10 @@ export function newsCard(
   const sourceLabel = providerLabel || subscriptionLabel || "News source";
   // A simulated demo item contacted no provider, so metadata gaps do not apply.
   if (!options.simulated) {
+    if (image && item.imageKind === "app-artwork")
+      notices.push(
+        "The card image is the game's store artwork, not a picture supplied by this article."
+      );
     if (!text) notices.push("No description supplied by the source.");
     if (!url) notices.push("No usable article link supplied by the source.");
     if (!publishedAt)
@@ -139,6 +152,12 @@ export function newsCard(
     url,
     excerpt: text,
     image: image || null,
+    imageKind: image
+      ? item.imageKind === "app-artwork"
+        ? "app-artwork"
+        : "article"
+      : null,
+    imageAttribution: image ? plainText(item.imageAttribution ?? "", 120) : "",
     publishedAt,
     sourceLabel,
     subscriptionLabel:
@@ -181,6 +200,8 @@ export function feedEmbed(
       Pick<
         FeedItem,
         | "image"
+        | "imageKind"
+        | "imageAttribution"
         | "attribution"
         | "publishedAt"
         | "tags"
@@ -194,8 +215,11 @@ export function feedEmbed(
   const description = options.includeSummary === false ? "" : card.excerpt;
   const attribution =
     card.attribution === "unknown" ? "" : ` · ${card.attributionLabel}`;
+  // Discord shows no other provenance for the image, so a store image is named
+  // in the footer: game artwork is not a picture the article carried.
+  const artwork = card.imageKind === "app-artwork" ? " · Store artwork" : "";
   const footer = safeText(
-    `${card.sourceLabel}${attribution} · via Orbit`,
+    `${card.sourceLabel}${attribution}${artwork} · via Orbit`,
     NEWS_LIMITS.footer
   );
   return {

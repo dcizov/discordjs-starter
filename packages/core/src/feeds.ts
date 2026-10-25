@@ -15,6 +15,11 @@ import {
 } from "./feed-content";
 import type { NewsAttribution } from "./news-presentation";
 import type { FeedItem, Resource } from "./types";
+import {
+  steamArtwork,
+  steamArtworkEnabled,
+  type SteamArtworkCache,
+} from "./steam-artwork";
 const MAX_BYTES = 1024 * 1024;
 
 export async function fetchFeedText(
@@ -189,6 +194,9 @@ export function parseFeed(xml: string): FeedItem[] {
 function steamItem(item: any, tags: string[]) {
   const contents = String(item?.contents ?? "");
   const identity = steamIdentity(item ?? {});
+  // Article imagery only comes from the article body; Steam's news payload has
+  // no image field. The store-artwork fallback is applied later and labelled.
+  const articleImage = imageFromMarkup(contents);
   return {
     id: String(item?.gid ?? ""),
     title: plainText(String(item?.title ?? ""), 256),
@@ -199,7 +207,8 @@ function steamItem(item: any, tags: string[]) {
         ? new Date(Number(item.date) * 1000).toISOString()
         : "",
     tags: ["Steam", ...tags],
-    image: imageFromMarkup(contents),
+    image: articleImage,
+    ...(articleImage ? { imageKind: "article" as const } : {}),
     attribution: identity.attribution,
     sourceLabel: identity.feedLabel,
     publisher: identity.publisher,
@@ -270,6 +279,44 @@ export function mapSteamNews(
   return { items, notices };
 }
 
+/**
+ * Add Steam's **app** artwork to items that have no image of their own.
+ *
+ * Order of preference: an image inside the article body wins; otherwise the
+ * game's store header/capsule image is used and explicitly labelled as app
+ * artwork. At most one store lookup happens per poll (cached per app id), and a
+ * failed lookup leaves the item without an image instead of inventing one.
+ *
+ * Exported for tests; the worker calls it through `pollSourceDetailed`.
+ */
+export async function withSteamAppArtwork(
+  items: FeedItem[],
+  appId: number,
+  options: {
+    cache?: Pick<SteamArtworkCache, "get">;
+    enabled?: boolean;
+  } = {}
+): Promise<{ items: FeedItem[]; used: boolean; appName: string }> {
+  const enabled = options.enabled ?? steamArtworkEnabled();
+  if (!items.length || !enabled || items.every((item) => item.image))
+    return { items, used: false, appName: "" };
+  const art = await (options.cache ?? steamArtwork).get(appId);
+  if (!art) return { items, used: false, appName: "" };
+  const itemsWithArt = items.map((item) =>
+    item.image
+      ? item
+      : {
+          ...item,
+          image: art.url,
+          imageKind: "app-artwork" as const,
+          imageAttribution: art.appName
+            ? `${art.appName} · Steam store artwork`
+            : "Steam store artwork",
+        }
+  );
+  return { items: itemsWithArt, used: true, appName: art.appName };
+}
+
 export async function pollSourceDetailed(
   source: Resource
 ): Promise<FeedPollResult> {
@@ -281,10 +328,24 @@ export async function pollSourceDetailed(
     const json = (await officialJson(
       steamNewsUrl(d.appId, !!d.officialOnly)
     )) as { appnews?: { newsitems?: unknown } };
-    return mapSteamNews(json?.appnews?.newsitems, {
+    const mapped = mapSteamNews(json?.appnews?.newsitems, {
       tags: d.tags ?? [],
       officialOnly: !!d.officialOnly,
     });
+    const artwork = await withSteamAppArtwork(mapped.items, d.appId);
+    const notices = [...mapped.notices];
+    if (artwork.used)
+      notices.push(
+        "Items without their own image show the game's Steam store artwork, which is app artwork rather than a picture supplied by the article. Set STEAM_APP_ARTWORK=false on the worker to leave those items text-only."
+      );
+    else if (!mapped.items.some((item) => item.image))
+      notices.push(
+        "No article image and no store artwork were available for these items, so the cards are text-only."
+      );
+    return {
+      items: artwork.items,
+      notices: [...new Set(notices)],
+    };
   }
   if (!d.url)
     throw new Error(

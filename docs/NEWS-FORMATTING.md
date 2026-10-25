@@ -139,13 +139,31 @@ returns **502** with `Retry-After` for a provider outage (`UpstreamError`), so
 
 ## Images
 
-Only provider-supplied images: Steam `[img]`/`{STEAM_CLAN_IMAGE}` markup, RSS
-`enclosure`/`media:*`/`itunes:image`/inline `<img>`. `safeImageUrl()` accepts
-only absolute, credential-free `https` URLs on a public host with an image
-extension. Open Graph fetching remains unimplemented: it needs SSRF-safe
-resolution, redirect and DNS-rebinding checks, timeouts, body limits,
-content-type validation and rate limits. Steam's API supplies no header image,
-so many Steam items legitimately have none.
+Two sources, in this order, and each is labelled:
+
+1. **Article imagery** — an image the item itself carries: Steam
+   `[img]`/`{STEAM_CLAN_IMAGE}` markup, RSS
+   `enclosure`/`media:*`/`itunes:image`/inline `<img>`. `safeImageUrl()` accepts
+   only absolute, credential-free `https` URLs on a public host with an image
+   extension.
+2. **Steam app artwork** (`packages/core/src/steam-artwork.ts`) — Steam's news
+   API has no image field, but the store's `appdetails` endpoint documents
+   `header_image`/`capsule_image`. When an article has no image of its own,
+   Orbit uses the game's artwork, validates the host against Steam's image CDNs,
+   and marks it `imageKind: "app-artwork"` with a credit line ("Dota 2 · Steam
+   store artwork"). The card shows that label and the Discord footer appends
+   `Store artwork`; it is never presented as a picture from the article.
+
+The lookup is cached per app id (6 h success, 10 min failure) and shared across
+every item in a poll, so ten announcements from one game cost one request; there
+is no per-item metadata call. `STEAM_APP_ARTWORK=false` disables it and leaves
+those cards text-only. A failed lookup is not an error: the item renders without
+an image, and the preview says so.
+
+Open Graph fetching remains unimplemented: it needs SSRF-safe resolution,
+redirect and DNS-rebinding checks, timeouts, body limits, content-type
+validation and rate limits. Orbit never scrapes Steam's event page for its
+cover art.
 
 ## Verification (fresh, this branch)
 
