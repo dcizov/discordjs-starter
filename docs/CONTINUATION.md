@@ -288,3 +288,184 @@ Not executed in the authoring sandbox, and why:
    through `change()`, which is a separate, reviewable change.
 5. Consider Open Graph images for RSS only after an SSRF-reviewed fetcher with
    timeouts, size/content-type limits, cache and failure isolation.
+
+---
+
+# Pass 2: rate limits, music capability, integrations and documentation
+
+Date: 2026-10-25 · Branch `arena/99c6cf65-discordjs-starter` (same branch,
+continuing after PR #3). Starting HEAD for this pass: `60b43b3` (clean tree,
+identical to `origin`). Ending HEAD: `git log -1` (two commits for this pass:
+the rate-limit/music/playback fix, then integrations + documentation).
+
+## Recovered state before editing
+
+`git status` clean, `git fetch` showed only `origin/main` and the working
+branch (the predecessor `arena/e2b42b08` is not on the remote). No second
+session was racing the branch. Everything below was verified against the code
+in this checkout, not against earlier summaries.
+
+## What this pass changed
+
+### 1. Confirmed cause of "Discord is rate limiting permission checks"
+
+The toast text comes from `packages/core/src/discord-permissions.ts`. The
+trigger was not a Discord-wide problem and not a mislabelled app limit: **every
+mutating dashboard request** passed `fresh = true` through
+`apps/web/lib/auth.ts` → `DiscordPermissionClient.guilds(..., fresh)`, which
+skipped the 30-second success snapshot. A burst of music controls (pause, skip,
+volume, repeat) therefore issued one `GET /users/@me/guilds?limit=200` per
+click against the same per-token bucket until Discord answered `429`. The
+"1 seconds" wording came from `Math.ceil(delay / 1000)` with a 1000 ms floor,
+and it was never pluralized.
+
+Fix (not "remove authorization", not a sleep, not a global lock):
+
+- explicit snapshot windows: **30 s for reads, 10 s for mutations**, with
+  in-flight coalescing unchanged, so a burst of controls shares one lookup;
+- the snapshot is still only what the dashboard _offers_ — the bot re-fetches
+  the member and re-checks module, DJ role, voice, channel and hierarchy at
+  execution time, so a 10-second window is never execution authority;
+- `429` still fails closed, keeps `Retry-After`, and blocks the key (or globally
+  for a global limit) instead of retrying in a loop;
+- correct singular/plural cooldown wording;
+- client: a duplicate submit is impossible while one action is in flight, and
+  the newest dashboard snapshot wins over a slower older response.
+
+### 2. Music capability audit and the two gaps it justified
+
+`docs/MUSIC.md` now carries a capability matrix (backend capability,
+implemented, slash commands, dashboard, mocked tests, verified live, disabled /
+limits). "Installed" and "working" are separate columns; **no row claims a live
+verification**, because none was possible here.
+
+Two capabilities were genuinely missing and were implemented rather than
+documented away:
+
+- **`/search`** — explicit search-and-select. Quick play (`/play`, first match)
+  is unchanged. `/search` lists up to five results with title, artist, source
+  and duration in a select menu whose session is bound to the member and guild,
+  expires after two minutes, and is single-use; the selected tracks are
+  re-validated and re-authorized, and a track already queued or playing is not
+  added again.
+- **`/seek`** — seconds in, Lavalink milliseconds out, finite durations only,
+  clamped to one second before the end, refused for live/unknown-length
+  sources, exposed as a dashboard slider that commits once per interaction.
+
+**Lyrics were deliberately not added.** No maintained, license-clear provider is
+configured, and a button that sometimes returns nothing would claim a
+capability Orbit cannot keep; the limitation is documented instead, including
+what a future integration would have to provide (server-side key, cache,
+attribution, honest "not found", timestamps + alignment before the word
+"synced"). No plugin was added to populate the matrix.
+
+### 3. Playback timing
+
+`playbackProgress` now measures the age of the snapshot in **server time**
+(the payload's `referenceAt` removes browser clock skew), stops interpolating
+after 90 seconds of silence, and reports `status: "stale"` instead of an
+indefinite "Now playing". The dashboard badge reads **State unconfirmed**, the
+position is labelled "last known", and an explanation points at the bot logs
+and the audit log. The local clock uses one monotonic anchor and reconciles on
+every new payload plus on `visibilitychange`, so a throttled background tab does
+not animate an old state. Nothing polls Discord or Lavalink per second.
+
+### 4. Integrations
+
+- `packages/core/src/integration-http.ts` is now the single trusted-provider
+  transport: explicit timeout, bounded streaming body read (1 MiB), no
+  redirects, no cache, validated JSON, and a small error vocabulary
+  (`auth`, `rate-limited`, `timeout`, `unavailable`, `invalid-response`,
+  `not-found`, `rejected`) with a derived `retryable` flag. **No automatic
+  retries** — the route, the job queue and a caller may already retry.
+- A provider timeout used to surface as a raw abort, which the route reported as
+  **400**; it is now a `504`-shaped `UpstreamError` and the route's existing
+  mapping produces **502** with `Retry-After` when the provider sent one.
+- Administrator-supplied URLs (RSS/Atom, webhooks) stay on the separate SSRF
+  pipeline in `feeds.ts` with DNS pinning and redirect validation. No shared
+  "fetch anything" client was introduced.
+- New `docs/INTEGRATION-ARCHITECTURE.md`: ownership table, shared vs
+  provider-specific responsibilities, cache/rate-limit table, error vocabulary,
+  how to add a provider, and what Orbit refuses to do.
+
+### 5. Consistency fix (bounded)
+
+A configured **DJ role that no longer exists** silently dead-ended members with
+"the DJ role is required" and could not be distinguished from a permission
+problem. Now: non-managers get an explicit "the configured DJ role no longer
+exists" message, Manage Server members can still control playback and repair the
+setting, access is never silently widened to everyone, and the music setup
+banner reports **Needs setup** for that state.
+
+### 6. Documentation
+
+- **`/docs` in the product**, generated at build time from the repository's own
+  Markdown (`docs/*.md`, `README.md`), with grouped navigation, per-page table of
+  contents, stable `/docs/<slug>` links, previous/next links, a skip link, and a
+  no-JavaScript mobile disclosure. Repository-relative links are rewritten to
+  in-app URLs; output is sanitized with the `sanitize-html` dependency already in
+  use.
+- Contextual links: each module's setup banner links to its guide, the help
+  dialog links to setup/permissions/dashboard/music/news/deals, and the command
+  reference links to channel guidance.
+- New pages: `DOCUMENTATION.md` (framework/hosting research with sources, the
+  visibility decision, contribution rules), `CHANNELS-AND-PLACEMENT.md`
+  (requirements vs recommendations per command and module),
+  `INTEGRATION-ARCHITECTURE.md`.
+- Command reference stays generated from the registration builders; `/search`
+  and `/seek` appear there automatically, with their arguments, limits and
+  runtime notes (46 invocations across 31 roots).
+
+**Docs visibility decision: public.** Developer documentation describes code that
+is already public in this repository and contains no credentials. Role gating
+would add a trusted-guild/role-ID model, revocation and cache-key rules, and
+would force dynamic rendering of otherwise static pages, all to hide non-secret
+text. If a page ever must be non-public, it stays out of `docs/` and out of the
+build rather than being "protected" by a role check.
+
+## Checks actually run (this pass)
+
+| Check                         | Command                                 | Result                                                                                                                                                                                                              |
+| ----------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit/integration              | `npx vitest run`                        | **723 tests / 61 files passed** (baseline before this pass: 692 / 58)                                                                                                                                               |
+| Music + permissions slice     | targeted vitest suites                  | `music-service` 14, `music-search` 7, `music-progress` 6, `permissions` 12, `music-api` 7                                                                                                                           |
+| Transport hardening           | `tests/integration-http.test.ts`        | 6 tests (classification, timeout, redirect/cache policy, bounded body, no retry, Retry-After)                                                                                                                       |
+| Documentation pipeline        | `tests/docs-content.test.ts`            | 5 tests (file existence, unique slugs, anchors/TOC, sanitized raw HTML, link rewriting, path escape)                                                                                                                |
+| Types                         | `tsc --noEmit` (root + `apps/web`)      | passed                                                                                                                                                                                                              |
+| Lint / formatting             | `npm run lint`, `npm run format:check`  | passed (Prettier clean)                                                                                                                                                                                             |
+| Production build              | `npm run build`                         | passed (Next + 6 tsup bundles); `/docs` static, `/docs/[slug]` with 20 prerendered pages                                                                                                                            |
+| Demo smoke (production build) | `curl` on `npm start`, `DEMO_MODE=true` | `/docs` 200; `/docs/music` 200 with rewritten in-app links; dashboard music page contains the seek control; `POST {action:"seek",position:12}` → `{"ok":true,"demo":true}` and the snapshot position became `12000` |
+| Browser suites                | CI only                                 | A new `tests/e2e/docs.spec.ts` covers index, anchors/TOC and a 390 px viewport; it has not been run locally (no Chromium in this sandbox)                                                                           |
+
+Not executed here, and why: live Discord authorization and audible playback (no
+credentials/Lavalink), live Steam/ITAD traffic (no outbound access), Docker
+Compose, a real database for migrations (no `TEST_DATABASE_URL`), and Playwright
+locally (no browser binary).
+
+## Decisions recorded
+
+| Decision                                   | Rationale                                                                                                 |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Reusable permission snapshot (30 s/10 s)   | Fixes the confirmed cause without weakening authorization; bot-side execution checks remain authoritative |
+| Explicit `/search` next to quick `/play`   | The first search result is a guess; selection is a real capability, not a replacement for quick play      |
+| No lyrics provider                         | No maintained, license-clear option here; a dead button would imply capability Orbit cannot promise       |
+| No new workspace package for integrations  | The providers already live in `packages/core` with no new dependency or runtime boundary                  |
+| Markdown rendered in the existing Next app | One content source, no second deployment, no docs framework; `marked` is the only added dependency        |
+| Developer docs public                      | They describe public code and contain no secrets; gating adds authorization complexity for no protection  |
+| No automatic transport retries             | Retries are a caller decision; multiplying them across HTTP/jobs/callers floods an unhealthy provider     |
+
+## Still deferred (unchanged or newly explicit)
+
+1. **Tickets** — not implemented; criteria unchanged (overwrite model, per-member
+   limits, restart/deleted-channel reconciliation, explicit retention policy).
+2. **Health extension** — heartbeat/shard/queue-depth/feed-freshness sources are
+   still absent; the music backend case distinguishes "configured", "connected"
+   and "confirmed playback" but does not add new measured sources.
+3. **Lyrics** — documented limitation, no provider.
+4. **Dashboard search-and-select** — `/search` is Discord-only; the dashboard
+   offers quick play. A two-step dashboard flow (search → pick) would need a new
+   endpoint and its own expiry/authorization contract, so it is not claimed.
+5. **Live verification** — the capability matrix's "verified live" column is
+   empty; no Discord guild, Lavalink backend or audible test was available.
+6. **OG/store images** — still needs an SSRF-reviewed fetcher with cache and size
+   limits.

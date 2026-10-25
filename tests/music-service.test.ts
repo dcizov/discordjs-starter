@@ -408,3 +408,70 @@ describe("seek on a finite track", () => {
     expect(p.seekTo).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("a deleted DJ role", () => {
+  const guildId = "120000000000000005",
+    memberId = "120000000000000099",
+    voiceId = "120000000000000210";
+  function member(manage: boolean) {
+    return {
+      id: memberId,
+      displayName: "Listener",
+      permissions: new PermissionsBitField(
+        manage ? PermissionFlagsBits.ManageGuild : 0n
+      ),
+      roles: { cache: new Map() },
+      guild: {
+        id: guildId,
+        shardId: 0,
+        roles: { cache: new Map() },
+        members: { fetchMe: async () => ({ voice: { channelId: voiceId } }) },
+      },
+      voice: {
+        channel: {
+          id: voiceId,
+          type: ChannelType.GuildVoice,
+          full: false,
+          permissionsFor: () =>
+            new PermissionsBitField([
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.Speak,
+            ]),
+        },
+      },
+    } as unknown as GuildMember;
+  }
+  beforeEach(() => {
+    const config = structuredClone(defaultConfig);
+    config.music.djRoleId = "120000000000000777";
+    db.getGuild.mockResolvedValue({ config });
+  });
+
+  it("does not silently open controls to everyone, and lets managers repair it", async () => {
+    const music = service();
+    music.backend!.players.set(guildId, {
+      playTrack: vi.fn(),
+      setGlobalVolume: vi.fn(),
+      setPaused: vi.fn(),
+      stopTrack: vi.fn(),
+      seekTo: vi.fn(),
+    } as unknown as Player);
+    const state = music.state(guildId);
+    state.current = {
+      id: "now",
+      title: "Current",
+      author: "Artist",
+      duration: 1000,
+      uri: "",
+      encoded: "encoded",
+      requestedBy: "Listener",
+      requestedById: memberId,
+    };
+    await expect(
+      music.action(member(false), { action: "pause" })
+    ).rejects.toThrow(/no longer exists/);
+    await music.action(member(true), { action: "pause" });
+    expect(state.paused).toBe(true);
+  });
+});

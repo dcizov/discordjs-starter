@@ -278,8 +278,10 @@ export async function pollSourceDetailed(
   if (d.adapter === "steam") {
     if (!d.appId || !Number.isSafeInteger(d.appId) || d.appId <= 0)
       throw new Error("A Steam application ID is required");
-    const json = await officialJson(steamNewsUrl(d.appId, !!d.officialOnly));
-    return mapSteamNews(json.appnews?.newsitems, {
+    const json = (await officialJson(
+      steamNewsUrl(d.appId, !!d.officialOnly)
+    )) as { appnews?: { newsitems?: unknown } };
+    return mapSteamNews(json?.appnews?.newsitems, {
       tags: d.tags ?? [],
       officialOnly: !!d.officialOnly,
     });

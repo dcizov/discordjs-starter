@@ -139,6 +139,16 @@ describe("code-derived least-privilege permissions and setup", () => {
     data.guild.config.modules.music = false;
     expect(moduleSetup(data, "music").state).toBe("paused");
   });
+  it("flags a deleted DJ role instead of implying everyone may control music", () => {
+    const data = context();
+    data.guild.config.music.djRoleId = "120000000000000777";
+    expect(moduleSetup(data, "music")).toMatchObject({
+      state: "needs-setup",
+      detail: expect.stringContaining("no longer exists"),
+    });
+    data.guild.config.music.djRoleId = "";
+    expect(moduleSetup(data, "music").state).toBe("configured");
+  });
   it("does not count Stage-only or denied channels as usable voice", () => {
     const data = context();
     data.guild.channels = data.guild.channels.map((channel) => ({

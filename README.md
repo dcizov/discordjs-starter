@@ -52,7 +52,7 @@ DEMO_MODE=true npm start
 | Self roles  | Buttons, selects, reaction panels; single/multi selection; prerequisites; exclusive roles; role limits; preview, publication, and safe reassignment                                                                                                                                                                                                                                                           |
 | Moderation  | Warnings, timeouts, kicks, bans, recent-message purges, case history, spam/repetition/mention/blocked-term rules, exemptions, escalation, audit channel                                                                                                                                                                                                                                                       |
 | Economy     | Per-guild balances, rolling daily rewards, activity rewards/cooldowns, transfers, leaderboard, role/item shop, inventory, reclaimable role entitlements, atomic PostgreSQL ledger; private own-account transaction history                                                                                                                                                                                    |
-| Music       | Discord voice playback through Lavalink, supported-source search, persistent dashboard snapshots, queue, pause/resume/skip/stop, volume, shuffle, repeat, DJ restrictions, optional requester queue cap                                                                                                                                                                                                       |
+| Music       | Discord voice playback through Lavalink, supported-source search plus explicit `/search` selection, persistent dashboard snapshots, queue, pause/resume/skip/stop/seek, volume, shuffle, repeat, DJ restrictions, optional requester queue cap                                                                                                                                                                |
 | Game deals  | IsThereAnyDeal search, shared game watchlists and general deal feeds; region/currency/shop/price/discount/historical-low filters; deduplicated alerts                                                                                                                                                                                                                                                         |
 | News        | Official Steam app-news adapter with provider-aware formatting, attribution and an optional official-only filter; configurable RSS/Atom and signed webhooks; honest setup-required Blizzard/Wowhead/Mojang starters; keyword/tag routing, interval schedules, health, tests, delivery history, and a test flight that renders the same cards as delivery (see [formatting contract](docs/NEWS-FORMATTING.md)) |
 | Dashboard   | OAuth2, manageable-server switcher, installed/invite distinction, responsive light/dark UI, configuration CRUD, validation, confirmations, search, server-paginated histories, loading/error/empty states, toasts, safe optimistic switches                                                                                                                                                                   |
@@ -278,7 +278,17 @@ Infrastructure:       Dockerfile, docker-compose.yml, docker/lavalink/
 Tests:                tests/ (unit/SQL), tests/e2e/ (Playwright)
 ```
 
-See [architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md), [integration details](docs/INTEGRATIONS.md), [music setup](docs/MUSIC.md), [deployment checklist](docs/DEPLOYMENT.md), [news formatting contract](docs/NEWS-FORMATTING.md), [dashboard UX notes](docs/DASHBOARD-UX.md), and [the current continuation report](docs/CONTINUATION.md).
+### Documentation
+
+The same Markdown is readable inside the product at **`/docs`** (grouped user
+and developer guides, table of contents, stable `/docs/<slug>` links) and in the
+repository. It is generated from `docs/*.md` at build time — one source of
+truth, no second docs site, no runtime file access. Developer guides are public
+on purpose: they describe code that is already in this repository and contain
+no credentials. The decision and its research are recorded in
+[the documentation platform notes](docs/DOCUMENTATION.md).
+
+See [architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md), [integration setup](docs/INTEGRATIONS.md), [integration architecture](docs/INTEGRATION-ARCHITECTURE.md), [where to use each module](docs/CHANNELS-AND-PLACEMENT.md), [music setup](docs/MUSIC.md), [deployment checklist](docs/DEPLOYMENT.md), [news formatting contract](docs/NEWS-FORMATTING.md), [dashboard UX notes](docs/DASHBOARD-UX.md), and [the current continuation report](docs/CONTINUATION.md).
 
 ## Honest operational boundaries
 

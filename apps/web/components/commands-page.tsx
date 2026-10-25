@@ -11,6 +11,7 @@ import {
   Terminal,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { CopyButton } from "./copy-button";
 import { PageHeader } from "./page-header";
 import { Button } from "./ui/button";
@@ -102,6 +103,17 @@ export function CommandsPage() {
               npm run commands:register
             </code>
             . This page never registers or executes commands.
+          </p>
+          <p className="mt-1">
+            Channel types, suggested placement, caller/bot permissions and what
+            happens when setup is incomplete are in{" "}
+            <Link
+              href="/docs/where-to-use"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Where to use each module
+            </Link>
+            . Requirements there are enforced; recommendations are not.
           </p>
         </div>
       </Card>

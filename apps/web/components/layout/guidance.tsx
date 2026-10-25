@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { ArrowRight, ArrowUpRight, BookOpen } from "lucide-react";
 import { Button } from "../ui/button";
 import { useWorkspace } from "../workspace";
@@ -133,11 +134,39 @@ export function HelpDialog({
             Replay the introduction
           </Button>
         )}
-        <p className="mt-5 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <BookOpen size={14} />
-          Installation, deployment, API, and music setup guides are included in
-          the repository.
-        </p>
+        <div className="mt-5 border-t pt-4">
+          <p className="flex items-center gap-2 text-[11px] font-medium">
+            <BookOpen size={14} />
+            Documentation
+          </p>
+          <ul className="mt-2 grid grid-cols-2 gap-1.5 text-[11px]">
+            {[
+              { href: "/docs/start-here", label: "Install and first setup" },
+              { href: "/docs/permissions", label: "Permissions" },
+              { href: "/docs/dashboard", label: "Dashboard guide" },
+              { href: "/docs/music", label: "Music and voice" },
+              { href: "/docs/news", label: "News sources" },
+              { href: "/docs/deals", label: "Deals and watchlists" },
+            ].map((link) => (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  className="text-primary underline-offset-2 hover:underline"
+                  onClick={() => onOpenChange(false)}
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link
+            href="/docs"
+            className="mt-2 inline-block text-[11px] text-muted-foreground underline-offset-2 hover:underline"
+            onClick={() => onOpenChange(false)}
+          >
+            All user and developer guides
+          </Link>
+        </div>
       </DialogContent>
     </Dialog>
   );

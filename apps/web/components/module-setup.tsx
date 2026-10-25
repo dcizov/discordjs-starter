@@ -4,6 +4,23 @@ import type { ModuleKey } from "@orbit/core";
 import { Badge, Card } from "./ui/primitives";
 import { Button } from "./ui/button";
 import { useWorkspace } from "./workspace";
+import Link from "next/link";
+
+/**
+ * Contextual help: the guide for the module the member is looking at, not a
+ * generic docs home page. Modules without a dedicated page stay unlinked
+ * rather than pointing at an unrelated document.
+ */
+const MODULE_GUIDE: Partial<
+  Record<ModuleKey, { href: string; label: string }>
+> = {
+  music: { href: "/docs/music", label: "Music and voice guide" },
+  news: { href: "/docs/news", label: "News source guide" },
+  deals: { href: "/docs/deals", label: "Deals guide" },
+  roles: { href: "/docs/permissions", label: "Permissions guide" },
+  polls: { href: "/docs/community", label: "Polls and announcements" },
+  announcements: { href: "/docs/community", label: "Polls and announcements" },
+};
 export function ModuleSetupBanner({ module }: { module: ModuleKey }) {
   const { data, navigate } = useWorkspace();
   const setup = moduleSetup(data, module);
@@ -36,9 +53,23 @@ export function ModuleSetupBanner({ module }: { module: ModuleKey }) {
           delivery/playback test.
         </p>
       </div>
-      <Button variant="outline" size="sm" onClick={() => navigate("channels")}>
-        Channels & permissions
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => navigate("channels")}
+        >
+          Channels & permissions
+        </Button>
+        {MODULE_GUIDE[module] && (
+          <Link
+            href={MODULE_GUIDE[module]!.href}
+            className="text-[11px] text-primary underline-offset-2 hover:underline"
+          >
+            {MODULE_GUIDE[module]!.label}
+          </Link>
+        )}
+      </div>
     </Card>
   );
 }

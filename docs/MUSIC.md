@@ -325,11 +325,83 @@ Slash-command errors use a red embed with a fenced, sanitized multiline diagnost
 
 Music slash/action/playback failures are also sent to the dashboard's **Audit** log. **Copy error** copies the exact stored sanitized detail, and **Copy full event** copies JSON. Line breaks are preserved, credentials/auth fields/URL query values are redacted, and storage is bounded to 8,192 characters with a truncation marker. The embed is only a presentation layer; it does not rewrite the audit detail or doctor JSON. Old shortened records cannot be recovered. Inspect/redact logs before sharing; never share `.env`, tokens, passwords, or private source URLs.
 
+## Capability matrix
+
+Installed is not the same as working. This table records what Orbit implements,
+where it is reachable, what is covered by mocks, and what still needs an
+authorized live check on your deployment. **"Verified live" is only claimed
+where a real Discord/Lavalink run confirmed it**; in this repository it stays
+empty, because no live guild or audible test is available here.
+
+| Capability                | Backend capability                                          | Implemented                   | Slash commands                     | Dashboard                       | Mocked tests                                               | Verified live | Disabled / limits                                                                                                      |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------- | ---------------------------------- | ------------------------------- | ---------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Text search (quick play)  | Lavalink search, `MUSIC_SEARCH_PREFIX` (default `scsearch`) | Yes (first result, by design) | `/play query:<text>`               | **Add to the queue** field      | `music-source`, `music-service`                            | No            | First match only; use `/search` to choose                                                                              |
+| Explicit search selection | Same search, up to 5 results                                | Yes                           | `/search query:<text>`             | Not offered (Discord-only menu) | `music-search` (expiry, ownership, single use, duplicates) | No            | One use per menu, 2-minute expiry, same member + guild                                                                 |
+| Direct links              | Allowlisted hosts + DNS/SSRF checks                         | Yes                           | `/play query:<url>`                | Same field                      | `music-source`                                             | No            | HTTPS only, `MUSIC_ALLOWED_HOSTS`, public DNS, no adult adapters                                                       |
+| Playlists                 | Provider playlist load                                      | Yes (all returned tracks)     | `/play query:<playlist url>`       | Same field                      | `music-service` (whole-request admission)                  | No            | Rejected as a whole over `maxQueue`/`maxPerMember`; no partial enqueue                                                 |
+| Queue view                | Persisted snapshot                                          | Yes                           | `/queue`                           | Queue card                      | `music-service`, `replies`                                 | No            | Snapshot for observation, not session restore                                                                          |
+| Pause / resume            | `setPaused`                                                 | Yes                           | `/pause`, `/resume`                | Transport button                | `music-service`                                            | No            | Requires an active player                                                                                              |
+| Skip                      | `stopTrack` + `end` event                                   | Yes                           | `/skip`                            | Transport button                | `music-service`                                            | No            | Never retried automatically (a duplicate skip changes the queue)                                                       |
+| Stop                      | leave voice + clear snapshot                                | Yes                           | `/stop`                            | Stop dialog + transport         | `music-service`                                            | No            | Clears the persisted queue; a restart does not replay it                                                               |
+| Volume                    | `setGlobalVolume`                                           | Yes                           | `/volume level:<0-100>`            | Slider (latest value wins)      | `music-service`, `volume-control`                          | No            | 0–100 integer; coalesced per interaction                                                                               |
+| Repeat                    | Queue policy                                                | Yes                           | `/repeat mode:<off\|track\|queue>` | Cycle button                    | `music-service`                                            | No            | Not an eviction policy                                                                                                 |
+| Shuffle                   | Queue order                                                 | Yes                           | `/shuffle`                         | Two buttons                     | `music-service`                                            | No            | Shuffles upcoming only                                                                                                 |
+| Remove a queued track     | Queue policy                                                | Yes                           | — (use `/queue` to see state)      | Row action                      | `music-api`                                                | No            | Dashboard only; the playing track is not removable this way                                                            |
+| Seek                      | `seekTo` (milliseconds)                                     | Yes                           | `/seek position:<seconds>`         | Seek slider                     | `music-service` (clamp, live duration, invalid input)      | No            | Finite duration only; clamps to 1 s before the end; not retried                                                        |
+| Progress display          | `playerUpdate` + persisted snapshot                         | Yes                           | —                                  | Progress bar + labels           | `music-progress` (interpolation, staleness, clock skew)    | No            | Freezes after 90 s of silence and says "State unconfirmed"                                                             |
+| Voice join/leave          | Shoukaku/Discord handshake                                  | Yes                           | Implicit on `/play`                | —                               | `music-voice` (event orders, stale cleanup)                | No            | Normal voice channels only; Stage supported as target is refused                                                       |
+| SponsorBlock skipping     | Lavalink plugin                                             | Optional                      | —                                  | —                               | `music-plugins`, `music-plugin-config`                     | No            | Only when the plugin is loaded and categories are configured                                                           |
+| Lyrics                    | —                                                           | **No**                        | **No**                             | **No**                          | —                                                          | —             | **No maintained, license-clear provider is configured.** No button, no command, no fabricated synced lyrics. See below |
+| Spotify / Apple Music     | —                                                           | **No**                        | —                                  | —                               | —                                                          | —             | Deliberately absent (metadata mirroring is not playback)                                                               |
+
+### Why there is no lyrics feature
+
+Orbit does not ship a lyrics endpoint today. The maintained options all add a
+new credential, a licensing/attribution obligation and a per-guild cache, and
+several are undocumented or rate-limit aggressively. Adding a **Lyrics** button
+that sometimes returns nothing would imply a capability Orbit cannot promise, so
+the absence is documented instead of shipped as a dead control. A lyrics
+integration would need: a server-side key (never in the browser), a cache with
+explicit freshness, attribution next to the text, honest "not found" handling,
+and — for a _synchronized_ view — real timestamps plus alignment with the
+Lavalink position. Without those, static text only, and never the word "synced".
+
 ## Commands and controls
 
-`/play`, `/queue`, `/pause`, `/resume`, `/skip`, `/stop`, `/volume`, `/shuffle`, and `/repeat` are implemented; register them with Discord. Command replies remain **ephemeral**, including embeds. The dashboard's Commands reference is not live registration verification. Dashboard controls share the music service/action queue. Members must be in the bot's voice channel; configured DJ-role/Manage Server checks, module state, and bot channel permissions are enforced at execution time.
+`/play`, `/search`, `/queue`, `/pause`, `/resume`, `/skip`, `/stop`, `/seek`, `/volume`, `/shuffle`, and `/repeat` are implemented; register them with Discord. Command replies remain **ephemeral**, including embeds. The dashboard's Commands reference is not live registration verification. Dashboard controls share the music service/action queue. Members must be in the bot's voice channel; configured DJ-role/Manage Server checks, module state, and bot channel permissions are enforced at execution time.
 
 Volume is bounded to 0–100%; queue limits are configurable. Unsupported sources produce an error, not fabricated success. Accepted play requests do not certify audible playback. The dashboard waits for actual job completion and warns rather than claiming success if completion remains unconfirmed; failures are audited. Requests older than 30 seconds at execution are rejected instead of replayed. Music actions are not automatically retried, since a repeated skip/play could alter the queue twice.
+
+### `/search` and `/seek` in detail
+
+`/search` runs the same resolver and source policy as `/play` and lists at most
+five results with title, artist, source and duration. Each menu is:
+
+- **bound** to the member who ran it and to that guild (another member cannot
+  spend the results),
+- **single-use** — the interaction is claimed once, so a double click or a
+  replayed component cannot enqueue the same tracks twice,
+- **short-lived** — two minutes, then it must be run again,
+- **re-checked** — the chosen tracks still go through the voice, DJ-role,
+  module, queue-capacity and per-member admission checks, and a track that is
+  already queued or currently playing is not added again.
+
+Quick play is unchanged: `/play` resolves and queues the first match
+immediately.
+
+`/seek` takes seconds, requires a finite duration, clamps to one second before
+the end, and refuses live/unknown-length sources instead of pretending. It is
+sent to Lavalink in milliseconds. A successful reply means "the backend
+accepted the seek", not "you can hear it from that point". The dashboard slider
+behaves the same way: one request when the listener lets go, no request per
+pixel.
+
+The dashboard progress bar never polls Discord or Lavalink per second. It starts
+from the persisted snapshot and interpolates with a monotonic local clock,
+reconciling whenever a new dashboard payload arrives (every 30 s, or as soon as
+a background tab becomes visible). If the snapshot is more than 90 seconds old,
+interpolation stops, the badge reads **State unconfirmed**, and the position is
+labelled "last known" instead of continuing to animate.
 
 Queue snapshots are for dashboard observation, not automatic voice-session restoration. An ordinary Lavalink reconnect can use its short resume window, but a full bot/backend restart or source-adapter change needs a new session. In demo mode all tracks are fictional previews and **no audio is played**.
 

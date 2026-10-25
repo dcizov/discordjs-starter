@@ -290,9 +290,23 @@ export class MusicService {
       throw new Error("Music is paused in this server.");
     if (!this.backend)
       throw new Error("Lavalink is not configured. See docs/MUSIC.md.");
+    const djRoleId = stored.config.music.djRoleId;
+    // A deleted/re-created role must not silently widen access to everyone,
+    // and it must not dead-end managers who can repair the setting either.
+    const djRoleExists =
+      !djRoleId || !!member.guild.roles?.cache?.has(djRoleId);
     if (
-      stored.config.music.djRoleId &&
-      !member.roles.cache.has(stored.config.music.djRoleId) &&
+      djRoleId &&
+      !djRoleExists &&
+      !member.permissions.has(PermissionFlagsBits.ManageGuild)
+    )
+      throw new Error(
+        "The DJ role configured for music no longer exists in this server, so playback controls are limited to Manage Server members. Ask a manager to choose a DJ role in Music settings."
+      );
+    if (
+      djRoleExists &&
+      djRoleId &&
+      !member.roles.cache.has(djRoleId) &&
       !member.permissions.has(PermissionFlagsBits.ManageGuild)
     )
       throw new Error("The DJ role is required to control music.");
