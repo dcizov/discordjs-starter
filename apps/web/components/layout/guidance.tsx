@@ -73,7 +73,11 @@ export function ModeInfoDialog({ open, onOpenChange }: Props) {
     </Dialog>
   );
 }
-export function HelpDialog({ open, onOpenChange }: Props) {
+export function HelpDialog({
+  open,
+  onOpenChange,
+  onReplayTour,
+}: Props & { onReplayTour?: () => void }) {
   const { navigate } = useWorkspace();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -120,6 +124,15 @@ export function HelpDialog({ open, onOpenChange }: Props) {
             </button>
           ))}
         </div>
+        {onReplayTour && (
+          <Button
+            variant="outline"
+            className="mt-4 w-full"
+            onClick={onReplayTour}
+          >
+            Replay the introduction
+          </Button>
+        )}
         <p className="mt-5 flex items-center gap-2 text-[11px] text-muted-foreground">
           <BookOpen size={14} />
           Installation, deployment, API, and music setup guides are included in

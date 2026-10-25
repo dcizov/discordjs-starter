@@ -18,6 +18,7 @@ import { DashboardHeader } from "./layout/header";
 import { DemoNotice } from "./layout/demo-notice";
 import { InstallPrompt } from "./layout/install-prompt";
 import { HelpDialog, ModeInfoDialog } from "./layout/guidance";
+import { FirstVisitTour } from "./layout/first-visit-tour";
 export function Dashboard({
   initial,
   section,
@@ -30,6 +31,7 @@ export function Dashboard({
   useEffect(() => setHydrated(true), []);
   const [mobile, setMobile] = useState(false);
   const [help, setHelp] = useState(false);
+  const [tourReplay, setTourReplay] = useState(0);
   const [demoInfo, setDemoInfo] = useState(false);
   const router = useRouter();
   useEffect(() => {
@@ -195,7 +197,17 @@ export function Dashboard({
           </main>
         </div>
         <ModeInfoDialog open={demoInfo} onOpenChange={setDemoInfo} />
-        <HelpDialog open={help} onOpenChange={setHelp} />
+        <HelpDialog
+          open={help}
+          onOpenChange={setHelp}
+          onReplayTour={() => {
+            setHelp(false);
+            setTourReplay((n) => n + 1);
+          }}
+        />
+        {hydrated && data.guild.installed && (
+          <FirstVisitTour replay={tourReplay} />
+        )}
       </div>
     </WorkspaceContext.Provider>
   );

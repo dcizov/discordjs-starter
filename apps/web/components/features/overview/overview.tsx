@@ -105,11 +105,22 @@ export function Overview() {
               Make yourself at home <ArrowRight size={12} />
             </button>
           </div>
-          <img
-            src="/orbit-hero.svg"
-            alt="A lavender planet with connected community satellites"
-            className="orbit-float pointer-events-none absolute -right-9 -top-6 h-[222px] w-[482px] max-w-none opacity-70 sm:right-0 sm:opacity-100 md:right-0 xl:right-9"
-          />
+          {/*
+            The loop lives on a dedicated wrapper: the SVG contains static blur
+            and drop-shadow filters, and promoting the wrapper keeps that bitmap
+            rasterized once instead of repainting the filters every frame. Only
+            transform changes, so the animation stays on the compositor.
+          */}
+          <div className="orbit-float-wrap pointer-events-none absolute -right-9 -top-6 h-[222px] w-[482px] max-w-none sm:right-0 md:right-0 xl:right-9">
+            <img
+              src="/orbit-hero.svg"
+              alt="A lavender planet with connected community satellites"
+              width={500}
+              height={230}
+              decoding="async"
+              className="size-full opacity-70 sm:opacity-100"
+            />
+          </div>
           <div className="absolute bottom-0 right-0 h-full w-1/2 bg-gradient-to-r from-[#f0ebf8] to-transparent opacity-50 sm:hidden" />
         </div>
       )}

@@ -106,15 +106,41 @@
     transform: translateY(0);
   }
 }
-@keyframes float {
+@keyframes orbit-float {
   0%,
   100% {
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
   50% {
-    transform: translateY(-8px);
+    transform: translate3d(0, -8px, 0);
   }
 }
-.orbit-float {
-  animation: float 7s ease-in-out infinite;
+/*
+  Only transform animates, on its own layer. The layer is promoted while the
+  loop runs and never on small screens, where the artwork is cropped and the
+  device is more likely to be power-constrained.
+*/
+.orbit-float-wrap {
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  animation: orbit-float 9s ease-in-out infinite;
+}
+@media (max-width: 639px) {
+  .orbit-float-wrap {
+    animation: none;
+    will-change: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit-float-wrap {
+    animation: none;
+    will-change: auto;
+  }
+  .animate-in,
+  .page-enter {
+    animation: none;
+  }
+  * {
+    scroll-behavior: auto !important;
+  }
 }
