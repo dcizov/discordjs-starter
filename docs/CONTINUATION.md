@@ -12,16 +12,16 @@ recovered from a new workspace.
 
 ## Recovered status matrix
 
-| Area                                     | State before this session                                                                                   | Evidence                                                                                     | Now                                                                                                         |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Monorepo structure / Turborepo           | npm workspaces (`apps/*`, `packages/*`), tsup for services, one Next app                                    | `package.json`, `tsup.config.ts`, `.github/workflows/ci.yml`, `docs/STRUCTURE-REFACTOR.md`   | Researched and **retained unchanged** (see decision record)                                                 |
-| News formatting, images, excerpts, links | Broken: one-tag-stripping normalizer, no BBCode handling, no images, no attribution, preview ≠ delivery     | `packages/core/src/feeds.ts`, `safety.ts`, screenshot 1                                      | **Implemented and freshly verified** (`docs/NEWS-FORMATTING.md`)                                            |
-| Audit / activity identity images         | Initials only, no avatar data recorded                                                                      | `overview.tsx`, `server-pages.tsx`, screenshot 2                                             | **Implemented** (recorded avatar hashes + migration); unit-verified, browser-unverified                     |
-| Music state, channel, progress, volume   | Pause-styled control while empty; snapshot-only position; volume committed per event and snapped back       | `music-page.tsx`, screenshot 3                                                               | **Implemented** (`docs/DASHBOARD-UX.md`); unit-verified, browser-unverified                                 |
-| First-visit dashboard tour               | None                                                                                                        | no tour code, no storage policy                                                              | **Implemented** (`tour-model.ts` + dialog + e2e spec, spec unexecuted)                                      |
-| Overview banner animation                | Animation on the filtered `<img>` itself                                                                    | `overview.tsx`, `globals.css`                                                                | **Implemented** compositor-only wrapper + reduced-motion/mobile opt-out; no frame-time measurement possible |
-| Ticket system                            | Not implemented (documented as high privacy burden in `FEATURE-RESEARCH.md`)                                | no tickets table/command/dashboard                                                           | **Deferred** — see below                                                                                    |
-| Operational / server health              | Honest separation of container liveness, saved config, backend readiness and delivery health already exists | `apps/bot/src/features/music/diagnostics.ts`, `service_health`, dashboard `ConnectionStatus` | **Unchanged this session**; extension deferred                                                              |
+| Area                                     | State before this session                                                                                   | Evidence                                                                                     | Now                                                                                                              |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Monorepo structure / Turborepo           | npm workspaces (`apps/*`, `packages/*`), tsup for services, one Next app                                    | `package.json`, `tsup.config.ts`, `.github/workflows/ci.yml`, `docs/STRUCTURE-REFACTOR.md`   | Researched and **retained unchanged** (see decision record)                                                      |
+| News formatting, images, excerpts, links | Broken: one-tag-stripping normalizer, no BBCode handling, no images, no attribution, preview ≠ delivery     | `packages/core/src/feeds.ts`, `safety.ts`, screenshot 1                                      | **Implemented and freshly verified** (`docs/NEWS-FORMATTING.md`)                                                 |
+| Audit / activity identity images         | Initials only, no avatar data recorded                                                                      | `overview.tsx`, `server-pages.tsx`, screenshot 2                                             | **Implemented** (recorded avatar hashes + migration); unit-verified, browser-unverified                          |
+| Music state, channel, progress, volume   | Pause-styled control while empty; snapshot-only position; volume committed per event and snapped back       | `music-page.tsx`, screenshot 3                                                               | **Implemented** (`docs/DASHBOARD-UX.md`); unit-verified, browser-unverified                                      |
+| First-visit dashboard tour               | None                                                                                                        | no tour code, no storage policy                                                              | **Implemented + verified** (`tour-model.ts`, dialog, `tests/tour.test.ts`, `tests/e2e/tour.spec.ts` green in CI) |
+| Overview banner animation                | Animation on the filtered `<img>` itself                                                                    | `overview.tsx`, `globals.css`                                                                | **Implemented** compositor-only wrapper + reduced-motion/mobile opt-out; no frame-time measurement possible      |
+| Ticket system                            | Not implemented (documented as high privacy burden in `FEATURE-RESEARCH.md`)                                | no tickets table/command/dashboard                                                           | **Deferred** — see below                                                                                         |
+| Operational / server health              | Honest separation of container liveness, saved config, backend readiness and delivery health already exists | `apps/bot/src/features/music/diagnostics.ts`, `service_health`, dashboard `ConnectionStatus` | **Unchanged this session**; extension deferred                                                                   |
 
 ## Prioritisation used this session
 
@@ -134,13 +134,22 @@ Music, tour, animation: see `docs/DASHBOARD-UX.md`.
 | SSR smoke                      | `curl` `/dashboard/:id/overview`                 | 200, hero wrapper present, tour dialog absent from SSR (client-only, as intended)                                                                                |
 | Schema generation              | `npx drizzle-kit generate`                       | `0003_audit_actor_avatar.sql` = a single `ADD COLUMN` (a first attempt with a corrupted schema file produced `DROP TABLE`s and was reverted before anything ran) |
 
-Not executed here, and why:
+| Browser suites (CI) | `npm run test:e2e` on the pushed branch | **51 passed** (1.2 min), verify job green |
 
-- **Browser/Playwright suites** (`npm run test:e2e`, including the new
-  `tour.spec.ts` and the two new music cases): no Chromium binary is available
-  and `npx playwright install chromium` cannot download in this sandbox
-  (network restricted to package registries and GitHub). The specs are written
-  to existing conventions; treat them as unexecuted until CI runs.
+Not executed in the authoring sandbox, and why:
+
+- **Browser/Playwright suites run in CI, not locally.** No Chromium binary is
+  available in the authoring sandbox (`npx playwright install chromium` cannot
+  download there), so the specs were executed by CI on push instead: the
+  `verify` job ran `npx playwright install --with-deps chromium` and
+  `npm run test:e2e` with **51 passing tests**, covering the first-visit tour,
+  the honest transport state, snapshot progress and volume commit. That run
+  caught one genuine defect the code review missed: the volume slider sent two
+  identical jobs per keyboard interaction (the debounce ref was not cleared
+  when its timer fired, so the blur caused by disabling the slider mid-save
+  flushed an already-committed value). Fixed in `5665a71` by clearing the timer
+  self-referentially and keeping the slider enabled while a commit is in
+  flight; the suite has asserted exactly one POST per interaction since.
 - **Live Discord, Steam/RSS providers, Lavalink audio**: no credentials, no
   outbound access to those hosts. All provider behaviour here is fixture- and
   mock-based.

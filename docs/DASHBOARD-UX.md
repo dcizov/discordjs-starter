@@ -106,8 +106,9 @@ longer claims the bot "completed" an action it merely queued.
 
 The policy (versioning, per-user scope, corrupt/unavailable storage, step
 bounds) is covered by `tests/tour.test.ts`. The dialog interaction is covered by
-`tests/e2e/tour.spec.ts`, which was **not executed** in this environment (no
-browser binary available; see the continuation report).
+`tests/e2e/tour.spec.ts`, which passes in CI's Chromium run alongside the music
+specs (51 e2e tests green on `5665a71`); the authoring sandbox itself has no
+browser, so local runs of that file are not available.
 
 ## Overview hero animation
 

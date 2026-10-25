@@ -151,7 +151,7 @@ Fresh evidence (this branch):
 
 Not verified here: a real Steam or RSS fetch (no live credentials/network in the
 sandbox), Discord's rendering of the image/embed, and a visual browser check of
-the dialog (no browser binary available in this environment).
+the dialog; the browser specs run in CI, not in the authoring sandbox.
 
 ## Remaining work
 
