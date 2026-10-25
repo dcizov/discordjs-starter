@@ -41,3 +41,13 @@ Several independent offerings establish recurring product categories. No represe
 The requested Discord.js version already matches the lockfile. No upgrade is required. Its versioned overview currently displays a Node 24.17+ installation sentence, but the **installed 14.27.0 package manifest** requires Node >=18; installed Next requires >=20.9 and this project deliberately requires >=22.14. The installed manifests and version-matched API/source are used for runtime compatibility; the overview's apparent current-README drift does not justify silently changing the deployment's Node major. Node 22.22.3 is tested here. Legacy/vendor examples never override the selected API contract.
 
 Implementation, operational limits, actual verification and backlog status are recorded in [COMMUNITY.md](COMMUNITY.md) ; this matrix is a selection rationale, not a claim that backlog features exist.
+
+> **Status update, 25 October 2026:** polls, scheduled announcements, economy
+> own-history, per-member music queue limits and the news routing preview have
+> been implemented (see [COMMUNITY.md](COMMUNITY.md)). The reported news
+> formatting/identity/music defects were fixed first in the follow-up session:
+> see [NEWS-FORMATTING.md](NEWS-FORMATTING.md), [DASHBOARD-UX.md](DASHBOARD-UX.md)
+> and [CONTINUATION.md](CONTINUATION.md). **Tickets (Backlog 3) remain
+> unimplemented**: the privacy/overwrite/retention design above is still the
+> prerequisite, and the continuation report records the deferred scope and
+> acceptance criteria rather than claiming partial delivery.

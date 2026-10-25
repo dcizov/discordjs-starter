@@ -47,16 +47,16 @@ DEMO_MODE=true npm start
 
 ## What’s implemented
 
-| Area        | Workflows                                                                                                                                                                                                                                      |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Self roles  | Buttons, selects, reaction panels; single/multi selection; prerequisites; exclusive roles; role limits; preview, publication, and safe reassignment                                                                                            |
-| Moderation  | Warnings, timeouts, kicks, bans, recent-message purges, case history, spam/repetition/mention/blocked-term rules, exemptions, escalation, audit channel                                                                                        |
-| Economy     | Per-guild balances, rolling daily rewards, activity rewards/cooldowns, transfers, leaderboard, role/item shop, inventory, reclaimable role entitlements, atomic PostgreSQL ledger; private own-account transaction history                     |
-| Music       | Discord voice playback through Lavalink, supported-source search, persistent dashboard snapshots, queue, pause/resume/skip/stop, volume, shuffle, repeat, DJ restrictions, optional requester queue cap                                        |
-| Game deals  | IsThereAnyDeal search, shared game watchlists and general deal feeds; region/currency/shop/price/discount/historical-low filters; deduplicated alerts                                                                                          |
-| News        | Official Steam app-news adapter; configurable RSS/Atom and signed webhooks; honest setup-required Blizzard/Wowhead/Mojang starters; keyword/tag routing, interval schedules, health, tests, delivery history, no-fetch/no-send routing preview |
-| Dashboard   | OAuth2, manageable-server switcher, installed/invite distinction, responsive light/dark UI, configuration CRUD, validation, confirmations, search, server-paginated histories, loading/error/empty states, toasts, safe optimistic switches    |
-| Reliability | Separate services, migrations, transactional outbox, retry backoff, stable delivery keys, Discord nonce suppression, structured logs, configuration audits, SSRF protection, bounded XML/body parsing, sanitized content, explicit mentions    |
+| Area        | Workflows                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Self roles  | Buttons, selects, reaction panels; single/multi selection; prerequisites; exclusive roles; role limits; preview, publication, and safe reassignment                                                                                                                                                                                                                                                           |
+| Moderation  | Warnings, timeouts, kicks, bans, recent-message purges, case history, spam/repetition/mention/blocked-term rules, exemptions, escalation, audit channel                                                                                                                                                                                                                                                       |
+| Economy     | Per-guild balances, rolling daily rewards, activity rewards/cooldowns, transfers, leaderboard, role/item shop, inventory, reclaimable role entitlements, atomic PostgreSQL ledger; private own-account transaction history                                                                                                                                                                                    |
+| Music       | Discord voice playback through Lavalink, supported-source search, persistent dashboard snapshots, queue, pause/resume/skip/stop, volume, shuffle, repeat, DJ restrictions, optional requester queue cap                                                                                                                                                                                                       |
+| Game deals  | IsThereAnyDeal search, shared game watchlists and general deal feeds; region/currency/shop/price/discount/historical-low filters; deduplicated alerts                                                                                                                                                                                                                                                         |
+| News        | Official Steam app-news adapter with provider-aware formatting, attribution and an optional official-only filter; configurable RSS/Atom and signed webhooks; honest setup-required Blizzard/Wowhead/Mojang starters; keyword/tag routing, interval schedules, health, tests, delivery history, and a test flight that renders the same cards as delivery (see [formatting contract](docs/NEWS-FORMATTING.md)) |
+| Dashboard   | OAuth2, manageable-server switcher, installed/invite distinction, responsive light/dark UI, configuration CRUD, validation, confirmations, search, server-paginated histories, loading/error/empty states, toasts, safe optimistic switches                                                                                                                                                                   |
+| Reliability | Separate services, migrations, transactional outbox, retry backoff, stable delivery keys, Discord nonce suppression, structured logs, configuration audits, SSRF protection, bounded XML/body parsing, sanitized content, explicit mentions                                                                                                                                                                   |
 
 ## New opt-in community tools
 
@@ -70,7 +70,7 @@ Bot startup is `apps/bot/src/bootstrap.ts`; commands, gateway listeners, feature
 
 ## Dashboard identities and sidebar meaning
 
-The server switcher shows Discord guild icons when supplied; the account menu uses your **global Discord avatar**, not a server-specific member avatar. Missing/failed images retain fixed-size initials. Use **Refresh profile image & name** in the account menu to refresh your own stored metadata; this adds no scope or passive Discord polling. Demo art is fictional/local and labeled. The old unconditional News green dot is removed: saved configuration is not proof of healthy delivery. See [root causes, bounded refactors, verification and remaining live-check gaps](docs/DASHBOARD-MAINTENANCE.md).
+The server switcher shows Discord guild icons when supplied; the account menu uses your **global Discord avatar**, not a server-specific member avatar. Audit entries show the avatar **recorded with the action** (never re-fetched per row, and documented as not necessarily current); missing/failed images retain fixed-size initials. A first-visit introduction can be replayed from _A little help?_. See [audit identity, music state, tour and hero-animation notes](docs/DASHBOARD-UX.md). Use **Refresh profile image & name** in the account menu to refresh your own stored metadata; this adds no scope or passive Discord polling. Demo art is fictional/local and labeled. The old unconditional News green dot is removed: saved configuration is not proof of healthy delivery. See [root causes, bounded refactors, verification and remaining live-check gaps](docs/DASHBOARD-MAINTENANCE.md).
 
 ## Run live
 
@@ -134,7 +134,7 @@ Configuration is read on every bot action/message; feed schedules are reconciled
 
 - **Deals:** set `ITAD_API_KEY` on bot/web/worker, register the updated commands, then use `/deals feed channel:#game-deals` or **Game deals → Set up deal alerts**. Rich cards use real artwork/ratings/offers; automatic discovery requires measurable popularity/review evidence, not obscure high-discount listings. See [the deals guide](docs/DEALS.md).
 - **Music:** the supplied Lavalink image includes the nine requested plugins plus Soundy, with unique source ownership and adult adapters disabled. See the [music/startup guide](docs/MUSIC.md) and [plugin inventory/SFW boundaries](docs/MUSIC-PLUGINS.md). Public catalogs are not universally SFW-rated; curate clean recordings. Playback from arbitrary providers is not promised.
-- **RSS/Atom:** enter a verified publisher URL. The bot never guesses feed URLs or scrapes sites.
+- **RSS/Atom:** enter a verified publisher URL. The bot never guesses feed URLs or scrapes sites. A **Test source** preview shows the exact cards, images, links and metadata gaps; nothing is sent to Discord.
 - **Webhook:** create an incoming-webhook source, save it, then use **Webhook credentials** to generate a secret. See the signed request example in the integration guide.
 
 ## Docker Compose
@@ -278,7 +278,7 @@ Infrastructure:       Dockerfile, docker-compose.yml, docker/lavalink/
 Tests:                tests/ (unit/SQL), tests/e2e/ (Playwright)
 ```
 
-See [architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md), [integration details](docs/INTEGRATIONS.md), [music setup](docs/MUSIC.md), and [deployment checklist](docs/DEPLOYMENT.md).
+See [architecture](docs/ARCHITECTURE.md), [security](docs/SECURITY.md), [integration details](docs/INTEGRATIONS.md), [music setup](docs/MUSIC.md), [deployment checklist](docs/DEPLOYMENT.md), [news formatting contract](docs/NEWS-FORMATTING.md), [dashboard UX notes](docs/DASHBOARD-UX.md), and [the current continuation report](docs/CONTINUATION.md).
 
 ## Honest operational boundaries
 
