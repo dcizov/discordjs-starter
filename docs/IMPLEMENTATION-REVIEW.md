@@ -1,5 +1,7 @@
 # Orbit implementation review — 25 October 2026
 
+> Historical implementation report. For the current source layout, runtime/tooling decisions and newer verification, see [STRUCTURE-REFACTOR.md](STRUCTURE-REFACTOR.md).
+
 ## Scope and inspected revision
 
 The current branch was fetched before implementation: **`arena/e2b42b08-discordjs-starter`**, starting at **`4c75751c7f840b0f19cf60eec44a1d34b2766912`**. The previously mentioned `23b405a` was not assumed to be current. This review describes the changes following that inspected revision; the branch history records their resulting commit.

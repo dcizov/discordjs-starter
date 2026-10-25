@@ -39,7 +39,7 @@ No upstream implementation is copied. Licenses are inspected; these are organiza
 
 ## Decision: Better Auth — defer, not implemented
 
-Current inspected package **1.7.12** supports Next 14–16, React 18–19, pg 8 and Drizzle `^0.45.2` / kit >=0.31.4: Orbit's installed versions are compatible. It offers maintained OAuth/state/origin/session/revocation machinery and Next route/RSC integration, so this is not a claim that custom auth is inherently superior.
+Current inspected package **1.7.12** supports Next 14–16, React 18–19, pg 8 and Drizzle `^0.45.2` / kit >=0.31.4: Orbit's installed versions are peer-compatible. The matching `@better-auth/drizzle-adapter@1.7.12` specifically declares Drizzle `^0.45.2` and core `^1.7.12`; checked package metadata, not an unperformed installed-adapter migration. It offers maintained OAuth/state/origin/session/revocation machinery and Next route/RSC integration, so this is not a claim that custom auth is inherently superior.
 
 Concrete migration costs and required protections:
 
@@ -97,7 +97,7 @@ Dependency direction: entrypoints → bootstrap/adapters → feature services �
 
 ## Implementation and final evidence
 
-Pending implementation. Starting counts above are fresh baseline evidence only; final counts, actual tree, examples, dependency changes, compatibility and exact ending commit/CI are recorded after execution. No live Discord/CDN/Redis/provider/audio success is claimed from demo or mocks.
+Implemented stages and their fresh checks follow below. The final local evidence table concludes this report; immutable ending commit/CI URLs are supplied in the delivery to avoid treating a historical parent run as proof. No live Discord/CDN/provider/audio success is claimed from demo or mocks.
 
 ### Stage 1 — development tools (implemented)
 
@@ -258,3 +258,27 @@ These are responsibility/contract reductions, not a claim that total source line
 - Economy locking/idempotency, publication claims/revisions/ambiguous sends, paused cleanup, voice ownership/stale events, SSRF/mentions, guild authorization and deterministic chart snapshots remain explicit. Similar checks at different trust/transaction boundaries are not merged merely for fewer lines.
 - Existing background dashboard refresh error presentation and multi-replica OAuth refresh concurrency are not redesigned. No new live credential, gateway lease/status registry, periodic provider polling or auto-replay is introduced.
 - No authorized Discord OAuth/guild/CDN/audio/provider check is claimed. Browser image fixtures demonstrate decoding and failure recovery, not live CDN success. Local SQL uses PGlite unless a dedicated TEST_DATABASE_URL is supplied; real PostgreSQL/Redis/backend/container checks are reported only from observed exact-head CI.
+
+## Final local verification (fresh, 2026-10-25)
+
+| Executed check                         | Result / boundary                                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Fresh final `npm ci`                   | PASS, frozen lockfile; no installed production package version changes                                                                     |
+| `npm test`                             | **625 tests / 51 files PASS**, 34.33s; includes 41 SQL-capable PGlite cases and all prior economy/publication/voice guards                 |
+| Typecheck / ESLint / format            | **PASS**, both TypeScript projects; no warnings or broad suppressions                                                                      |
+| Production builds                      | **PASS** for both `DEMO_MODE=false` and `DEMO_MODE=true`, Next + all six CJS bundles                                                       |
+| Compiled CLI smoke                     | Demo bot/registration exit without connections; compiled channel/role export and music doctor `--help` work without credentials            |
+| Fresh final Chromium suite             | **48/48 PASS**, 1.3m; custom Chromium 153.0.8010.0 (standard workflow browser separately checked in CI)                                    |
+| Plugin installer Python / shell        | **7 PASS**; `sh -n` probe launcher PASS                                                                                                    |
+| Schema drift                           | `db:generate`: **No schema changes, nothing to migrate**                                                                                   |
+| Production audit                       | **0 findings**                                                                                                                             |
+| Full developer-inclusive audit         | **7 moderate / 0 critical** affected packages; residual Drizzle loader/esbuild + Tailwind 3/parser findings documented, not waived         |
+| Runtime architecture review            | Critical moved feature bodies unchanged beyond imports; no bot runtime import cycles; no environment-runtime marker in built client chunks |
+| Git whitespace / YAML formatting       | **PASS**                                                                                                                                   |
+| Local Docker/JDK/real PostgreSQL/Redis | **Not available/run locally**; exact-head CI runs these isolated checks and is reported separately                                         |
+
+No live Discord client/bot/application/DB/Redis/Lavalink credentials were present (availability inspected as booleans only). No live login, registration, guild/CDN, provider or audible test was performed. CI's real PostgreSQL, Redis and network-isolated backend checks are not a production environment certification.
+
+Actual browser screenshots refreshed under ignored `.artifacts/`: `dashboard-identity-demo.png`, `dashboard-account-demo.png`, `dashboard-identity-fallbacks.png`, `dashboard-identity-mobile.png`, `native-polls-demo.png`, `announcements-demo.png`. These are real local demo renders, not fabricated live receipts or generated mockups.
+
+Logs live in ignored `.artifacts/structure/`: baseline install/tests/audits/browser; stage `tools-*`, `env-*`, `bot-*`, `ui-*`, `health-*`, and final install/typecheck/lint/format/tests/schema/demo-build/live-build/browser/Python/audit files. The first readiness timing regression is recorded red, then green; initial extraction/test-fixture corrections were not concealed by disabling assertions. Final exact commit and observed CI run/jobs are reported in the delivery, not inferred from old handover counts.

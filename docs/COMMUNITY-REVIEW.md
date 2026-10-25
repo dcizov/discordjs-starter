@@ -1,5 +1,7 @@
 # Community tools — implementation and verification
 
+> Historical implementation report. For the current source layout, runtime/tooling decisions and newer verification, see [STRUCTURE-REFACTOR.md](STRUCTURE-REFACTOR.md).
+
 Date: **25 October 2026**. Branch: **`arena/e2b42b08-discordjs-starter`**. Starting/fetched revision: **`0e77b456862207bb670e76d4aa7913f24e19470b`**, not the older implementation-review baseline. This report travels with the implementation commit; the ending commit SHA and exact remote check result are provided in the final handover and Git history. No other branch is used.
 
 ## Delivered, not backlog

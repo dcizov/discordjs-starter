@@ -66,7 +66,7 @@ See [setup, permissions, privacy, recovery and examples](docs/COMMUNITY.md), [of
 
 ## Source organization
 
-Bot startup is `apps/bot/src/bootstrap.ts`; commands, gateway listeners, feature services, dashboard action consumption and read-only tools have explicit folders. The shared command builders remain in `packages/core/src/commands.ts`. See [the source map, library decisions and verification](docs/STRUCTURE-REFACTOR.md). CLI script names and compiled `dist/*.js` entrypoints stay compatible.
+Bot startup is `apps/bot/src/bootstrap.ts`; commands, gateway listeners, feature services, dashboard action consumption and read-only tools have explicit folders. The shared command builders remain in `packages/core/src/commands.ts`. See [the source map, library decisions and verification](docs/STRUCTURE-REFACTOR.md). CLI script names and compiled `dist/*.js` entrypoints stay compatible. Dashboard chrome lives in `components/layout`/`identity`; community and overview responsibilities in `components/features`. Better Auth and t3-env were assessed, not silently adopted. The audio image owns its authenticated healthcheck; configuration, backend readiness and audible playback remain distinct.
 
 ## Dashboard identities and sidebar meaning
 

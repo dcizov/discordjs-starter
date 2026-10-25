@@ -1,5 +1,7 @@
 # Dashboard identity and bounded maintenance review
 
+> Historical implementation report. For the current source layout, runtime/tooling decisions and newer verification, see [STRUCTURE-REFACTOR.md](STRUCTURE-REFACTOR.md).
+
 Date: 25 October 2026. Branch: `arena/e2b42b08-discordjs-starter`.
 
 ## Baseline and evidence (before implementation)
