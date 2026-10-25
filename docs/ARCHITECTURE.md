@@ -116,3 +116,7 @@ The feature-specific demo adapter is mode-guarded, shares validation/storage sem
 ## Runtime environment boundary
 
 `packages/core/src/environment.ts` owns mode selection, typed validated individual reads and the web/bot/worker/register/export/migrate/music-doctor startup contracts. It is **not** re-exported by the browser-facing core barrel; server consumers import the qualified subpath. Persistent guild/resource schemas remain in `config.ts`. Optional music is validated only by its consumers. Module imports/compilation do not validate live credentials; explicit demo services use no live dependencies. Explicit migration tools still need their database even when the surrounding demo is enabled. No `skipValidation` bypass or browser public secrets are introduced. See [structure decisions/runtime matrix](STRUCTURE-REFACTOR.md).
+
+## Dashboard composition
+
+The authorized App Router page still loads one safe server snapshot and keys the workspace by guild and user. `components/dashboard.tsx` owns only that workspace's data/API/optimistic reconciliation and layout composition. `components/layout` owns navigation/header/guidance; `components/identity` owns image loading/fallback and the protected profile controls. Feature page/editor/review components live in `components/features/community`; overview toolkit/status/preferences in `components/features/overview`. Existing shared workspace state is not replaced by a larger context, and chart/calendar preparation remains server-owned. Full [before/after map and invariants](STRUCTURE-REFACTOR.md).

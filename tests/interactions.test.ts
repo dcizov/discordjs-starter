@@ -42,7 +42,9 @@ vi.mock("../apps/bot/src/features/roles/panels", () => ({
   handleRoleInteraction: vi.fn(),
   publishPanel: vi.fn(),
 }));
-vi.mock("../apps/bot/src/features/roles/shop", () => ({ claimShopRole: vi.fn() }));
+vi.mock("../apps/bot/src/features/roles/shop", () => ({
+  claimShopRole: vi.fn(),
+}));
 import { onInteraction } from "../apps/bot/src/interactions/dispatch";
 
 const guildId = "120000000000000001";
