@@ -37,6 +37,7 @@ import { PageHeader } from "./page-header";
 import { ResourceEditor, kindNames } from "./resource-editor";
 import { NewsArticleCard } from "./news-article-card";
 import type { NewsCard } from "@orbit/core/news-presentation";
+import { sourceFreshness } from "@orbit/core/source-health";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -642,6 +643,11 @@ export function ResourcesPage({
                         : Rss;
             const setupIssue = sourceSetupIssue(r);
             const healthy = !setupIssue && r.data.health === "healthy";
+            // Saved health is not evidence that a check ran recently.
+            const freshness = sourceFreshness(
+              r,
+              new Date(data.presentation.referenceAt).getTime()
+            );
             return (
               <Card key={r.id} className="p-5">
                 <div className="flex items-center justify-between">
@@ -692,7 +698,13 @@ export function ResourcesPage({
                           : "Awaiting check"}
                   </Badge>
                   {!r.enabled && <Badge>Paused</Badge>}
+                  {r.enabled && freshness.state !== "fresh" && (
+                    <Badge tone="amber">{freshness.label}</Badge>
+                  )}
                 </div>
+                <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                  {freshness.detail}
+                </p>
                 <p className="mt-3 line-clamp-2 min-h-[31px] text-[11px] leading-relaxed text-muted-foreground">
                   {healthy
                     ? r.data.adapter === "steam"
