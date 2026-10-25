@@ -69,7 +69,7 @@ Success is fewer coupled decisions, untyped boundaries and lifecycle-reset rules
 - Deleted decorative switcher/version dots. “Orbit installed” is installation metadata, not proof that a feature works; the live-mode badge is neutral. Demo remains visibly labeled.
 - The moderation number derives once from enabled rule **configurations**, with an accessible name also stating enabled/paused module state. It is not a delivery-health signal. Selected navigation uses `aria-current`.
 - Preserved the actual data-derived service-health header and existing setup/status pages; no new registry, inferred module health or saved-config → healthy transition. Zero/unknown service health is not considered all-healthy.
-- Scoped axe found 2.72:1 contrast in the original sidebar group headings. Removed only their opacity reduction; identity/navigation scoped WCAG checks now pass in both themes. This is not a whole-app WCAG certification.
+- Scoped axe found 2.72:1 contrast in the original sidebar group headings. Removed their opacity reduction. Subsequent standard-browser CI exposed a near-threshold shared light-theme text token, corrected as described below; both theme checks assert the actual HTML theme. This is not a whole-app WCAG certification.
 
 ## Refactors: concrete before / after
 
@@ -82,6 +82,14 @@ Success is fewer coupled decisions, untyped boundaries and lifecycle-reset rules
 | Root Tooltip dependency, no import or documented consumer                                    | Removed `@radix-ui/react-tooltip` and its now-unused root `react-visually-hidden` dependency                                      | Two unused package entries / 60 lockfile lines removed. `npm explain` and source search established non-use first; all remaining installed versions are unchanged. Existing Radix primitives remain. |
 
 The Community browser characterization for publish/schedule/cancel/delete copy passed **before** its source change; existing close/immutable/stale/pause workflows remain covered afterward. The live-only Discord native-poll close path is covered by unit/database/executor tests, not falsely described as a live browser action.
+
+## CI-discovered contrast correction
+
+The first new implementation commit, `36f577fa78ff160f99fe557aa0c1687313c6282a`, ran [CI 40200928215](https://github.com/dcizov/discordjs-starter/actions/runs/40200928215). **Containers passed**: runtime/dev images, Compose profiles, unprivileged offline CLI, all nine pinned plugins + Soundy, supervised backend WebSocket/readiness and the real Dev Container without a second bot. Verification passed real PostgreSQL units/type/lint/audit/build but the standard-browser suite was **44 pass / 1 fail**: Community scoped text contrast. The earlier local Chromium 153 green was not treated as proof that this was harmless.
+
+Reproduction before changing CSS: six small palette tests calculated WCAG sRGB contrast from the existing HSL tokens **without rounding channels**. Two failed: light muted text was **4.4934:1 on body** and **4.2798:1 on the muted surface** (minimum 4.5). Local Chromium's displayed integer channels gave a misleading 4.5168 body ratio. This is a real margin defect, not grounds to weaken axe.
+
+**Correction:** light `--muted-foreground` lightness 48% → 45%; dark colors unchanged. Exact ratios are now about **4.99:1 body / 4.75:1 muted**, with six palette tests passing. Community axe now waits for actual font readiness and currently running finite animations to finish, avoiding intermediate page/dialog fade colors; it does not sleep, disable motion, alter timeouts, exclude nodes or relax rules. Dark/light checks assert the actual theme, and failures include contrast diagnostics. No application SSR/content-hiding change. Full units, both production modes and all browsers are rerun on the corrected source; final immutable CI run is supplied with the delivery.
 
 ## Guarantees deliberately retained
 
@@ -101,7 +109,7 @@ Commands are the **optional host-Node verification performed in this sandbox**, 
 | Real SQL session guard tests                 | Extended the existing database suite, **41 PASS** using PGlite PostgreSQL locally: matching session/account, foreign session refusal, expired session refusal and no revoked-session recreation; CI runs the same suite against PostgreSQL |
 | Community before refactor                    | Existing **7/7 browser PASS**, plus new copy characterization **1/1 PASS** before source edits                                                                                                                                             |
 | Selected safety-focused units after refactor | **135/7 PASS**, including community executor/worker and voice/service regressions                                                                                                                                                          |
-| Full units after SQL additions               | **537 tests / 43 files PASS**, 46.02s on the final clean install after unused-dependency removal (earlier run: 34.50s)                                                                                                                     |
+| Full units after SQL additions               | **543 tests / 44 files PASS**, 49.19s after the final contrast correction (the clean-install post-removal run before the six contrast cases was **537/43**, 46.02s)                                                                        |
 | Typecheck, ESLint, Prettier                  | **PASS** after the final clean install; no broad casts/lint disables added                                                                                                                                                                 |
 | Production/service builds                    | Both `DEMO_MODE=false npm run build` and `DEMO_MODE=true npm run build` **PASS**, including Next and all six service/CLI bundles; no live credentials used                                                                                 |
 | Full real Chromium browser run               | **45/45 PASS**, 1.2m, rerun after the final clean install: existing hydration/timezones, commands, copy/error, role/moderation/economy/news/music/setup/publishing regressions plus 11 identity/sidebar tests                              |
@@ -109,7 +117,7 @@ Commands are the **optional host-Node verification performed in this sandbox**, 
 | Drizzle generation / migration drift         | **No schema changes; nothing to migrate**                                                                                                                                                                                                  |
 | Production dependency audit                  | **0 vulnerabilities**; full development audit is **not** clean (see below)                                                                                                                                                                 |
 | Git whitespace                               | `git diff --check` **PASS**                                                                                                                                                                                                                |
-| Local Docker/container builds                | **Not run locally: Docker executable unavailable**. Newly pushed implementation-commit CI results/URLs are supplied in the final delivery, not inferred from the old 4150464 green run.                                                    |
+| Local Docker/container builds                | **Docker unavailable locally**. First implementation CI **containers PASS** (linked above); final corrected-head verification/containers results are supplied in the delivery, not inferred from the old 4150464 green run.                |
 
 The first identity browser run was **7 pass / 2 fail**: a test incorrectly measured a 31px bordered inner image as a 33px frame; the real HTTP response also exposed Next's global `no-store` overriding endpoint `private, no-store`. Both were corrected and the complete 45-test run passed. No test was disabled or weakened to permit a broken image. A separate initial scoped axe scan exposed the heading contrast issue; the final light/dark scoped scan is green.
 
@@ -131,9 +139,9 @@ No Discord client ID/secret/bot token, application secret, live database or Redi
 ## Changed areas and compatibility
 
 - **Identity/auth:** `lib/auth.ts`, callback and new own-profile route; `lib/discord-images.ts`, dashboard loader, additive shared DTO fields.
-- **UI/config:** dashboard shell, new `identity-image.tsx`, workspace page key, narrow Next image/API headers; Community confirmation copy only.
+- **UI/config:** dashboard shell, new `identity-image.tsx`, workspace page key, narrow Next image/API headers; Community confirmation copy only; shared light-theme muted-text contrast margin.
 - **Bot/demo:** one GuildUpdate listener reusing sync, original local sample SVGs and fresh-seed metadata. No second bot, member intents or registration step introduced.
-- **Tests:** new identity/image/auth/profile unit suites, SQL session cases, sync metadata test, identity browser suite and extra Community characterization; original local PNG fixture (no third-party asset).
+- **Tests:** new identity/image/auth/profile unit suites, SQL session cases, sync metadata test, identity browser suite, extra Community characterization and six unrounded palette contrast cases; original local PNG fixture (no third-party asset).
 - **Dependency/docs:** only unused Tooltip removed; this report and README/security guidance updated. No lockfile-wide upgrade, package replacement, database/schema or public command behavior change.
 
 Existing stores/configs remain compatible. Existing null images remain valid; no live/fake image substitution. Rebuild/recreate the normal web/bot images with the existing Compose workflow; **this change adds no migration or command re-registration requirement**. Do not reset data to obtain sample artwork.
@@ -148,4 +156,4 @@ Actual screenshots under ignored `.artifacts/` (not a new asset dump in Git):
 - `dashboard-identity-mobile.png`: actual mobile drawer/identity controls.
 - `native-polls-demo.png`, `announcements-demo.png`: existing publishing flows after the copy refactor.
 
-Focused/broad logs: `identity-characterization.log`, `identity-auth-{focused,regressions}.log`, `identity-images-{focused,regressions}.log`, `identity-profile-sql.log`, `identity-copy-characterization.log`, `identity-refactor-focused.log`, `identity-e2e-full.log`. Clean-install final logs use `identity-final-*`; final builds/audits use `identity-final-{live-build,build}.log`, `identity-final-production-audit.json` and `identity-full-audit.json`. Reports are local ignored artifacts; GitHub verification results must name the new exact commit/run, not historical CI.
+Focused/broad logs: `identity-characterization.log`, `identity-auth-{focused,regressions}.log`, `identity-images-{focused,regressions}.log`, `identity-profile-sql.log`, `identity-copy-characterization.log`, `identity-refactor-focused.log`, `identity-e2e-full.log`, `identity-contrast-{characterization,focused}.log`. Clean-install final logs use `identity-final-*`; final builds/audits use `identity-final-{live-build,build}.log`, `identity-final-production-audit.json` and `identity-full-audit.json`. Reports are local ignored artifacts; GitHub verification results must name the new exact commit/run, not historical CI.

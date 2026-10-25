@@ -376,6 +376,22 @@ test("new publishing, routing and private-history controls pass scoped WCAG AA c
   await draft(request, "poll", "E2E · Accessible poll snapshot");
   await visit(page, "polls");
   async function check(selector: string) {
+    await page.locator(selector).waitFor({ state: "visible" });
+    // Audit settled colors/fonts, not an intermediate page/dialog fade. No fixed
+    // sleep, motion suppression, relaxed contrast rule or infinite-animation wait.
+    await page.evaluate(async () => {
+      await document.fonts.ready;
+      await Promise.allSettled(
+        document
+          .getAnimations()
+          .filter(
+            (animation) =>
+              animation.playState === "running" &&
+              animation.effect?.getComputedTiming().iterations !== Infinity
+          )
+          .map((animation) => animation.finished)
+      );
+    });
     const results = await new AxeBuilder({ page })
       .include(selector)
       .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
@@ -384,7 +400,10 @@ test("new publishing, routing and private-history controls pass scoped WCAG AA c
       results.violations.map((v) => ({
         id: v.id,
         impact: v.impact,
-        nodes: v.nodes.map((n) => n.html),
+        nodes: v.nodes.map((n) => ({
+          html: n.html,
+          failureSummary: n.failureSummary,
+        })),
       }))
     ).toEqual([]);
   }
@@ -395,6 +414,7 @@ test("new publishing, routing and private-history controls pass scoped WCAG AA c
   await page
     .getByRole("button", { name: "Toggle color theme", exact: true })
     .click();
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await check("[data-community-workspace]");
   await visit(page, "news");
   await page

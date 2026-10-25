@@ -7,7 +7,8 @@
     --foreground: 237 17% 20%;
     --card: 0 0% 100%;
     --muted: 230 20% 96%;
-    --muted-foreground: 232 9% 48%;
+    /* AA margin on body/card/muted surfaces, including fractional sRGB channels. */
+    --muted-foreground: 232 9% 45%;
     --border: 233 18% 92%;
     --primary: 258 64% 60%;
     --primary-foreground: 0 0% 100%;

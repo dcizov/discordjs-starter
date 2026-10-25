@@ -355,6 +355,9 @@ test("navigation and identity controls pass scoped contrast/label checks in both
   for (const theme of ["light", "dark"]) {
     if (theme === "dark")
       await page.getByRole("button", { name: "Toggle color theme" }).click();
+    await expect(page.locator("html")).toHaveClass(
+      new RegExp(`\\b${theme}\\b`)
+    );
     const results = await new AxeBuilder({ page })
       .include('nav[aria-label="Workspace navigation"]')
       .include('button[aria-label^="Switch server"]')
