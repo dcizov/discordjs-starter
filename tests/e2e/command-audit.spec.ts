@@ -55,7 +55,7 @@ test("commands are discoverable, derived from registration, searchable, and filt
   ).toBeVisible();
   await search.fill("");
   await page.getByLabel("Filter command module").selectOption("music");
-  await expect(page.getByRole("article")).toHaveCount(9);
+  await expect(page.getByRole("article")).toHaveCount(11);
   await expect(
     page.getByRole("article", { name: "/play", exact: true })
   ).toBeVisible();
