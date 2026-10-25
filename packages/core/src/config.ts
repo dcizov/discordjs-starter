@@ -212,6 +212,8 @@ export const sourceSchema = base.extend({
       .regex(/^#[0-9a-fA-F]{6}$/)
       .default("#8b5cf6"),
     includeSummary: z.boolean().default(true),
+    /** Steam only: hide items Steam metadata does not attribute to the app. */
+    officialOnly: z.boolean().default(false),
     health: z
       .enum(["healthy", "degraded", "setup_required", "paused"])
       .default("setup_required"),

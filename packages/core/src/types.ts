@@ -86,6 +86,10 @@ export type AuditEntry = {
   guildId: string;
   actorId: string;
   actorName: string;
+  /** Avatar hash recorded with the action, if the actor's metadata was known then. */
+  actorAvatar?: string | null;
+  /** Server-derived display URL for the recorded avatar; never fetched per row. */
+  actorAvatarUrl?: string | null;
   action: string;
   target: string;
   detail: string;
@@ -186,6 +190,8 @@ export type DashboardData = {
     installed: boolean;
   }[];
 };
+/** Attribution inferred from provider metadata; "unknown" is never rendered as official. */
+export type NewsAttribution = "official" | "external" | "unknown";
 export type FeedItem = {
   id: string;
   title: string;
@@ -193,6 +199,10 @@ export type FeedItem = {
   summary: string;
   publishedAt: string;
   tags: string[];
+  /** Provider-supplied lead image. Never fetched or guessed by Orbit. */
+  image?: string | null;
+  attribution?: NewsAttribution;
+  sourceLabel?: string;
   price?: number;
   currency?: string;
   discount?: number;

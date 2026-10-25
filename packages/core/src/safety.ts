@@ -8,6 +8,7 @@ import {
 } from "node:crypto";
 import { BlockList, isIP } from "node:net";
 import sanitizeHtml from "sanitize-html";
+import { decodeHtmlEntities } from "./feed-content";
 import type { GuildRole } from "./types";
 import { Permissions, roleAssignmentIssue } from "./permissions";
 export { Permissions } from "./permissions";
@@ -89,8 +90,23 @@ export function assertModeratable(
       "You or Orbit cannot moderate a member with an equal or higher role."
     );
 }
+/** Accept only absolute http(s) links without embedded credentials. */
+export function safeLink(value: string) {
+  try {
+    const u = new URL(value);
+    if (!["https:", "http:"].includes(u.protocol) || u.username || u.password)
+      return "";
+    return u.toString().slice(0, 2000);
+  } catch {
+    return "";
+  }
+}
 export function safeText(text: string, max = 1900) {
-  return sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} })
+  // sanitize-html escapes ampersands in its text output; decode afterwards so
+  // "Patch & notes" is not delivered as "Patch &amp; notes".
+  return decodeHtmlEntities(
+    sanitizeHtml(text, { allowedTags: [], allowedAttributes: {} })
+  )
     .replace(/@(everyone|here)/gi, "＠$1")
     .replace(/<@([!&]?)(\d+)>/g, "[mention]")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")

@@ -48,6 +48,9 @@ export async function dispatchItems(source: Resource, items: FeedItem[]) {
           ...(source.kind === "deal" && item.deal ? { deal: item.deal } : {}),
           summary: item.summary,
           tags: normalized.tags,
+          image: item.image ?? null,
+          attribution: item.attribution ?? "unknown",
+          publishedAt: item.publishedAt,
           notificationRoleId:
             settings.notificationRoleId || guild.config.notificationRoleId,
           color: settings.embedColor ?? "#8b5cf6",

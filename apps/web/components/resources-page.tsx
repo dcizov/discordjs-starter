@@ -35,6 +35,8 @@ import { DataTable } from "./data-table";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { ResourceEditor, kindNames } from "./resource-editor";
+import { NewsArticleCard } from "./news-article-card";
+import type { NewsCard } from "@orbit/core/news-presentation";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -1036,32 +1038,45 @@ export function ResourcesPage({
           if (!o) setTest(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{test?.name} · test flight</DialogTitle>
             <DialogDescription>
               {test?.demo
-                ? "A simulated preview. No external source was fetched and nothing was sent."
-                : `Source reached successfully. Found ${test?.count} recent items. Nothing has been sent to Discord.`}
+                ? "A simulated preview. No external source was fetched and nothing was sent to Discord."
+                : `Source reached successfully. Found ${test?.count ?? 0} recent item${test?.count === 1 ? "" : "s"}. Nothing has been sent to Discord.`}
             </DialogDescription>
           </DialogHeader>
+          <p className="rounded-lg border bg-muted/50 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+            These cards use the same normalization and embed limits as live
+            delivery. Deliveries are still made only by the worker for new items
+            that pass your filters and routing rules.
+            {test?.officialOnly
+              ? " The official-only filter is on, so items Steam does not attribute to this app are hidden."
+              : ""}
+          </p>
           <div className="space-y-3">
-            {test?.items?.map((item: any, i: number) => (
-              <div
-                key={i}
-                className="rounded-xl border-l-4 border-l-primary bg-muted/40 p-4"
-              >
-                <h3 className="text-xs font-semibold">{item.title}</h3>
-                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-                  {item.summary}
-                </p>
-              </div>
+            {test?.items?.map((item: NewsCard) => (
+              <NewsArticleCard key={item.id || item.title} card={item} />
             ))}
             {!test?.items?.length && (
               <p className="rounded-lg bg-muted p-4 text-xs text-muted-foreground">
                 The source is reachable but has no recent items. Incoming
                 webhooks wait for your integration to send an event.
               </p>
+            )}
+            {!!test?.count && test.count > (test?.shown ?? 0) && (
+              <p className="text-[11px] text-muted-foreground">
+                Showing the {test.shown} most recent items of {test.count}; the
+                rest arrive through normal delivery only.
+              </p>
+            )}
+            {!!test?.notices?.length && (
+              <ul className="space-y-1 rounded-lg border border-amber-200/70 bg-amber-50/70 p-3 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+                {test.notices.map((notice: string) => (
+                  <li key={notice}>{notice}</li>
+                ))}
+              </ul>
             )}
           </div>
           <Button className="mt-5 w-full" onClick={() => setTest(null)}>

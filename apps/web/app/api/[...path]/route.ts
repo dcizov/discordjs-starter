@@ -25,7 +25,8 @@ import { inviteUrl, isDemo, required } from "@orbit/core/environment";
 import { BotActionUnavailableError } from "@orbit/core/bot-actions";
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
-import { pollSource, searchGames } from "@orbit/core/feeds";
+import { pollSourceDetailed, searchGames } from "@orbit/core/feeds";
+import { newsCard } from "@orbit/core/news-presentation";
 import { createQueue, enqueueAction } from "@orbit/core/queue";
 import {
   audit,
@@ -64,7 +65,11 @@ async function handle(req: Request, context: Context) {
     if (mutating) assertOrigin(req);
     const auth = await authorize(guildId, mutating);
     await rateLimit(`${auth.user.id}:${guildId}`);
-    const actor = { id: auth.user.id, name: auth.user.name };
+    const actor = {
+      id: auth.user.id,
+      name: auth.user.name,
+      avatar: auth.user.avatar ?? null,
+    };
     if (path[2] === "invite" && req.method === "GET")
       return NextResponse.json({ url: inviteUrl(guildId) });
     if (!auth.guild.installed)
@@ -316,17 +321,30 @@ async function handle(req: Request, context: Context) {
               "Generate webhook credentials first. No requests can be accepted without a signing secret."
             );
         }
-        const items = isDemo()
-          ? [
-              {
-                title: "Your source is ready for a test flight",
-                summary:
-                  "This is a simulated preview. No external source was fetched and nothing was sent to Discord.",
-                url: "",
-                id: "demo-test",
-              },
-            ]
-          : await pollSource(resource);
+        // Demo never fabricates provider metadata: it returns one clearly
+        // labelled simulated item with the same card contract as live ones.
+        const polled = isDemo()
+          ? {
+              items: [
+                {
+                  id: "demo-test",
+                  title: "Your source is ready for a test flight",
+                  summary:
+                    "This is a simulated preview. No external source was fetched and nothing was sent to Discord.",
+                  url: "",
+                  attribution: "unknown" as const,
+                  publishedAt: "",
+                  image: null,
+                  tags: [],
+                  sourceLabel: resource.name,
+                },
+              ],
+              notices: [
+                "Simulated preview: no external request, no Discord delivery.",
+              ],
+            }
+          : await pollSourceDetailed(resource);
+        const items = polled.items;
         if (!isDemo())
           await saveResource(
             guildId,
@@ -347,7 +365,15 @@ async function handle(req: Request, context: Context) {
         return NextResponse.json({
           ok: true,
           count: items.length,
-          items: items.slice(0, 3),
+          shown: Math.min(items.length, 3),
+          items: items
+            .slice(0, 3)
+            .map((item) =>
+              newsCard(item, { sourceName: resource.name, simulated: isDemo() })
+            ),
+          notices: polled.notices,
+          officialOnly:
+            resource.data.adapter === "steam" && !!resource.data.officialOnly,
           demo: isDemo(),
         });
       }

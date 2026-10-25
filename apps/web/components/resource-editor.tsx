@@ -122,6 +122,7 @@ export function ResourceEditor({
       notificationRoleId: "",
       embedColor: "#8b5cf6",
       includeSummary: true,
+      officialOnly: false,
       health: "setup_required",
     },
     route: {
@@ -846,6 +847,24 @@ export function ResourceEditor({
                   aria-label="Include summary"
                 />
               </div>
+              {values.adapter === "steam" && (
+                <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+                  <span className="text-xs leading-relaxed">
+                    Official announcements only
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      Hides items Steam marks as external or does not attribute
+                      to this app. Classification comes from Steam metadata, so
+                      community crossposts can still appear when Steam labels
+                      them as app announcements.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={!!values.officialOnly}
+                    onCheckedChange={(v) => set("officialOnly", v)}
+                    aria-label="Official announcements only"
+                  />
+                </div>
+              )}
             </>
           )}
           {kind === "route" && (

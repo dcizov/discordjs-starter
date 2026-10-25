@@ -2,10 +2,11 @@ import { reconcileCommunityPosts } from "./community";
 import type { Resource } from "@orbit/core";
 import { fingerprint, safeText } from "@orbit/core";
 import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
-import { pollDeals, pollSource, safeLink } from "@orbit/core/feeds";
+import { pollDeals, pollSource } from "@orbit/core/feeds";
 import { logger } from "@orbit/core/logger";
 import { assertDeliverableDeal } from "@orbit/core/deal-policy";
 import { dealEmbed, dealLinkRow } from "@orbit/core/deal-presentation";
+import { feedEmbed } from "@orbit/core/news-presentation";
 import type { GameDeal } from "@orbit/core/deal-types";
 import {
   createQueue,
@@ -177,25 +178,28 @@ async function main() {
             );
           assertDeliverableDeal(deal, source.data);
         }
+        // One shared presentation policy produces the preview cards and this
+        // embed, so a dashboard preview cannot promise different formatting.
         const embed = deal
           ? dealEmbed(deal)
-          : {
-              title: safeText(row.title, 256),
-              ...(safeLink(row.url) ? { url: safeLink(row.url) } : {}),
-              ...(payload.includeSummary
-                ? { description: safeText(payload.summary ?? "", 1000) }
-                : {}),
-              color: /^#[0-9a-f]{6}$/i.test(payload.color ?? "")
-                ? parseInt(payload.color.slice(1), 16)
-                : 0x9b7ada,
-              footer: {
-                text: safeText(
-                  `${payload.sourceName ?? source.name} · via Orbit`,
-                  150
-                ),
+          : feedEmbed(
+              {
+                id: row.externalId,
+                title: row.title,
+                url: row.url,
+                summary: payload.summary ?? "",
+                image: payload.image ?? null,
+                attribution: payload.attribution ?? "unknown",
+                publishedAt: payload.publishedAt ?? "",
+                tags: payload.tags ?? [],
+                sourceLabel: payload.sourceName ?? source.name,
               },
-              timestamp: new Date().toISOString(),
-            };
+              {
+                includeSummary: payload.includeSummary,
+                color: payload.color,
+                sourceName: payload.sourceName ?? source.name,
+              }
+            );
         await rest.post(Routes.channelMessages(row.channelId), {
           body: {
             content: roleId ? `<@&${roleId}>` : "",
