@@ -71,7 +71,12 @@ export function VolumeControl({
     setDraft(next);
     setStatus("idle");
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void commit(next), 400);
+    // Clear the ref when the timer fires, otherwise a later blur/pointer-up
+    // would `flush` an already-committed value and send a duplicate job.
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      void commit(next);
+    }, 400);
   }
 
   function flush() {
@@ -98,7 +103,7 @@ export function VolumeControl({
         max="100"
         step="1"
         value={shown}
-        disabled={disabled || status === "saving"}
+        disabled={disabled}
         aria-label="Playback volume"
         aria-valuetext={`${shown}%`}
         aria-describedby={describedBy}
