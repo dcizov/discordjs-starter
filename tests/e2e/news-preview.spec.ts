@@ -6,6 +6,30 @@ const guildId = "120000000000000001";
 const root = `/dashboard/${guildId}`;
 
 /**
+ * The demo workspace ships a Steam source; take its name from the API rather
+ * than assuming seed copy, so renaming the seed cannot silently skip this test.
+ */
+async function steamSourceName(request: any) {
+  const data = await (await request.get(`/api/guilds/${guildId}`)).json();
+  const source = data.resources.find(
+    (resource: any) =>
+      resource.kind === "source" && resource.data?.adapter === "steam"
+  );
+  expect(
+    source,
+    "the demo workspace should contain a Steam news source"
+  ).toBeTruthy();
+  return source.name as string;
+}
+
+function sourceCard(page: any, name: string) {
+  return page
+    .locator("div.rounded-xl")
+    .filter({ has: page.getByRole("heading", { name, exact: true }) })
+    .last();
+}
+
+/**
  * Browser regression for the reported defect.
  *
  * The test-flight response is the recorded payload in
@@ -23,6 +47,7 @@ const payload = readFileSync(
 
 test("the Steam preview renders real announcement content without raw markup", async ({
   page,
+  request,
 }) => {
   await page.route("**/api/guilds/**/resources/source/*/test", (route) =>
     route.fulfill({
@@ -34,12 +59,8 @@ test("the Steam preview renders real announcement content without raw markup", a
   await page.goto(`${root}/news`);
   await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
 
-  // Use whichever Steam source the demo seed ships with.
-  const sourceCard = page
-    .locator("div.rounded-xl")
-    .filter({ has: page.getByText("Steam", { exact: true }) })
-    .first();
-  await sourceCard
+  const name = await steamSourceName(request);
+  await sourceCard(page, name)
     .getByRole("button", { name: "Test source", exact: true })
     .click();
 
@@ -103,6 +124,7 @@ test("the Steam preview renders real announcement content without raw markup", a
 
 test("a provider outage is reported as a retryable failure, not a bad request", async ({
   page,
+  request,
 }) => {
   await page.route("**/api/guilds/**/resources/source/*/test", (route) =>
     route.fulfill({
@@ -116,11 +138,8 @@ test("a provider outage is reported as a retryable failure, not a bad request", 
   );
   await page.goto(`${root}/news`);
   await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
-  const sourceCard = page
-    .locator("div.rounded-xl")
-    .filter({ has: page.getByText("Steam", { exact: true }) })
-    .first();
-  await sourceCard
+  const name = await steamSourceName(request);
+  await sourceCard(page, name)
     .getByRole("button", { name: "Test source", exact: true })
     .click();
   // The failure message is visible; no fabricated cards are rendered.
