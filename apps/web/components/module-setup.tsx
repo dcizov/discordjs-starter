@@ -49,8 +49,7 @@ export function ModuleSetupBanner({ module }: { module: ModuleKey }) {
           {setup.detail}
         </p>
         <p className="mt-1 text-[10px] text-muted-foreground">
-          Configuration + synced metadata only, not an authorization or live
-          delivery/playback test.
+          Configuration only — not a live delivery or playback test.
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">

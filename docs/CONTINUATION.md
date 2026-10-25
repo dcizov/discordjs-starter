@@ -477,3 +477,64 @@ follow-up commits on this branch.
    empty; no Discord guild, Lavalink backend or audible test was available.
 6. **OG/store images** — still needs an SSRF-reviewed fetcher with cache and size
    limits.
+
+## Pass 3 (2026-10-26): stale dependency tree, Steam artwork, tables, docs
+
+Branched from `8c68304` (local HEAD == `origin/arena/99c6cf65-discordjs-starter`,
+clean tree). Nothing was reset, rebased or removed; the earlier passes' work is
+intact. All commits below are on `arena/99c6cf65-discordjs-starter`.
+
+### What changed
+
+| Commit      | Change                                                                                                   | Why it matters                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `5058360`   | `scripts/check-dependencies.mjs` runs before `dev`, `build`, `build:web`, `start` and `test`             | The reported `Module not found: Can't resolve 'marked'` came from a **stale dependency tree**, not a missing manifest entry: root `package.json` and the lockfile both have `marked`, and a clean `npm ci` builds. The guard names the missing packages and the two real remedies (host `npm ci`; remove only the `<project>_dev_node_modules` volume). Reproduced by moving `node_modules/marked` aside and restoring it.                                                                                                                                     |
+| `fd0d678`   | Type declaration for the guard                                                                           | Its TypeScript test imports a `.mjs` file; without the declaration `tsc` failed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `e2c23c1`   | Steam **app artwork** as a labelled fallback (`packages/core/src/steam-artwork.ts`, wired in `feeds.ts`) | `ISteamNews/GetNewsForApp` has **no image field** (verified against the recorded captures in `tests/fixtures/steam/`). Article markup still wins; otherwise the documented `appdetails` `header_image`/`capsule_image` is used, cached once per app id (6 h success, 10 min failure, one in-flight request, bounded LRU), accepted only from Steam's image CDNs. `imageKind`/`imageAttribution` travel to the card (visible label) and the Discord footer (`Store artwork`). `STEAM_APP_ARTWORK=false` disables it; a failed lookup leaves the item text-only. |
+| `0219c3a`   | Reference-style news feed; server-side table sorting and column visibility; one history query contract   | See `docs/DASHBOARD-WORKFLOWS.md`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| this commit | Text reduction, developer docs, README trim                                                              | See below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+
+Text/dashboard pass: the setup banner caveat, the audit and permission
+explanations, the music settings note and several empty states were shortened,
+and news diagnostics moved into two disclosures. Consent, privacy, destructive
+and unconfirmed states were **not** shortened (delete-configuration dialog,
+webhook secret handling, stop-playback warning, delivery "do not resend").
+
+Documentation: the in-app docs system already existed (`apps/web/lib/docs-content.ts`,
+`/docs`, `docs/DOCUMENTATION.md`); three pages were added to its manifest —
+`DASHBOARD-WORKFLOWS.md`, `DEVELOPER-NAVIGATION.md`, `ORPC-DECISION.md` — for 23
+documented pages. The existing music capability matrix in `docs/MUSIC.md` stays
+the single matrix; a second one was written and then deleted rather than left as
+a duplicate.
+
+### Checks actually run (fresh, this session)
+
+| Check                                                    | Result                                                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm ci` (after the install that reproduced the failure) | 628 packages                                                                                                                                                                                                                                                                                                                     |
+| `npm run typecheck`                                      | pass                                                                                                                                                                                                                                                                                                                             |
+| `npm run lint`                                           | pass                                                                                                                                                                                                                                                                                                                             |
+| `npm run format:check`                                   | pass                                                                                                                                                                                                                                                                                                                             |
+| `npx vitest run`                                         | **771 tests in 65 files pass**                                                                                                                                                                                                                                                                                                   |
+| `npm run build:web`                                      | pass — 31 static pages, 23 `/docs/*` routes prerendered                                                                                                                                                                                                                                                                          |
+| `npm run build:services`                                 | pass                                                                                                                                                                                                                                                                                                                             |
+| Demo server (`DEMO_MODE=true npm start`)                 | `/docs` and `/docs/music` render; `/api/guilds/<demo>/history?...&sort=actorName&dir=asc` returns sorted rows; an unknown history parameter returns `400 Unknown history parameter "bogus".`; `POST /api/guilds/<demo>/music {"action":"seek","position":42}` → `{"ok":true,"demo":true}` and a missing position → a clear error |
+
+Not run, and therefore not claimed: a live Discord bot, Lavalink audio, a real
+PostgreSQL/Redis deployment, and browser screenshots. **This sandbox cannot
+install a Chromium build** (`npx playwright install chromium` fails to download),
+so no desktop/mobile screenshots were produced; the browser specs in
+`tests/e2e/` remain the place where layout is verified, and they run in CI. In
+their place: rendered-markup and view-model assertions
+(`tests/news-feed-model.test.ts`), SQL-level ordering tests against PGlite
+(`tests/database.test.ts`), and the demo-server responses above. CI for these
+commits has not been observed.
+
+### Still deferred
+
+- Status inventory with counts and a sort control (reference dashboard): state
+  and counts exist in `module-setup.ts`, so this is presentation work only.
+- Facet counts on history filters; a share/copy action on news cards.
+- Row selection and bulk actions: no dataset has a multi-row action that is safe
+  (audit, deliveries and cases are append-only evidence).
+- oRPC: deferred with explicit revisit triggers in `docs/ORPC-DECISION.md`.

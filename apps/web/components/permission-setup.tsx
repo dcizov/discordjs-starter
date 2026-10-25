@@ -212,14 +212,13 @@ export function PermissionSetup() {
           </h3>
           <ol className="mt-3 list-decimal space-y-2 pl-4 text-[11px] leading-relaxed text-muted-foreground">
             <li>
-              Install scopes: bot + applications.commands. The invite requests
-              basic View Channel, Send Messages and Embed Links only; opt into
-              feature grants in Discord.
+              Invite scopes: bot + applications.commands. Basic View Channel,
+              Send Messages and Embed Links only; opt into feature grants in
+              Discord.
             </li>
             <li>
-              Bot guild permissions and selected-channel/category overwrites are
-              different; fix the specific denied destination, not the whole
-              server.
+              Guild permissions and channel overwrites differ: fix the denied
+              destination, not the whole server.
             </li>
             <li>
               Gateway intents requested in code: {gatewayIntentNames.join(", ")}
@@ -231,20 +230,18 @@ export function PermissionSetup() {
               toggle.
             </li>
             <li>
-              Command defaults, runtime moderator checks, protected targets and
-              music’s same-channel/DJ rules still apply.
+              Command defaults, moderator checks, protected targets and the
+              music DJ rules still apply.
             </li>
             <li>
-              Dashboard OAuth uses identify + guilds. Owner/Manage Server (or
-              Administrator) authorizes the dashboard, not bot powers; writes
-              re-check authorization.
+              Dashboard sign-in uses identify + guilds. It grants no bot powers,
+              and every write re-checks your permissions.
             </li>
           </ol>
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-            For music, test a normal non-full voice channel with View Channel,
-            Connect and Speak. Then distinguish Discord handshake, Lavalink
-            player and permitted source loading. No playback claim follows from
-            these synced bits.
+            Music: test a normal voice channel with View Channel, Connect and
+            Speak. Synced bits never prove a handshake, a player, or that a
+            source will load.
           </p>
         </Card>
       </div>

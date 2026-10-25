@@ -66,10 +66,10 @@ elsewhere" would be unverified.
    folder and a request never touches the disk. A content change ships with the
    next build — normal for static documentation, and documented here so nobody
    expects a runtime edit to appear.
-4. **Search: not justified yet.** With 20 pages, grouped navigation plus the
-   browser's own find is faster than a search index, and a client-side search
-   would add JavaScript and a second index to keep correct. Revisit if the page
-   count grows or versioned API references are added.
+4. **Search: not justified yet.** With roughly two dozen pages, grouped
+   navigation plus the browser's own find is faster than a search index, and a
+   client-side search would add JavaScript and a second index to keep correct.
+   Revisit if the page count grows or versioned API references are added.
 5. **Versioning: not applicable.** The docs describe the deployed code in the
    same commit; there is no released matrix of versions to pin.
 

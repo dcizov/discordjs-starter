@@ -576,8 +576,7 @@ export function MusicPage() {
               />
             </Field>
             <p className="rounded-lg bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
-              Lavalink connection settings and search-source prefixes are
-              configured server-side. They never appear in the browser.
+              Lavalink settings live on the server and never reach the browser.
             </p>
             <Button className="w-full" disabled={!!busy}>
               {busy === "settings" ? <Spinner /> : <Check size={14} />}Save

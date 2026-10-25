@@ -1065,8 +1065,8 @@ export function ResourcesPage({
             <NewsPreviewFeed items={test.items} sourceName={test.name} />
           ) : (
             <p className="rounded-lg bg-muted p-4 text-xs text-muted-foreground">
-              The source is reachable but has no recent items. Incoming webhooks
-              wait for your integration to send an event.
+              No recent items yet. Webhook sources only post when your
+              integration sends an event.
             </p>
           )}
           {/* Facts a reader only sometimes wants: how many items were polled,
@@ -1078,7 +1078,7 @@ export function ResourcesPage({
             <div className="mt-2 space-y-1.5">
               <p>
                 Same normalization and embed limits as live delivery; only the
-                worker sends new items that pass your filters and routing.
+                worker posts new items.
               </p>
               {test?.officialOnly ? (
                 <p>

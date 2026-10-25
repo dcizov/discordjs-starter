@@ -88,9 +88,9 @@ export function ChannelsPage() {
               A little power, thoughtfully given.
             </p>
             <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-              Orbit never needs Administrator. Keep its role above the roles it
-              manages, and give it access only to the channels it needs. Channel
-              and role changes are managed in Discord and synced here.
+              Orbit never needs Administrator: keep its role above the roles it
+              manages. Channel and role changes happen in Discord and are synced
+              here.
             </p>
           </div>
         </div>
@@ -360,10 +360,9 @@ export function AuditPage() {
         badge="Append-only"
       />
       <p className="mb-4 text-[11px] leading-relaxed text-muted-foreground">
-        Names and avatars are recorded when an action happens. They are not
-        refreshed afterwards, so an entry shows who acted at that moment — not
-        necessarily someone's current Discord avatar. Missing or deleted
-        pictures fall back to initials.
+        Names and avatars are captured when the action happened and never
+        refreshed, so an entry shows who acted then — not necessarily their
+        current avatar.
       </p>
       <div className="mb-4 flex justify-between gap-3">
         <SearchInput

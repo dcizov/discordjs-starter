@@ -191,6 +191,33 @@ export const DOC_INDEX: readonly DocEntry[] = [
     summary: "Container-based development, ports and data safety.",
   },
   {
+    slug: "developer-navigation",
+    file: "docs/DEVELOPER-NAVIGATION.md",
+    title: "Developer navigation",
+    group: "Building on Orbit",
+    audience: "developer",
+    summary:
+      "Where every runtime, domain service, job, screen and test lives, and where to start.",
+  },
+  {
+    slug: "dashboard-workflows",
+    file: "docs/DASHBOARD-WORKFLOWS.md",
+    title: "Dashboard workflows",
+    group: "Building on Orbit",
+    audience: "developer",
+    summary:
+      "Reference-dashboard workflows, the accepted slice, and the table foundation decisions.",
+  },
+  {
+    slug: "orpc",
+    file: "docs/ORPC-DECISION.md",
+    title: "oRPC decision",
+    group: "Building on Orbit",
+    audience: "developer",
+    summary:
+      "Why Orbit keeps its hand-written API contract, what was reduced instead, and the revisit triggers.",
+  },
+  {
     slug: "documentation",
     file: "docs/DOCUMENTATION.md",
     title: "Documentation platform",
