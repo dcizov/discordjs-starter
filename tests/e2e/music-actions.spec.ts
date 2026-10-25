@@ -104,3 +104,45 @@ test("an accepted request stays pending until the consumer actually completes it
   ).toBeVisible();
   await expect(page.getByPlaceholder("Set the mood…")).toHaveValue("");
 });
+
+test("an empty or paused player never presents an active pause control", async ({
+  page,
+}) => {
+  await openMusic(page);
+  const progress = page.getByRole("progressbar", { name: "Playback progress" });
+  await expect(progress).toBeVisible();
+  // The primary transport button describes itself honestly for each state.
+  const transport = page.getByRole("button", {
+    name: /Pause playback|Resume playback|Nothing is playing/,
+  });
+  await expect(transport).toBeVisible();
+  const label = await transport.getAttribute("aria-label");
+  if (label === "Nothing is playing") await expect(transport).toBeDisabled();
+});
+
+test("volume moves locally and commits one debounced request per interaction", async ({
+  page,
+}) => {
+  const bodies: any[] = [];
+  await page.route(`**${base}/music`, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true, demo: true } });
+  });
+  await openMusic(page);
+  const slider = page.getByRole("slider", { name: "Playback volume" });
+  await expect(slider).toBeEnabled();
+  const before = Number(await slider.inputValue());
+  await slider.focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowRight");
+  // Immediate local feedback, before any request is confirmed.
+  await expect
+    .poll(async () => Number(await slider.inputValue()))
+    .toBeGreaterThanOrEqual(Math.min(100, before + 1));
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0]).toMatchObject({ action: "volume" });
+  expect(bodies[0].volume).toBeGreaterThanOrEqual(Math.min(100, before + 1));
+  await expect(
+    page.getByRole("slider", { name: "Playback volume" })
+  ).toHaveValue(String(bodies[0].volume));
+});

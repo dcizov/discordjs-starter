@@ -18,11 +18,13 @@ import {
   SkipForward,
   Square,
   Trash2,
-  Volume2,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "./page-header";
+import { VolumeControl } from "./features/music/volume-control";
+import { usePlaybackNow } from "./features/music/playback-clock";
+import { playbackProgress } from "@orbit/core/music-progress";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -48,8 +50,11 @@ export function MusicPage() {
   const [settings, setSettings] = useState(false);
   const [config, setConfig] = useState(data.guild.config.music);
   const [stop, setStop] = useState(false);
-  const [volume, setVolume] = useState<number | null>(null);
   const m = data.music;
+  // The clock only runs while a player is actually advancing; the first paint
+  // always uses the persisted snapshot (no hydration drift).
+  const now = usePlaybackNow(!!m.current && !m.paused);
+  const progress = playbackProgress(m, now ?? NaN);
   async function action(action: string, extra: Record<string, any> = {}) {
     setBusy(action);
     try {
@@ -60,10 +65,12 @@ export function MusicPage() {
         toast.success(
           data.demo
             ? "Added to the preview queue. No audio is played."
-            : "The bot processed your request. Check Now playing/queue; audio plays in Discord."
+            : "Request sent to the bot. Audio plays in Discord; check the playing state for confirmation."
         );
-      } else if (!data.demo)
-        toast.success("The bot completed the music command");
+      } else if (!data.demo && action !== "volume")
+        toast.success(
+          "Request sent to the bot. Nothing is confirmed until the playing state updates."
+        );
     } catch (e: any) {
       if (e instanceof BotActionPendingError) toast.warning(e.message);
       else toast.error(e.message);
@@ -142,17 +149,37 @@ export function MusicPage() {
             )}
           </div>
           <div className="px-7 pb-6">
-            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              role="progressbar"
+              aria-label="Playback progress"
+              aria-valuemin={0}
+              aria-valuemax={progress.duration ?? 0}
+              aria-valuenow={
+                progress.duration === null ? undefined : progress.position
+              }
+              aria-valuetext={
+                progress.duration === null
+                  ? progress.status === "idle"
+                    ? "Nothing is playing"
+                    : `Elapsed ${duration(progress.position)}; duration unknown`
+                  : `${duration(progress.position)} of ${duration(progress.duration)}`
+              }
+              className="h-1 w-full overflow-hidden rounded-full bg-muted"
+            >
               <div
-                className="h-full rounded-full bg-primary/60"
-                style={{
-                  width: `${m.current ? Math.min(100, (m.position / m.current.duration) * 100) : 0}%`,
-                }}
+                className="h-full rounded-full bg-primary/60 transition-[width] duration-500 ease-linear motion-reduce:transition-none"
+                style={{ width: `${progress.percent ?? 0}%` }}
               />
             </div>
             <div className="mt-2 flex justify-between text-[9px] tabular-nums text-muted-foreground">
-              <span>{duration(m.position)}</span>
-              <span>{duration(m.current?.duration ?? 0)}</span>
+              <span>{duration(progress.position)}</span>
+              <span>
+                {progress.duration === null
+                  ? progress.status === "idle"
+                    ? "0:00"
+                    : "Live / duration unknown"
+                  : duration(progress.duration)}
+              </span>
             </div>
             <div className="mt-4 flex items-center justify-center gap-6">
               <Button
@@ -174,10 +201,21 @@ export function MusicPage() {
                 <Square size={15} />
               </Button>
               <Button
-                className="size-11 rounded-full"
+                className={cn(
+                  "size-11 rounded-full",
+                  !m.current && "bg-muted text-muted-foreground hover:bg-muted"
+                )}
+                variant={m.current ? "default" : "outline"}
                 size="icon"
                 disabled={!!busy || !m.current}
-                aria-label={m.paused ? "Resume playback" : "Pause playback"}
+                aria-label={
+                  !m.current
+                    ? "Nothing is playing"
+                    : m.paused
+                      ? "Resume playback"
+                      : "Pause playback"
+                }
+                title={!m.current ? "Add a track to start playing" : undefined}
                 onClick={() => action(m.paused ? "resume" : "pause")}
               >
                 {busy === "pause" || busy === "resume" ? (
@@ -224,32 +262,35 @@ export function MusicPage() {
                 </span>
               </Button>
             </div>
-            <div className="mx-auto mt-5 flex max-w-48 items-center gap-2.5">
-              <Volume2 size={13} className="text-muted-foreground" />
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={volume ?? m.volume}
-                aria-label="Playback volume"
-                className="h-1 w-full"
-                onChange={(e) => setVolume(Number(e.target.value))}
-                onPointerUp={(e) => {
-                  action("volume", {
-                    volume: Number(e.currentTarget.value),
-                  }).then(() => setVolume(null));
-                }}
-                onKeyUp={(e) => {
-                  if (e.key.startsWith("Arrow"))
-                    action("volume", {
-                      volume: Number(e.currentTarget.value),
-                    }).then(() => setVolume(null));
-                }}
-              />
-              <span className="w-6 text-[10px] tabular-nums text-muted-foreground">
-                {volume ?? m.volume}%
-              </span>
-            </div>
+            <VolumeControl
+              value={m.volume}
+              live={!data.demo}
+              disabled={!!busy || (!data.demo && !m.current)}
+              disabledReason={
+                !m.current
+                  ? "Volume needs an active player. Add a track first."
+                  : "Another music action is in progress."
+              }
+              onCommit={async (next) => {
+                try {
+                  const result = await api<{
+                    completed?: boolean;
+                    accepted?: boolean;
+                  }>("/music", "POST", { action: "volume", volume: next });
+                  // The action API waits for the bot's job. `completed` means
+                  // the bot applied it; a bare acceptance is still only queued.
+                  await refresh();
+                  return result.completed ? "applied" : "queued";
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Volume change failed"
+                  );
+                  throw error;
+                }
+              }}
+            />
           </div>
         </Card>
         <div className="space-y-5">
