@@ -64,7 +64,7 @@ describe("Compose startup and upgrade safety", () => {
         "lavalink"
       );
     // The derived image owns readiness, including plain-Docker deployments.
-    // Actual compiled HTTP/auth/refusal/redirect/recovery tests run in its JDK build.
+    // Actual HTTP/auth/refusal/redirect/recovery tests run with image curl in CI.
     expect(compose.services.lavalink).not.toHaveProperty("healthcheck");
     const docker = readFileSync(
       new URL("../docker/lavalink/Dockerfile", import.meta.url),
@@ -78,9 +78,9 @@ describe("Compose startup and upgrade safety", () => {
       new URL("../docker/lavalink/healthcheck.sh", import.meta.url),
       "utf8"
     );
-    expect(run).toContain("unset _JAVA_OPTIONS");
-    expect(run).toContain("exec java -Xms8m -Xmx32m");
-    expect(run).not.toMatch(/curl|wget|node|Authorization|PASSWORD/);
+    expect(run).toContain("curl --disable --silent");
+    expect(run).toContain("--header @-");
+    expect(run).not.toMatch(/java|node|python/);
   });
 
   it("keeps the headless CI readiness wait alive between unrefed backend retries, then cancels its deadline", () => {
