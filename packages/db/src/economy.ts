@@ -1,5 +1,5 @@
 import type { Account, GuildConfig, LedgerEntry } from "@orbit/core";
-import { isDemo } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { and, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { database } from "./client";

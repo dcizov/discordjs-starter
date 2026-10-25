@@ -1,6 +1,6 @@
 import { and, desc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { isDemo } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { database } from "./client";
 import { demoRead } from "./demo";
 import { serialize } from "./store";

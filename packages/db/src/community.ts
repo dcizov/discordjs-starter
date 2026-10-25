@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { isDemo, configSchema } from "@orbit/core";
+import { configSchema } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import {
   communityInputSchema,
   communityQuerySchema,

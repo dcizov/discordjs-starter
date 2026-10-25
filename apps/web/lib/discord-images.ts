@@ -1,6 +1,7 @@
 import "server-only";
 import { CDN } from "discord.js";
-import { DEMO_GUILD_ICON, DEMO_USER_AVATAR, isDemo } from "@orbit/core";
+import { DEMO_GUILD_ICON, DEMO_USER_AVATAR } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import type { DashboardData } from "@orbit/core";
 
 const cdn = new CDN();

@@ -1,4 +1,5 @@
-import { DEMO_GUILD_ID, isDemo, required } from "@orbit/core";
+import { DEMO_GUILD_ID } from "@orbit/core";
+import { isDemo, required } from "@orbit/core/environment";
 import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 export async function GET(req: Request) {

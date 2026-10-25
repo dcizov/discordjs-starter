@@ -1,11 +1,6 @@
 import { rateLimit, readBounded } from "@/lib/security";
-import {
-  decrypt,
-  isDemo,
-  required,
-  safeText,
-  verifyWebhook,
-} from "@orbit/core";
+import { decrypt, safeText, verifyWebhook } from "@orbit/core";
+import { isDemo, required } from "@orbit/core/environment";
 import { safeLink } from "@orbit/core/feeds";
 import { database, dispatchItems, getResource, schema } from "@orbit/db";
 import { eq } from "drizzle-orm";

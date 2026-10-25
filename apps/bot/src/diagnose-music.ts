@@ -1,4 +1,4 @@
-import { isDemo, required } from "@orbit/core";
+import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import dotenv from "dotenv";
 import {
@@ -42,6 +42,7 @@ async function main() {
     throw new Error(
       "Music diagnostics require DEMO_MODE=false. Demo mode never contacts Lavalink or audio providers."
     );
+  validateEnvironment("music-doctor");
   const client = createMusicDoctorClient({
     host: required("LAVALINK_URL"),
     password: required("LAVALINK_PASSWORD"),

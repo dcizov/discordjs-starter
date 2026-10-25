@@ -102,5 +102,11 @@ Pending implementation. Starting counts above are fresh baseline evidence only; 
 ### Stage 1 — development tools (implemented)
 
 - Vitest **3.2.7 → 5.0.5**, compatible with Node >=22.14 (package requires >=22.12). Existing tests/config run unchanged: **543/44 PASS, 29.84s**; typecheck and lint pass. No isolation/retry/timeout changes. Tinypool and the old Vitest mocker are removed by the supported Vitest update, not an incompatible override.
-- Drizzle Kit **0.31.6 → 0.31.11** (same supported minor; main also uses this patch). Existing schema generation still reports **no changes**. ORM/runtime versions unchanged.
+- Drizzle Kit **0.31.11 → 0.31.11** (same supported minor; main also uses this patch). Existing schema generation still reports **no changes**. ORM/runtime versions unchanged.
 - Full audit now **7 moderate / 0 critical**; production **0**. Remaining graph: Drizzle Kit's legacy esbuild-kit loader/old esbuild (4 nodes) and Tailwind 3/PostCSS selector parser (3 nodes). Official advisory requires selector-parser >=7.1.6 while Tailwind 3 constrains ^6.1.2; automatic suggestions include Tailwind 4 or Drizzle Kit downgrade 0.18.1. No forced downgrade, major CSS migration or unreviewed transitive-major override is applied. These are remaining developer-tool issues, not a clean-tree claim.
+
+### Stage 2 — configuration and OAuth wording (implemented)
+
+Seven current-behavior environment tests passed before source changes. One server runtime module now owns the field validators and startup matrix; the feature config no longer includes environment functions. DB connection setup and server callers use this same contract, with no root barrel export or credential capture at import time. Tool validation follows `--help`/demo refusal, and web retains its real bot-token requirement for channel REST reads. Missing/invalid errors never include values. Unknown modes, invalid connection protocols and malformed optional music settings fail explicitly.
+
+Added the runtime matrix, secret-safe malformed URL errors, unchanged password bytes, client-access refusal and initial-sign-in versus renewal wording tests. **563/45 PASS (29.23s)**; typecheck/lint pass. No auth library/schema/session migration or cookie/scope change. Existing session/profile/tenancy tests still pass.

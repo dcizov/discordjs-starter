@@ -1,6 +1,6 @@
 import { hash } from "@/lib/auth";
 import { assertOrigin } from "@/lib/security";
-import { isDemo } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { database, schema } from "@orbit/db";
 import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";

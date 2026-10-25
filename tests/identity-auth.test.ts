@@ -350,3 +350,30 @@ it("keeps OAuth state validation and HTTP-only session creation through the real
   ).toBe(400);
   expect(fetcher).not.toHaveBeenCalled();
 });
+
+it("distinguishes initial OAuth sign-in rejection from token-renewal rejection", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response("private upstream body", { status: 400 }))
+  );
+  await expect(
+    exchangeDiscordToken({
+      grant_type: "authorization_code",
+      code: "test-code",
+      redirect_uri: "https://orbit.example/api/auth/callback",
+    })
+  ).rejects.toMatchObject({
+    status: 401,
+    message: "Discord could not complete sign-in. Start sign-in again.",
+  });
+  await expect(
+    exchangeDiscordToken({
+      grant_type: "refresh_token",
+      refresh_token: "test-refresh",
+    })
+  ).rejects.toMatchObject({
+    status: 401,
+    message:
+      "Discord could not renew this sign-in. Try again or sign in again.",
+  });
+});

@@ -1,6 +1,7 @@
 import { logger } from "@orbit/core/logger";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
-import { fingerprint, isDemo } from "@orbit/core";
+import { fingerprint } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import {
   communityInputSchema,
   CommunityConflict,

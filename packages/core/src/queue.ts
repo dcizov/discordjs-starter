@@ -1,7 +1,7 @@
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { BotActionUnavailableError } from "./bot-actions";
-import { isDemo, required } from "./config";
+import { isDemo, required } from "./environment";
 let redis: IORedis | undefined;
 export function redisConnection() {
   if (isDemo()) throw new Error("Live job queues are disabled in demo mode");

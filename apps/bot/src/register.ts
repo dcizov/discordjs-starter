@@ -1,4 +1,4 @@
-import { isDemo, required } from "@orbit/core";
+import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { REST, Routes } from "discord.js";
 import "dotenv/config";
 import { commandDefinitions } from "./commands";
@@ -7,6 +7,7 @@ async function main() {
     console.log("Demo mode: slash-command registration is disabled.");
     return;
   }
+  validateEnvironment("register");
   const id = required("DISCORD_CLIENT_ID"),
     guild = process.env.DISCORD_GUILD_ID;
   const rest = new REST({ version: "10" }).setToken(required("DISCORD_TOKEN"));

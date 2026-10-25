@@ -1,4 +1,4 @@
-import { isDemo } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import {
   getCommunityPost,
   claimCommunityPost,

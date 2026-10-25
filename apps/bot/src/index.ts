@@ -1,11 +1,6 @@
 import { gatewayIntentNames } from "@orbit/core/permissions";
-import {
-  fingerprint,
-  isDemo,
-  required,
-  safeText,
-  validateEnvironment,
-} from "@orbit/core";
+import { fingerprint, safeText } from "@orbit/core";
+import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { assertFreshBotAction } from "@orbit/core/bot-actions";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";

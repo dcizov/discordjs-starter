@@ -1,6 +1,6 @@
 import { routeFeedItem } from "@orbit/core/feed-routing";
 import type { FeedItem, Resource } from "@orbit/core";
-import { isDemo } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { safeLink } from "@orbit/core/feeds";
 import { dealQuality, eligibleDeal } from "@orbit/core/deal-policy";
 import { createQueue } from "@orbit/core/queue";

@@ -3,7 +3,8 @@ import {
   exchangeDiscordToken,
   fetchDiscordProfile,
 } from "@/lib/auth";
-import { isDemo, required, timingSafeStringEqual } from "@orbit/core";
+import { timingSafeStringEqual } from "@orbit/core";
+import { isDemo, required } from "@orbit/core/environment";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 export async function GET(req: Request) {

@@ -20,14 +20,8 @@ import { authorize, HttpError } from "@/lib/auth";
 import { loadDashboard } from "@/lib/dashboard";
 import { assertOrigin, body, rateLimit } from "@/lib/security";
 import type { ResourceKind } from "@orbit/core";
-import {
-  encrypt,
-  inviteUrl,
-  isDemo,
-  required,
-  resourceSchemas,
-  snowflake,
-} from "@orbit/core";
+import { encrypt, resourceSchemas, snowflake } from "@orbit/core";
+import { inviteUrl, isDemo, required } from "@orbit/core/environment";
 import { BotActionUnavailableError } from "@orbit/core/bot-actions";
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { getCommandCatalog } from "@orbit/core/command-catalog";

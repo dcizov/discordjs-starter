@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isDemo, required } from "./config";
+import { isDemo, required } from "./environment";
 import { officialJson } from "./integration-http";
 import { isPublicAddress, safeText } from "./safety";
 import { isIP } from "node:net";

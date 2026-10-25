@@ -1,12 +1,7 @@
 import { reconcileCommunityPosts } from "./community";
 import type { Resource } from "@orbit/core";
-import {
-  fingerprint,
-  isDemo,
-  required,
-  safeText,
-  validateEnvironment,
-} from "@orbit/core";
+import { fingerprint, safeText } from "@orbit/core";
+import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { pollDeals, pollSource, safeLink } from "@orbit/core/feeds";
 import { logger } from "@orbit/core/logger";
 import { assertDeliverableDeal } from "@orbit/core/deal-policy";

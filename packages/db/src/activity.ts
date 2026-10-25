@@ -5,7 +5,7 @@ import {
   chartTimeZone,
   type ActivityCount,
 } from "@orbit/core/activity";
-import { isDemo } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { database } from "./client";
 import { demoRead } from "./demo";

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { DEMO_GUILD_ID, isDemo } from "@orbit/core";
+import { DEMO_GUILD_ID } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { ArrowUpRight, Orbit, ShieldCheck, Sparkles } from "lucide-react";
 import Link from "next/link";
 export const dynamic = "force-dynamic";

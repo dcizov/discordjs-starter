@@ -1,4 +1,3 @@
-import { baselineInvitePermissions } from "./permissions";
 import { z } from "zod";
 import { DEAL_QUALITY_DEFAULTS } from "./deal-policy";
 import type { GuildConfig } from "./types";
@@ -253,62 +252,3 @@ export const resourceSchemas = {
   route: routeSchema,
   case: caseSchema,
 };
-export function isDemo() {
-  return (
-    process.env.DEMO_MODE === "true" ||
-    (process.env.NODE_ENV !== "production" &&
-      process.env.DEMO_MODE !== "false" &&
-      !process.env.DISCORD_CLIENT_ID)
-  );
-}
-export function required(name: string) {
-  const v = process.env[name];
-  if (!v) throw new Error(`${name} must be configured`);
-  return v;
-}
-export function inviteUrl(guildId?: string) {
-  const app = process.env.DISCORD_CLIENT_ID;
-  if (!app) return null;
-  const permissions = baselineInvitePermissions;
-  return `https://discord.com/oauth2/authorize?client_id=${app}&scope=bot%20applications.commands&permissions=${permissions}${guildId ? `&guild_id=${guildId}&disable_guild_select=true` : ""}`;
-}
-export function validateEnvironment(service: "web" | "bot" | "worker") {
-  if (isDemo()) return;
-  const common = z
-    .object({
-      DATABASE_URL: z.string().url(),
-      REDIS_URL: z.string().url(),
-      DISCORD_TOKEN: z.string().min(1),
-    })
-    .passthrough();
-  const schema =
-    service === "web"
-      ? common.extend({
-          DISCORD_CLIENT_ID: snowflake,
-          DISCORD_CLIENT_SECRET: z.string().min(1),
-          APP_SECRET: z.string().min(32),
-          APP_URL: z
-            .string()
-            .url()
-            .refine((v) => {
-              const u = new URL(v);
-              return (
-                u.protocol === "https:" ||
-                u.hostname === "localhost" ||
-                u.hostname === "127.0.0.1"
-              );
-            }, "Use a public HTTPS URL (HTTP localhost is allowed for development)"),
-        })
-      : service === "bot"
-        ? common.extend({ DISCORD_CLIENT_ID: snowflake })
-        : common;
-  const result = schema.safeParse(process.env);
-  if (!result.success)
-    throw new Error(
-      `Invalid ${service} environment: ${result.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`
-    );
-  if (!!process.env.LAVALINK_URL !== !!process.env.LAVALINK_PASSWORD)
-    throw new Error(
-      "Configure both LAVALINK_URL and LAVALINK_PASSWORD, or leave both empty."
-    );
-}

@@ -14,10 +14,10 @@ import {
   assertAssignableRole,
   assertFeedUrl,
   configSchema,
-  isDemo,
   resourceSchemas,
   safeText,
 } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";

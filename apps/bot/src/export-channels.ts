@@ -1,4 +1,4 @@
-import { isDemo, required } from "@orbit/core";
+import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { REST } from "discord.js";
 import dotenv from "dotenv";
 import {
@@ -41,6 +41,7 @@ async function main() {
     throw new Error(
       "Discord export requires live read-only Discord access. Set DEMO_MODE=false and DISCORD_TOKEN in the root .env. No export was written."
     );
+  validateEnvironment("export");
   const token = required("DISCORD_TOKEN");
   const rest = new REST({ version: "10", timeout: 10000, retries: 2 }).setToken(
     token

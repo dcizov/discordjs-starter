@@ -4,9 +4,8 @@ import {
   DEMO_USER_ID,
   DEMO_USER_AVATAR,
   encrypt,
-  isDemo,
-  required,
 } from "@orbit/core";
+import { isDemo, required } from "@orbit/core/environment";
 import { database, listInstalledGuilds, schema } from "@orbit/db";
 import {
   createDiscordPermissionState,
@@ -57,7 +56,9 @@ export async function exchangeDiscordToken(grant: TokenGrant) {
   if (!response.ok)
     throw new HttpError(
       [400, 401, 403].includes(response.status) ? 401 : 503,
-      "Discord could not renew this sign-in. Try again or sign in again."
+      grant.grant_type === "authorization_code"
+        ? "Discord could not complete sign-in. Start sign-in again."
+        : "Discord could not renew this sign-in. Try again or sign in again."
     );
   const parsed = tokenSchema.safeParse(await response.json().catch(() => null));
   if (!parsed.success)
@@ -79,7 +80,7 @@ export async function fetchDiscordProfile(accessToken: string) {
   if (!response.ok)
     throw new HttpError(
       [401, 403].includes(response.status) ? 401 : 503,
-      "Discord could not refresh your profile. Try again or sign in again."
+      "Discord could not load your profile. Try again or sign in again."
     );
   const parsed = profileSchema.safeParse(
     await response.json().catch(() => null)

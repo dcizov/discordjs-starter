@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { PermissionFlagsBits, GatewayIntentBits } from "discord.js";
-import { inviteUrl } from "@orbit/core";
+import { inviteUrl } from "@orbit/core/environment";
 import {
   baselineInvitePermissions,
   botGuildPermissions,

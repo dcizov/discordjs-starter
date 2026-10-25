@@ -1,4 +1,4 @@
-import { isDemo } from "@orbit/core";
+import { isDemo } from "@orbit/core/environment";
 import { redisConnection } from "@orbit/core/queue";
 import "server-only";
 import { HttpError } from "./auth";
