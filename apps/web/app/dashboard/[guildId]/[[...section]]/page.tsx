@@ -34,5 +34,11 @@ export default async function Page({
       );
     throw e;
   }
-  return <Dashboard initial={data} section={section?.[0] ?? "overview"} />;
+  return (
+    <Dashboard
+      key={`${data.guild.id}:${data.user.id}`}
+      initial={data}
+      section={section?.[0] ?? "overview"}
+    />
+  );
 }

@@ -139,3 +139,19 @@ describe("synced effective permission metadata", () => {
     expect(g.channels.fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+it("persists current guild name/icon hashes and legitimate icon removal on metadata sync", async () => {
+  const g = guild();
+  const current = g;
+  current.name = "Renamed guild";
+  current.icon = "a_0123456789abcdef0123456789abcdef";
+  await syncGuild(current);
+  expect(saved.values).toHaveBeenLastCalledWith(
+    expect.objectContaining({ name: "Renamed guild", icon: current.icon })
+  );
+  current.icon = null;
+  await syncGuild(current);
+  expect(saved.values).toHaveBeenLastCalledWith(
+    expect.objectContaining({ icon: null })
+  );
+});

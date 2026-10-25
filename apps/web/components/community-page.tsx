@@ -33,8 +33,49 @@ import {
   DialogDescription,
 } from "./ui/dialog";
 
-type Action =
-  "publish" | "refresh" | "close" | "cancel" | "schedule" | "delete";
+type Action = "publish" | "close" | "cancel" | "schedule" | "delete";
+function confirmationCopy(
+  action: Action,
+  demo: boolean
+): { title: string; description: string; submit: string } {
+  switch (action) {
+    case "publish":
+      return {
+        title: demo ? "Simulate publication" : "Publish to Discord?",
+        description:
+          "Review the content and destination below. All mentions are suppressed. Published polls are immutable; ambiguous responses block automatic resend.",
+        submit: demo ? "Simulate publish" : "Publish now",
+      };
+    case "schedule":
+      return {
+        title: "Schedule once in UTC",
+        description:
+          "Delivery is not guaranteed. The approving manager must still belong to the server and have Manage Server when the job runs. Expired jobs are not replayed.",
+        submit: "Save schedule",
+      };
+    case "delete":
+      return {
+        title: "Delete the stored record?",
+        description:
+          "This deletes Orbit's saved content and aggregates, not the Discord message. Audit metadata is retained. An unconfirmed publication must never be blindly resent.",
+        submit: "Delete record",
+      };
+    case "close":
+      return {
+        title: "End this native poll?",
+        description:
+          "Members will no longer be able to vote. Discord may need time to finalize the aggregate tally. This action cannot reopen a native poll.",
+        submit: "End voting",
+      };
+    case "cancel":
+      return {
+        title: "Cancel this unsent post?",
+        description:
+          "The stored revision will change so an old queued job cannot publish it. In-flight/already published messages cannot be recalled.",
+        submit: "Confirm cancellation",
+      };
+  }
+}
 const editable = (post: CommunityPost) =>
   ["draft", "failed", "cancelled", "missed"].includes(post.state);
 export function CommunityPage({ kind }: { kind: CommunityKind }) {
@@ -67,6 +108,7 @@ export function CommunityPage({ kind }: { kind: CommunityKind }) {
   } | null>(null);
   const [utc, setUtc] = useState("");
   const zone = data.guild.config.timezone;
+  const copy = confirm ? confirmationCopy(confirm.action, data.demo) : null;
   const lastAction = useRef<HTMLElement | null>(null),
     refreshButton = useRef<HTMLButtonElement>(null);
   function remember() {
@@ -565,30 +607,8 @@ export function CommunityPage({ kind }: { kind: CommunityKind }) {
       >
         <DialogContent onCloseAutoFocus={restoreFocus}>
           <DialogHeader>
-            <DialogTitle>
-              {confirm?.action === "publish"
-                ? data.demo
-                  ? "Simulate publication"
-                  : "Publish to Discord?"
-                : confirm?.action === "schedule"
-                  ? "Schedule once in UTC"
-                  : confirm?.action === "delete"
-                    ? "Delete the stored record?"
-                    : confirm?.action === "close"
-                      ? "End this native poll?"
-                      : "Cancel this unsent post?"}
-            </DialogTitle>
-            <DialogDescription>
-              {confirm?.action === "delete"
-                ? "This deletes Orbit's saved content and aggregates, not the Discord message. Audit metadata is retained. An unconfirmed publication must never be blindly resent."
-                : confirm?.action === "schedule"
-                  ? "Delivery is not guaranteed. The approving manager must still belong to the server and have Manage Server when the job runs. Expired jobs are not replayed."
-                  : confirm?.action === "close"
-                    ? "Members will no longer be able to vote. Discord may need time to finalize the aggregate tally. This action cannot reopen a native poll."
-                    : confirm?.action === "cancel"
-                      ? "The stored revision will change so an old queued job cannot publish it. In-flight/already published messages cannot be recalled."
-                      : "Review the content and destination below. All mentions are suppressed. Published polls are immutable; ambiguous responses block automatic resend."}
-            </DialogDescription>
+            <DialogTitle>{copy?.title}</DialogTitle>
+            <DialogDescription>{copy?.description}</DialogDescription>
           </DialogHeader>
           {data.demo && (
             <Badge tone="blue">Demo simulation — no Discord I/O</Badge>
@@ -653,19 +673,7 @@ export function CommunityPage({ kind }: { kind: CommunityKind }) {
               }
               onClick={() => void perform()}
             >
-              {busy
-                ? "Working…"
-                : confirm?.action === "publish"
-                  ? data.demo
-                    ? "Simulate publish"
-                    : "Publish now"
-                  : confirm?.action === "schedule"
-                    ? "Save schedule"
-                    : confirm?.action === "delete"
-                      ? "Delete record"
-                      : confirm?.action === "close"
-                        ? "End voting"
-                        : "Confirm cancellation"}
+              {busy ? "Working…" : copy?.submit}
             </Button>
           </div>
         </DialogContent>

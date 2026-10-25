@@ -7,6 +7,7 @@ import { defaultConfig, isDemo } from "@orbit/core";
 import { emptyMusic, getDashboardData, getAccount } from "@orbit/db";
 import "server-only";
 import { authorize, HttpError } from "./auth";
+import { guildIconUrl, publicUser } from "./discord-images";
 export async function loadDashboard(
   guildId: string,
   authorized?: Awaited<ReturnType<typeof authorize>>,
@@ -43,6 +44,12 @@ export async function loadDashboard(
       };
   return {
     ...data,
+    guild: {
+      ...data.guild,
+      name: guild.name,
+      icon: guild.icon,
+      iconUrl: guildIconUrl(guild.id, guild.icon),
+    },
     ...(communityKind && guild.installed
       ? {
           community: await listCommunityPosts(guildId, { kind: communityKind }),
@@ -71,7 +78,7 @@ export async function loadDashboard(
       itad: !!process.env.ITAD_API_KEY,
       lavalink: !!process.env.LAVALINK_URL && !!process.env.LAVALINK_PASSWORD,
     },
-    user: { id: user.id, name: user.name, avatar: user.avatar },
-    guilds,
+    user: publicUser(user),
+    guilds: guilds.map((g) => ({ ...g, iconUrl: guildIconUrl(g.id, g.icon) })),
   };
 }

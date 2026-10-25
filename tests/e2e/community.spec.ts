@@ -405,3 +405,62 @@ test("new publishing, routing and private-history controls pass scoped WCAG AA c
   await visit(page, "economy");
   await check('[data-testid="own-history"]');
 });
+
+test("confirmation copy stays action-specific without publishing from a review", async ({
+  page,
+  request,
+}) => {
+  await config(request, {
+    ...original,
+    modules: { ...original.modules, announcements: true },
+  });
+  const title = "E2E · Confirmation copy characterization";
+  await draft(request, "announcement", title);
+  await visit(page, "announcements");
+  const article = page.getByRole("article", { name: title, exact: true });
+  for (const check of [
+    {
+      trigger: "Review & publish",
+      heading: "Simulate publication",
+      submit: "Simulate publish",
+      explanation: "All mentions are suppressed.",
+    },
+    {
+      trigger: "Schedule",
+      heading: "Schedule once in UTC",
+      submit: "Save schedule",
+      explanation: "Delivery is not guaranteed.",
+    },
+    {
+      trigger: "Cancel draft",
+      heading: "Cancel this unsent post?",
+      submit: "Confirm cancellation",
+      explanation: "The stored revision will change",
+    },
+    {
+      trigger: "Delete stored record",
+      heading: "Delete the stored record?",
+      submit: "Delete record",
+      explanation: "Audit metadata is retained.",
+    },
+  ]) {
+    await article
+      .getByRole("button", { name: check.trigger, exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await expect(
+      dialog.getByRole("heading", { name: check.heading, exact: true })
+    ).toBeVisible();
+    await expect(
+      dialog.getByText(check.explanation, { exact: false })
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: check.submit, exact: true })
+    ).toBeVisible();
+    await dialog
+      .getByRole("button", { name: "Keep unchanged", exact: true })
+      .click();
+    await expect(dialog).not.toBeVisible();
+    await expect(article).toContainText("Simulation · draft");
+  }
+});

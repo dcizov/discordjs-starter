@@ -64,6 +64,10 @@ DEMO_MODE=true npm start
 
 See [setup, permissions, privacy, recovery and examples](docs/COMMUNITY.md), [official-source feature research](docs/FEATURE-RESEARCH.md), and [fresh verification](docs/COMMUNITY-REVIEW.md). The additive `0002_community_posts.sql` migration also indexes own-account history. Register the updated command definitions in the intended scope; viewing the Commands catalog does not register them. The minimal invite remains `19456`; **Send Polls is a deliberate channel-level opt-in**, not an automatic permission expansion.
 
+## Dashboard identities and sidebar meaning
+
+The server switcher shows Discord guild icons when supplied; the account menu uses your **global Discord avatar**, not a server-specific member avatar. Missing/failed images retain fixed-size initials. Use **Refresh profile image & name** in the account menu to refresh your own stored metadata; this adds no scope or passive Discord polling. Demo art is fictional/local and labeled. The old unconditional News green dot is removed: saved configuration is not proof of healthy delivery. See [root causes, bounded refactors, verification and remaining live-check gaps](docs/DASHBOARD-MAINTENANCE.md).
+
 ## Run live
 
 Steps 2–4 below use the **host-Node workflow**. On a machine without host Node/npm, use [full-stack Docker development](#full-stack-development-with-hot-reload) instead; it provides containerized migration and registration commands too.

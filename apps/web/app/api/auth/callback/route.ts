@@ -1,4 +1,8 @@
-import { createSession } from "@/lib/auth";
+import {
+  createSession,
+  exchangeDiscordToken,
+  fetchDiscordProfile,
+} from "@/lib/auth";
 import { isDemo, required, timingSafeStringEqual } from "@orbit/core";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -18,26 +22,13 @@ export async function GET(req: Request) {
       { status: 400 }
     );
   try {
-    const r = await fetch("https://discord.com/api/v10/oauth2/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: required("DISCORD_CLIENT_ID"),
-        client_secret: required("DISCORD_CLIENT_SECRET"),
-        code,
-        grant_type: "authorization_code",
-        redirect_uri: `${required("APP_URL")}/api/auth/callback`,
-      }),
-      signal: AbortSignal.timeout(10000),
+    const token = await exchangeDiscordToken({
+      code,
+      grant_type: "authorization_code",
+      redirect_uri: `${required("APP_URL")}/api/auth/callback`,
     });
-    if (!r.ok) throw new Error("Code exchange failed");
-    const token = await r.json();
-    const me = await fetch("https://discord.com/api/v10/users/@me", {
-      headers: { Authorization: `Bearer ${token.access_token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!me.ok) throw new Error("Identity lookup failed");
-    const session = await createSession(token, await me.json());
+    const profile = await fetchDiscordProfile(token.access_token);
+    const session = await createSession(token, profile);
     const response = NextResponse.redirect(new URL("/", required("APP_URL")));
     response.cookies.set("orbit_session", session, {
       httpOnly: true,

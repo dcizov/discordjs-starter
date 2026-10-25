@@ -93,6 +93,14 @@ async function main() {
         logger.error({ error: e.message }, "Guild sync failed")
       )
   );
+  client.on(Events.GuildUpdate, (_before, guild) => {
+    void syncGuild(guild).catch((error) =>
+      logger.warn(
+        { guildId: guild.id, error: errorDiagnostic(error) },
+        "Guild metadata sync failed"
+      )
+    );
+  });
   client.on(
     Events.GuildDelete,
     (g) =>

@@ -17,6 +17,24 @@ const config = {
   ],
   poweredByHeader: false,
   devIndicators: false,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
+        port: "",
+        pathname: "/icons/*/*.webp",
+        search: "?size=128",
+      },
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
+        port: "",
+        pathname: "/avatars/*/*.webp",
+        search: "?size=128",
+      },
+    ],
+  },
   async headers() {
     return [
       {
@@ -36,7 +54,7 @@ const config = {
       },
       {
         source: "/api/:path*",
-        headers: [{ key: "Cache-Control", value: "no-store" }],
+        headers: [{ key: "Cache-Control", value: "private, no-store" }],
       },
     ];
   },

@@ -153,7 +153,7 @@ export type ServiceHealth = {
 export type DashboardData = {
   presentation: { referenceAt: string; activity: ActivitySnapshot };
   community?: import("./community").CommunityPage;
-  guild: Guild;
+  guild: Guild & { iconUrl?: string | null };
   resources: Resource[];
   audit: AuditEntry[];
   ledger: LedgerEntry[];
@@ -171,11 +171,18 @@ export type DashboardData = {
     pageSize: number;
   };
   integrations?: { itad: boolean; lavalink: boolean };
-  user: { id: string; name: string; avatar: string | null };
+  /** Hash fields remain compatible; URL fields are server-derived display data. */
+  user: {
+    id: string;
+    name: string;
+    avatar: string | null;
+    avatarUrl?: string | null;
+  };
   guilds: {
     id: string;
     name: string;
     icon: string | null;
+    iconUrl?: string | null;
     installed: boolean;
   }[];
 };
@@ -195,3 +202,7 @@ export type FeedItem = {
 };
 export const DEMO_GUILD_ID = "120000000000000001";
 export const DEMO_USER_ID = "120000000000000099";
+
+// Original local illustrations only; never substituted for live Discord metadata.
+export const DEMO_GUILD_ICON = "/demo/cozy-corner.svg";
+export const DEMO_USER_AVATAR = "/demo/jamie-davis.svg";

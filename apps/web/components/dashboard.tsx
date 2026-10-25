@@ -19,6 +19,7 @@ import {
   Moon,
   Orbit,
   Plus,
+  RefreshCw,
   Search,
   ShieldCheck,
   Sun,
@@ -30,6 +31,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CommunityPage } from "./community-page";
+import { IdentityImage } from "./identity-image";
 import { CommandsPage } from "./commands-page";
 import { EconomyPage } from "./economy-page";
 import { MusicPage } from "./music-page";
@@ -65,6 +67,7 @@ export function Dashboard({
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
   const [mobile, setMobile] = useState(false);
+  const [profileBusy, setProfileBusy] = useState(false);
   const [help, setHelp] = useState(false);
   const [search, setSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -111,8 +114,12 @@ export function Dashboard({
             ? "?ownLedger=true"
             : ""
     );
+    if (d.user.id !== data.user.id || d.guild.id !== data.guild.id) {
+      router.refresh();
+      return;
+    }
     setData(d);
-  }, [api, section]);
+  }, [api, section, data.user.id, data.guild.id, router]);
   const navigate = useCallback(
     (s: string) => {
       router.push(`/dashboard/${data.guild.id}/${s}`);
@@ -151,7 +158,40 @@ export function Dashboard({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  const enabledRuleCount = data.resources.filter(
+    (resource) => resource.kind === "rule" && resource.enabled
+  ).length;
+  const servicesHealthy =
+    data.health.length > 0 &&
+    data.health.every((service) => service.status === "healthy");
   const guildHref = (id: string) => `/dashboard/${id}/overview`;
+  async function refreshUserProfile() {
+    setProfileBusy(true);
+    try {
+      const result = await request<{ user: DashboardData["user"] }>(
+        "/api/auth/profile",
+        "POST",
+        {}
+      );
+      if (result.user.id !== data.user.id) {
+        // A sign-in in another tab requires a new server authorization boundary.
+        router.refresh();
+        return;
+      }
+      setData((current) => ({ ...current, user: result.user }));
+      toast.success(
+        data.demo
+          ? "Demo profile — Discord was not contacted"
+          : "Discord profile metadata refreshed"
+      );
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Profile refresh failed"
+      );
+    } finally {
+      setProfileBusy(false);
+    }
+  }
   const sidebar = (
     <>
       <Link
@@ -169,15 +209,23 @@ export function Dashboard({
       </Link>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="mb-7 flex w-full items-center gap-2.5 rounded-xl border border-border bg-card p-2.5 text-left transition hover:bg-muted">
-            <ServerIcon name={data.guild.name} />
+          <button
+            aria-label={`Switch server, current: ${data.guild.name}`}
+            className="mb-7 flex w-full items-center gap-2.5 rounded-xl border border-border bg-card p-2.5 text-left transition hover:bg-muted"
+          >
+            <IdentityImage
+              id={data.guild.id}
+              name={data.guild.name}
+              src={data.guild.iconUrl}
+              kind="guild"
+              size={33}
+            />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[12px] font-semibold">
                 {data.guild.name}
               </span>
               <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <span className="size-1.5 rounded-full bg-emerald-400" />
-                {data.guild.installed ? "Community server" : "Not connected"}
+                {data.guild.installed ? "Orbit installed" : "Not connected"}
               </span>
             </span>
             <ChevronsUpDown size={13} className="text-muted-foreground" />
@@ -190,7 +238,13 @@ export function Dashboard({
           {data.guilds.map((g) => (
             <DropdownMenuItem key={g.id} asChild>
               <Link prefetch={false} href={guildHref(g.id)}>
-                <ServerIcon name={g.name} small />
+                <IdentityImage
+                  id={g.id}
+                  name={g.name}
+                  src={g.iconUrl}
+                  kind="guild"
+                  size={28}
+                />
                 <span className="flex-1">
                   {g.name}
                   {!g.installed && (
@@ -214,10 +268,10 @@ export function Dashboard({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <nav className="flex-1 space-y-6">
+      <nav aria-label="Workspace navigation" className="flex-1 space-y-6">
         {["workspace", "server"].map((group) => (
           <div key={group}>
-            <p className="mb-2.5 px-3 text-[10px] font-semibold uppercase tracking-[1.4px] text-muted-foreground/70">
+            <p className="mb-2.5 px-3 text-[10px] font-semibold uppercase tracking-[1.4px] text-muted-foreground">
               {group === "workspace" ? "Workspace" : "Server management"}
             </p>
             <div className="space-y-1">
@@ -229,6 +283,7 @@ export function Dashboard({
                     key={n.id}
                     href={`/dashboard/${data.guild.id}/${n.id}`}
                     onClick={() => setMobile(false)}
+                    aria-current={section === n.id ? "page" : undefined}
                     className={cn(
                       "group relative flex h-[38px] items-center gap-3 rounded-lg px-3 text-[12px] font-medium transition-colors",
                       section === n.id
@@ -246,27 +301,18 @@ export function Dashboard({
                       }
                     />
                     <span className="flex-1">{n.label}</span>
-                    {n.id === "moderation" &&
-                      data.resources.filter(
-                        (r) => r.kind === "rule" && r.enabled
-                      ).length > 0 && (
-                        <span
-                          className={cn(
-                            "flex size-[17px] items-center justify-center rounded text-[10px]",
-                            section === n.id
-                              ? "bg-violet-100 text-violet-500"
-                              : "bg-muted text-muted-foreground"
-                          )}
-                        >
-                          {
-                            data.resources.filter(
-                              (r) => r.kind === "rule" && r.enabled
-                            ).length
-                          }
-                        </span>
-                      )}
-                    {n.id === "news" && (
-                      <span className="size-1.5 rounded-full bg-emerald-400" />
+                    {n.id === "moderation" && enabledRuleCount > 0 && (
+                      <span
+                        aria-label={`${enabledRuleCount} enabled rule configurations; moderation ${data.guild.config.modules.moderation ? "enabled" : "paused"}`}
+                        className={cn(
+                          "flex size-[17px] items-center justify-center rounded text-[10px]",
+                          section === n.id
+                            ? "bg-violet-100 text-violet-700"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {enabledRuleCount}
+                      </span>
                     )}
                   </Link>
                 ))}
@@ -293,7 +339,6 @@ export function Dashboard({
         </button>
         <div className="flex items-center justify-between border-t px-1 pt-4">
           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-emerald-400" />
             Orbit v1.0
           </span>
           {data.demo ? (
@@ -303,7 +348,7 @@ export function Dashboard({
               </Badge>
             </button>
           ) : (
-            <Badge tone="green" className="text-[9px]">
+            <Badge tone="neutral" className="text-[9px]">
               LIVE
             </Badge>
           )}
@@ -315,7 +360,7 @@ export function Dashboard({
     <WorkspaceContext.Provider
       value={{ data, setData, api, refresh, saveConfig, navigate }}
     >
-      <div className="min-h-screen" inert={!hydrated} data-hydrated={hydrated}>
+      <div className="min-h-screen" data-hydrated={hydrated}>
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col overflow-y-auto border-r border-border bg-card px-4 pb-5 pt-7 lg:flex">
           {sidebar}
         </aside>
@@ -365,14 +410,10 @@ export function Dashboard({
                 <span
                   className={cn(
                     "size-1.5 rounded-full",
-                    data.health.length > 0 &&
-                      data.health.every((h) => h.status === "healthy")
-                      ? "bg-emerald-400"
-                      : "bg-amber-400"
+                    servicesHealthy ? "bg-emerald-400" : "bg-amber-400"
                   )}
                 />
-                {data.health.length > 0 &&
-                data.health.every((h) => h.status === "healthy")
+                {servicesHealthy
                   ? "All systems operational"
                   : data.health.length
                     ? "Some services need attention"
@@ -414,15 +455,15 @@ export function Dashboard({
                 <DropdownMenuTrigger asChild>
                   <button
                     className="flex items-center gap-2.5"
-                    aria-label="Account menu"
+                    aria-label={`Account menu for ${data.user.name}`}
                   >
-                    <span className="flex size-[30px] items-center justify-center rounded-full border border-[#e6d5bb] bg-[#f3e7d4] text-[10px] font-semibold text-[#927552]">
-                      {data.user.name
-                        .split(" ")
-                        .map((s) => s[0])
-                        .slice(0, 2)
-                        .join("")}
-                    </span>
+                    <IdentityImage
+                      id={data.user.id}
+                      name={data.user.name}
+                      src={data.user.avatarUrl}
+                      kind="user"
+                      size={30}
+                    />
                     <ChevronDown
                       size={12}
                       className="hidden text-muted-foreground sm:block"
@@ -433,10 +474,21 @@ export function Dashboard({
                   <div className="px-3 py-2">
                     <p className="text-xs font-semibold">{data.user.name}</p>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      {data.demo ? "Demo administrator" : "Discord account"}
+                      {data.demo
+                        ? "Demo administrator · sample image"
+                        : "Global Discord profile"}
                     </p>
                   </div>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    disabled={profileBusy}
+                    onSelect={() => void refreshUserProfile()}
+                  >
+                    <RefreshCw />
+                    {profileBusy
+                      ? "Refreshing profile…"
+                      : "Refresh profile image & name"}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setDemoInfo(true)}>
                     <ShieldCheck />
                     Privacy & permissions
@@ -789,36 +841,5 @@ export function Dashboard({
         </Dialog>
       </div>
     </WorkspaceContext.Provider>
-  );
-}
-export function ServerIcon({
-  name,
-  small = false,
-}: {
-  name: string;
-  small?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-[9px] border border-violet-200/60 bg-[#ece6fb] text-violet-500",
-        small ? "size-7" : "size-[33px]"
-      )}
-    >
-      <span className="absolute -bottom-2 -right-1 size-6 rounded-full bg-violet-300/20" />
-      <span
-        className={cn(
-          "relative font-semibold",
-          small ? "text-[12px]" : "text-[13px]"
-        )}
-      >
-        {name
-          .split(" ")
-          .filter((s) => s.toLowerCase() !== "the")
-          .slice(0, 2)
-          .map((s) => s[0])
-          .join("")}
-      </span>
-    </span>
   );
 }

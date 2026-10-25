@@ -1,3 +1,5 @@
+import { refreshProfile } from "../apps/web/lib/auth";
+vi.mock("server-only", () => ({}));
 import * as community from "../packages/db/src/community";
 import * as communityStore from "../packages/db/src/store";
 import * as ownHistory from "../packages/db/src/history";
@@ -968,5 +970,123 @@ describe("opt-in community post lifecycle and own-account history", () => {
     await expect(
       ownHistory.getOwnEconomyHistory(g1, u1, { pageSize: 21 })
     ).rejects.toThrow();
+  });
+});
+
+describe("profile refresh SQL ownership and session lifetime", () => {
+  async function storedSession(
+    userId: string,
+    expiresAt = new Date(Date.now() + 60000)
+  ) {
+    const id = `identity-test-${randomUUID()}`;
+    await database()
+      .db.insert(s.sessions)
+      .values({
+        id,
+        userId,
+        name: "Original account",
+        avatar: null,
+        accessToken: "test-only-encrypted-token-placeholder",
+        refreshToken: "test-only-refresh-placeholder",
+        tokenExpiresAt: new Date(Date.now() + 60000),
+        expiresAt,
+      });
+    return id;
+  }
+  function upstreamProfile() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(async () =>
+        Response.json({
+          id: u1,
+          username: "current_username",
+          global_name: "Updated global name",
+          avatar: "0123456789abcdef0123456789abcdef",
+        })
+      )
+    );
+  }
+  it("updates only the matching session/account and refuses a foreign session ID", async () => {
+    const own = await storedSession(u1),
+      foreign = await storedSession(u2);
+    const user = {
+      id: u1,
+      sessionId: own,
+      name: "Original account",
+      avatar: null,
+      accessToken: "test-access",
+    };
+    upstreamProfile();
+    try {
+      expect(await refreshProfile(user)).toMatchObject({
+        name: "Updated global name",
+        avatar: "0123456789abcdef0123456789abcdef",
+      });
+      await expect(
+        refreshProfile({ ...user, sessionId: foreign })
+      ).rejects.toMatchObject({ status: 401 });
+      const rows = await database()
+        .db.select()
+        .from(s.sessions)
+        .where(sql`${s.sessions.id} IN (${own},${foreign})`);
+      expect(rows.find((row) => row.id === own)).toMatchObject({
+        userId: u1,
+        name: "Updated global name",
+        accessToken: "test-only-encrypted-token-placeholder",
+      });
+      expect(rows.find((row) => row.id === foreign)).toMatchObject({
+        userId: u2,
+        name: "Original account",
+        avatar: null,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      await database()
+        .db.delete(s.sessions)
+        .where(sql`${s.sessions.id} IN (${own},${foreign})`);
+    }
+  });
+  it("does not update expired sessions or recreate a session revoked during the upstream request", async () => {
+    const id = await storedSession(u1, new Date(Date.now() - 1000));
+    const user = {
+      id: u1,
+      sessionId: id,
+      name: "Original account",
+      avatar: null,
+      accessToken: "test-access",
+    };
+    upstreamProfile();
+    try {
+      await expect(refreshProfile(user)).rejects.toMatchObject({ status: 401 });
+      const [row] = await database()
+        .db.select()
+        .from(s.sessions)
+        .where(eq(s.sessions.id, id));
+      expect(row.name).toBe("Original account");
+      await database()
+        .db.update(s.sessions)
+        .set({ expiresAt: new Date(Date.now() + 60000) })
+        .where(eq(s.sessions.id, id));
+      vi.mocked(fetch).mockImplementationOnce(async () => {
+        // Revoke after the caller captured its identity, while Discord is in flight.
+        await database().db.delete(s.sessions).where(eq(s.sessions.id, id));
+        return Response.json({
+          id: u1,
+          username: "current_username",
+          global_name: "Updated global name",
+          avatar: "0123456789abcdef0123456789abcdef",
+        });
+      });
+      await expect(refreshProfile(user)).rejects.toMatchObject({ status: 401 });
+      expect(
+        await database()
+          .db.select()
+          .from(s.sessions)
+          .where(eq(s.sessions.id, id))
+      ).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
+      await database().db.delete(s.sessions).where(eq(s.sessions.id, id));
+    }
   });
 });

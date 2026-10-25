@@ -9,7 +9,12 @@ import type {
   Resource,
   ServiceHealth,
 } from "@orbit/core";
-import { DEMO_GUILD_ID, DEMO_USER_ID, defaultConfig } from "@orbit/core";
+import {
+  DEMO_GUILD_ID,
+  DEMO_USER_ID,
+  DEMO_GUILD_ICON,
+  defaultConfig,
+} from "@orbit/core";
 import { randomUUID } from "node:crypto";
 export type DemoState = {
   communityPosts?: import("@orbit/core/community").CommunityPost[];
@@ -118,7 +123,7 @@ export function createDemo(): DemoState {
   const guild: Guild = {
     id: DEMO_GUILD_ID,
     name: "The Cozy Corner",
-    icon: null,
+    icon: DEMO_GUILD_ICON,
     installed: true,
     memberCount: 2846,
     config,
@@ -546,6 +551,7 @@ export function createDemo(): DemoState {
         ...structuredClone(guild),
         id: "120000000000000002",
         name: "The Workshop",
+        icon: null,
         memberCount: 128,
         config: structuredClone(defaultConfig),
       },
@@ -553,6 +559,7 @@ export function createDemo(): DemoState {
         ...structuredClone(guild),
         id: "120000000000000003",
         name: "Pixel Pioneers",
+        icon: null,
         memberCount: 512,
         installed: false,
       },
