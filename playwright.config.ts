@@ -6,7 +6,9 @@ export default defineConfig({
   workers: 1,
   timeout: 45000,
   retries: process.env.CI ? 1 : 0,
-  reporter: "list",
+  // Keep failures readable through the Checks API when the log-download CDN
+  // is unavailable to a restricted development environment.
+  reporter: process.env.CI ? [["list"], ["github"]] : "list",
   use: {
     baseURL: "http://localhost:3000",
     trace: "retain-on-failure",

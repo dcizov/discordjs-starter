@@ -82,6 +82,10 @@ Normal development/CI uses `npx playwright install --with-deps chromium`. Avoid 
 - **No local Docker engine**, PostgreSQL server, Redis service or Lavalink backend was available. Local PGlite is not labeled real PostgreSQL. Queue consumer/transport behavior is mock-tested, not a real Redis integration run.
 - The normal authorized branch-push workflow runs additional isolated **PostgreSQL 17** tests, Docker/Compose builds, plugin/Soundy tests and offline backend WebSocket/readiness checks. Inspect the exact ending commit's [GitHub checks](https://github.com/dcizov/discordjs-starter/actions?query=branch%3Aarena%2Fe2b42b08-discordjs-starter); the final handover reports their observed status separately. Historical CI from `0e77b45` is not new-feature proof. Even successful offline containers do not prove Discord/provider playback.
 
+### First remote run — not a green claim
+
+On implementation commit `729f0401ae03b0212605977a21f6910cc2a05686`, [run 40191921681](https://github.com/dcizov/discordjs-starter/actions/runs/40191921681) passed the isolated PostgreSQL test step and the complete container job (runtime/dev images, Compose profiles, plugin/Soundy builds/tests, offline backend readiness/WebSocket and real Dev Container smoke). Its browser-test step failed. The signed log-download CDN was inaccessible from this sandbox, so CI now also uses Playwright's built-in GitHub reporter to expose exact failures through check annotations. This diagnostic change does not weaken assertions, rate limits or timeouts. The final handover gives the latest exact commit/run status; the first run is not described as successful.
+
 ## Setup, examples and actual screenshots
 
 Use [COMMUNITY.md](COMMUNITY.md) for the direct Docker update/migration/registration commands and feature walkthrough. Registration has **29 roots / 44 invocations**; a catalog page is not live registration. Re-register only for the intended application/guild scope, with existing server-side credentials. Both new flags remain off until configured; no unsolicited live messages or collection start on upgrade.
