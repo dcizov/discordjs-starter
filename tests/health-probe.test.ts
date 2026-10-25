@@ -13,3 +13,19 @@ it.skipIf(!hasCurl)(
     expect(await checkLavalinkHealth()).toBe(11);
   }
 );
+
+it("runs the CI fixture/help with native Node TypeScript, without an app loader or Docker", () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      "tests/integration/lavalink-health.ts",
+      "--help",
+    ],
+    { encoding: "utf8" }
+  );
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain(
+    "loopback fixtures only, no app dependencies"
+  );
+});

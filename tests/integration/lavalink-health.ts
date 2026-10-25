@@ -169,18 +169,30 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const image = process.argv[2];
-  if (!image)
-    throw new Error(
-      "Pass the CI-built Lavalink image name; no production container is used."
+  if (image === "--help") {
+    console.log(
+      "Usage: node --experimental-strip-types tests/integration/lavalink-health.ts CI_IMAGE; loopback fixtures only, no app dependencies."
     );
-  void checkLavalinkHealth(image)
-    .then((checks) => {
-      console.log(
-        `::notice title=Authenticated HTTP health probe::${checks} real image-curl checks passed: auth, exact status, no redirects/proxy, secret-safe failures, refusal and recovery`
+  } else {
+    if (!image)
+      throw new Error(
+        "Pass the CI-built Lavalink image name; no production container is used."
       );
-    })
-    .catch((error) => {
-      console.error(error);
-      process.exitCode = 1;
-    });
+    void checkLavalinkHealth(image)
+      .then((checks) => {
+        console.log(
+          `::notice title=Authenticated HTTP health probe::${checks} real image-curl checks passed: auth, exact status, no redirects/proxy, secret-safe failures, refusal and recovery`
+        );
+      })
+      .catch((error) => {
+        const detail =
+          error instanceof Error
+            ? (error.stack ?? error.message)
+            : "Unknown probe fixture failure";
+        console.error(
+          `::error title=HTTP probe fixture failed::${detail.replaceAll("%", "%25").replaceAll("\r", "%0D").replaceAll("\n", "%0A")}`
+        );
+        process.exitCode = 1;
+      });
+  }
 }

@@ -103,7 +103,8 @@ jobs:
           tools="$(docker run --rm --network none --entrypoint sh orbit:lavalink-ci -c 'for tool in java curl wget node python; do if command -v "$tool" >/dev/null 2>&1; then printf "%s=yes " "$tool"; else printf "%s=no " "$tool"; fi; done')"
           printf '::notice title=Lavalink runtime tool inventory::%s\n' "$tools"
       - name: Exercise HTTP probe behavior with the actual image curl
-        run: node --import tsx tests/integration/lavalink-health.ts orbit:lavalink-ci
+        # Host CI has Node, not app node_modules; the fixture uses only builtins.
+        run: node --experimental-strip-types tests/integration/lavalink-health.ts orbit:lavalink-ci
       - name: Verify plugins, backend WebSocket and readiness without Discord/provider access
         run: |
           cleanup_backend() {
