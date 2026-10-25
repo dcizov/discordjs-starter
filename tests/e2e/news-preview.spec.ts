@@ -87,8 +87,10 @@ test("the Steam preview renders real announcement content without raw markup", a
   await expect(
     card.getByText("App announcement", { exact: true })
   ).toBeVisible();
+  // The meta line names the producing feed next to the date; the disclosure
+  // below repeats the feed name, so match the meta line exactly.
   await expect(
-    card.getByText("Community Announcements", { exact: false })
+    card.getByText(/^Community Announcements · \d{1,2} \w{3} \d{4}$/)
   ).toBeVisible();
   await expect(
     card.getByRole("link", { name: "Read the announcement" })
