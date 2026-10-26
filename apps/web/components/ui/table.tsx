@@ -12,19 +12,17 @@ import { cn } from "@/lib/utils";
 export function TableWrap({
   className,
   children,
-  label,
 }: {
   className?: string;
   children: React.ReactNode;
-  /** Accessible name for the scrollable region around the table. */
-  label?: string;
 }) {
   return (
     <div
       className={cn("relative w-full overflow-x-auto", className)}
-      role="region"
-      aria-label={label}
-      tabIndex={label ? 0 : undefined}
+      // The scroll container is focusable so a keyboard user can scroll it; the
+      // labelled region belongs to the table component that owns the toolbar
+      // and footer, so this div does not add a second, unnamed landmark.
+      tabIndex={0}
     >
       {children}
     </div>

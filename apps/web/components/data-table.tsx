@@ -373,7 +373,10 @@ export function DataTable<T extends { id: string }>({
   const rowsOnPage = table.getRowModel().rows.length;
 
   return (
-    <div className="min-w-0">
+    // The region covers the toolbar, the table and the footer: a reader who
+    // lands on "Contributors by balance" reaches its search and paging too, and
+    // the range sentence belongs to the thing it counts.
+    <div className="min-w-0" role="region" aria-label={label ?? "Records"}>
       {toolbar}
       <div className="flex flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -461,7 +464,7 @@ export function DataTable<T extends { id: string }>({
           aria-busy={loading}
           className={cn("transition-opacity", loading && "opacity-60")}
         >
-          <TableWrap label={label ?? "Records"}>
+          <TableWrap>
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

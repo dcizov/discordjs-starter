@@ -520,7 +520,7 @@ export function EconomyPage() {
                 onQueryChange={setQuery}
                 onFilterChange={setFilter}
                 searchLabel="Search transactions"
-                searchPlaceholder="Search notes, types, and members…"
+                searchPlaceholder="Search transactions…"
                 facetLabel="Filter transaction type"
                 facetTitle="Type"
                 facetOptions={[

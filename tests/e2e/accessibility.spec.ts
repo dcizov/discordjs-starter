@@ -163,26 +163,18 @@ test("table headers expose sort state and the columns menu is keyboard operable"
   const table = page.getByRole("region", { name: "Channels" }).locator("table");
   await expect(table).toBeVisible();
   const channelHeader = table.getByRole("columnheader", { name: /Channel/ });
+  // The first column is the channel name — the column being sorted.
+  const names = () => table.locator("tbody tr td:first-child").allInnerTexts();
   await expect(channelHeader).not.toHaveAttribute("aria-sort", /.+/);
   await channelHeader.getByRole("button").click();
   await expect(channelHeader).toHaveAttribute("aria-sort", "ascending");
-  const first = await table
-    .locator("tbody tr")
-    .first()
-    .locator("td")
-    .nth(1)
-    .innerText();
+  const ascending = await names();
   await channelHeader.getByRole("button").click();
   await expect(channelHeader).toHaveAttribute("aria-sort", "descending");
-  const lastPageFirst = await table
-    .locator("tbody tr")
-    .first()
-    .locator("td")
-    .nth(1)
-    .innerText();
-  expect(
-    lastPageFirst.localeCompare(first, undefined, { sensitivity: "base" })
-  ).toBeGreaterThanOrEqual(0);
+  // Descending is the same list, reversed — an order change of the whole list,
+  // not just an arrow. Comparing the two orders exactly avoids depending on any
+  // particular collation.
+  expect(await names()).toEqual([...ascending].reverse());
 
   await page.getByRole("button", { name: "Columns", exact: true }).click();
   const menu = page.getByRole("menu");

@@ -135,6 +135,8 @@ test("the audit log filters by action and pages on the server", async ({
   await page.keyboard.press("Enter");
   const listbox = page.getByRole("listbox");
   await expect(listbox).toBeVisible();
+  const input = page.locator("[cmdk-input]");
+  await input.focus();
   await page.keyboard.type("Moderated");
   await page.keyboard.press("Enter");
   await expect(listbox).toBeHidden();

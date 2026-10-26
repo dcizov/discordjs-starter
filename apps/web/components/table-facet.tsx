@@ -111,6 +111,14 @@ export function FacetFilterButton({ facet }: { facet: FacetFilter }) {
               <CommandItem
                 key={option.value}
                 value={`${option.label} ${option.value}`}
+                // The name states the option as a sentence, with the count in
+                // words. Reading raw adjacent nodes would run them together
+                // ("Needs setup2") and lose the meaning of the number.
+                aria-label={
+                  typeof option.count === "number"
+                    ? `${option.label} (${option.count})`
+                    : option.label
+                }
                 onSelect={() => {
                   facet.onChange(option.value);
                   setOpen(false);
@@ -129,7 +137,10 @@ export function FacetFilterButton({ facet }: { facet: FacetFilter }) {
                 </span>
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 {typeof option.count === "number" && (
-                  <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                  <span
+                    aria-hidden
+                    className="shrink-0 text-[10px] tabular-nums text-muted-foreground"
+                  >
                     {option.count}
                   </span>
                 )}
