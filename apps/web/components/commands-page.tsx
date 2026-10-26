@@ -3,22 +3,16 @@ import {
   commandModuleLabels,
   type CommandCatalog,
 } from "@orbit/core/command-catalog-types";
-import {
-  AlertCircle,
-  BookOpen,
-  RefreshCw,
-  ShieldCheck,
-  Terminal,
-} from "lucide-react";
+import { BookOpen, ShieldCheck, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CopyButton } from "./copy-button";
 import { PageHeader } from "./page-header";
-import { Button } from "./ui/button";
 import {
   Badge,
   Card,
   EmptyState,
+  ErrorState,
   SearchInput,
   Select,
   Skeleton,
@@ -140,21 +134,12 @@ export function CommandsPage() {
           ))}
         </div>
       ) : error ? (
-        <Card className="p-8 text-center" role="alert">
-          <AlertCircle className="mx-auto mb-3 text-amber-400" size={22} />
-          <p className="text-sm font-medium">
-            The command reference couldn’t load.
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">{error}</p>
-          <Button
-            className="mt-4"
-            variant="outline"
-            size="sm"
-            onClick={() => setRetry((r) => r + 1)}
-          >
-            <RefreshCw size={14} />
-            Try again
-          </Button>
+        <Card>
+          <ErrorState
+            title="The command reference couldn’t load."
+            detail={error}
+            onRetry={() => setRetry((r) => r + 1)}
+          />
         </Card>
       ) : (
         <>

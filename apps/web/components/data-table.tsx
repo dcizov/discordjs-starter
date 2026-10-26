@@ -9,7 +9,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { EmptyState } from "./ui/primitives";
+import { EmptyState, ErrorState } from "./ui/primitives";
 
 /**
  * Column of the shared dashboard table.
@@ -51,6 +51,8 @@ export function DataTable<T extends { id: string }>({
   pagination,
   sort,
   loading = false,
+  error = "",
+  onRetry,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -60,6 +62,9 @@ export function DataTable<T extends { id: string }>({
   pagination?: { page: number; total: number; onPage: (page: number) => void };
   sort?: TableSort;
   loading?: boolean;
+  /** Load failure for the whole page of rows; rendered instead of the table. */
+  error?: string;
+  onRetry?: () => void;
 }) {
   const [page, setPage] = useState(1);
   const [hidden, setHidden] = useState<string[]>(() =>
@@ -133,6 +138,9 @@ export function DataTable<T extends { id: string }>({
       ) : null}
     </div>
   );
+
+  // A failed fetch is not an empty result: never show "nothing here" for it.
+  if (error) return <ErrorState detail={error} onRetry={onRetry} />;
 
   if (!rows.length)
     return (
@@ -215,41 +223,81 @@ export function DataTable<T extends { id: string }>({
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between gap-3 border-t px-5 py-3">
-          <p className="text-[10px] text-muted-foreground">
-            Showing{" "}
-            <span className="font-medium text-foreground">
-              {(p - 1) * pageSize + 1}–{Math.min(p * pageSize, totalItems)}
-            </span>{" "}
-            of {totalItems} matching rows
-          </p>
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-7"
-              disabled={p === 1}
-              onClick={() => go(p - 1)}
-              aria-label="Previous page"
-            >
-              <ChevronLeft size={13} />
-            </Button>
-            <span className="px-2 text-[10px] text-muted-foreground">
-              {p} of {total}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-7"
-              disabled={p >= total}
-              onClick={() => go(p + 1)}
-              aria-label="Next page"
-            >
-              <ChevronRight size={13} />
-            </Button>
-          </div>
-        </div>
+        <TableFooter
+          page={p}
+          totalPages={total}
+          totalItems={totalItems}
+          pageSize={pageSize}
+          onPage={go}
+        />
       </div>
     </>
+  );
+}
+
+/**
+ * Footer shared by every paginated table: range, page count and the two
+ * navigation buttons.
+ *
+ * Extracted from `DataTable` because the compact personal-ledger table had its
+ * own "Page 1/2" footer with different wording and button sizes; two pagination
+ * footers on one dashboard is a bug waiting to be reported as inconsistency. It
+ * renders no page numbers of its own — the row count and range are the honest
+ * signal for server-paginated data.
+ */
+export function TableFooter({
+  page,
+  totalPages,
+  totalItems,
+  pageSize,
+  onPage,
+  className,
+}: {
+  page: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPage: (page: number) => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between gap-3 border-t px-5 py-3 ${
+        className ?? ""
+      }`}
+    >
+      <p className="text-[10px] text-muted-foreground">
+        Showing{" "}
+        <span className="font-medium text-foreground">
+          {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalItems)}
+        </span>{" "}
+        of {totalItems} matching rows
+      </p>
+      <div className="flex items-center gap-1.5">
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-7"
+          disabled={page === 1}
+          onClick={() => onPage(page - 1)}
+          aria-label="Previous page"
+        >
+          <ChevronLeft size={13} />
+        </Button>
+        <span className="px-2 text-[10px] text-muted-foreground">
+          {page} of {totalPages}
+        </span>
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-7"
+          disabled={page >= totalPages}
+          onClick={() => onPage(page + 1)}
+          aria-label="Next page"
+        >
+          <ChevronRight size={13} />
+        </Button>
+      </div>
+    </div>
   );
 }

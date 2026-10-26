@@ -1,7 +1,8 @@
 "use client";
 import { createContext, useContext, useId } from "react";
 import { cn } from "@/lib/utils";
-import { Inbox, Loader2, Search } from "lucide-react";
+import { AlertCircle, Inbox, Loader2, RefreshCw, Search } from "lucide-react";
+import { Button } from "./button";
 export function Card({
   className,
   children,
@@ -272,6 +273,50 @@ export function SectionHeader({
       </h2>
       {aside ? (
         <div className="flex shrink-0 items-center gap-2">{aside}</div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Block-level failure with an optional retry.
+ *
+ * Page- and panel-level failures were drawn four different ways (amber icon with
+ * two paragraphs, a bare red paragraph, a red card, a bordered red box) for the
+ * same meaning: "this surface could not load". Field-level validation stays
+ * inline next to its input; this is for the case where nothing loaded.
+ */
+export function ErrorState({
+  title = "This section couldn’t load.",
+  detail,
+  onRetry,
+  className,
+}: {
+  title?: string;
+  detail?: string;
+  onRetry?: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "flex flex-col items-center gap-2 px-6 py-10 text-center",
+        className
+      )}
+    >
+      <AlertCircle size={22} className="text-amber-500" aria-hidden />
+      <p className="text-sm font-medium">{title}</p>
+      {detail ? (
+        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+          {detail}
+        </p>
+      ) : null}
+      {onRetry ? (
+        <Button variant="outline" size="sm" className="mt-2" onClick={onRetry}>
+          <RefreshCw size={12} aria-hidden />
+          Try again
+        </Button>
       ) : null}
     </div>
   );

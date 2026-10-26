@@ -3,9 +3,7 @@ import { useEffect, useState } from "react";
 import { useWorkspace } from "./workspace";
 import { historyQueryString } from "@orbit/core/history-query";
 import { DataTable, type Column } from "./data-table";
-import { Button } from "./ui/button";
 import { Skeleton } from "./ui/primitives";
-import { AlertCircle, RefreshCw } from "lucide-react";
 export function HistoryTable<T extends { id: string }>({
   kind,
   query = "",
@@ -76,24 +74,7 @@ export function HistoryTable<T extends { id: string }>({
       clearTimeout(timer);
     };
   }, [api, kind, page, query, filter, sort, token, retry]);
-  if (error)
-    return (
-      <div
-        role="alert"
-        className="flex flex-col items-center gap-3 p-10 text-center"
-      >
-        <AlertCircle size={22} className="text-amber-500" />
-        <p className="text-xs text-muted-foreground">{error}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setRetry((v) => v + 1)}
-        >
-          <RefreshCw size={12} />
-          Try again
-        </Button>
-      </div>
-    );
+  const retryRequest = () => setRetry((v) => v + 1);
   if (!result)
     return (
       <div className="space-y-4 p-5" aria-label="Loading records">
@@ -124,6 +105,8 @@ export function HistoryTable<T extends { id: string }>({
       }}
       emptyTitle={emptyTitle}
       emptyDescription={emptyDescription}
+      error={error}
+      onRetry={retryRequest}
     />
   );
 }

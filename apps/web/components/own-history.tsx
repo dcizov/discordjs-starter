@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import type { DashboardData } from "@orbit/core";
 import { communityDate } from "@orbit/core/community";
 import { useWorkspace } from "./workspace";
-import { Card } from "./ui/primitives";
-import { Button } from "./ui/button";
+import { ErrorState, Card } from "./ui/primitives";
+import { TableFooter } from "./data-table";
 export function OwnHistory() {
   const { data, api } = useWorkspace();
   const [history, setHistory] = useState<
@@ -78,38 +78,21 @@ export function OwnHistory() {
       </table>
       {!history.rows.length && (
         <p className="py-4 text-xs text-muted-foreground">
-          No transactions on this page.
+          No transactions yet.
         </p>
       )}
-      {error && (
-        <p role="alert" className="my-3 text-xs text-red-700 dark:text-red-300">
-          {error}
-        </p>
-      )}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-[11px]" role="status">
-          Page {history.page}/
-          {Math.max(1, Math.ceil(history.total / history.pageSize))}
-        </p>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy || history.page === 1}
-            onClick={() => void load(history.page - 1)}
-          >
-            Earlier page
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy || history.page * history.pageSize >= history.total}
-            onClick={() => void load(history.page + 1)}
-          >
-            Older entries
-          </Button>
-        </div>
-      </div>
+      {error && <ErrorState detail={error} className="px-0 py-4" />}
+      <TableFooter
+        className="mt-3 border-t-0 px-0 pb-0"
+        page={history.page}
+        totalPages={Math.max(1, Math.ceil(history.total / history.pageSize))}
+        totalItems={history.total}
+        pageSize={history.pageSize}
+        onPage={(page) => {
+          if (busy) return;
+          void load(page);
+        }}
+      />
     </Card>
   );
 }
