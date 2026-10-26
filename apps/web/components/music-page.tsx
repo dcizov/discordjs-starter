@@ -106,9 +106,13 @@ export function MusicPage() {
     setBusy(action);
     try {
       await api("/music", "POST", { action, ...extra });
+      // Clear the request as soon as the bot has it, before the snapshot
+      // refresh. Clearing after the refresh empties a field the person may
+      // already have typed into again, and silently drops that request.
+      // A failed request keeps the text, so it can be retried.
+      if (action === "play") setQuery("");
       await refresh();
       if (action === "play") {
-        setQuery("");
         toast.success(
           data.demo
             ? "Added to the preview queue. No audio is played."

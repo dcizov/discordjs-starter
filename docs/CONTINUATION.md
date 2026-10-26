@@ -1301,6 +1301,35 @@ The new accessibility suite found real defects rather than test noise:
   dimming was the whole defect; `/40` and `/50` survive only on `aria-hidden`
   decoration and disabled text.
 
+### The `music-actions` flake had a cause, not just a probability
+
+`the play form sends the chosen provider and the server default otherwise`
+failed intermittently at CI in two different places (`:150` before, `:199`
+now), with the same signature: the first `POST /music` arrived, the second never
+did. No sleep or retry was added; the race was traced instead.
+
+`MusicPage.action()` clears the request field **after** awaiting the snapshot
+refresh (`setQuery("")` sat after `await refresh()`). The test's
+`expect.poll(() => bodies.length).toBe(1)` succeeds as soon as the POST is
+recorded, i.e. several hundred milliseconds before that refresh finishes. If the
+test then filled "A second request", the pending `setQuery("")` wiped it, the
+`required` request input was empty when the button was clicked, and the browser
+blocked submission with its own constraint validation — so no second request
+existed at all, and `expect.poll(…).toBe(2)` timed out. Which of the two steps
+lost the race depended only on how long the refresh took, which is why the same
+commit both passed (74 passed) and failed (1 failed) in two CI runs.
+
+Two changes, no test accommodation:
+
+- **App**: the field is cleared as soon as the bot has accepted the request,
+  before the refresh. This is the correct order regardless of tests — clearing
+  after the refresh empties a field someone may have already typed into again,
+  silently discarding that request. A failed request still keeps the text, so it
+  can be retried, which the existing "stays pending until the consumer actually
+  completes it" case still asserts.
+- **Test**: it waits for the app's own signal (`toHaveValue("")`) before typing
+  the next request. That is an assertion about the product, not a delay.
+
 Four test-side assumptions were wrong for the same reason — they described
 native selects, or looked for a portalled popup inside a dialog, or assumed
 Radix tracks `aria-activedescendant`, or assumed the trigger keeps focus during

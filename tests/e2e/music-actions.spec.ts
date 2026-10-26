@@ -191,7 +191,11 @@ test("the play form sends the chosen provider and the server default otherwise",
     source: "bandcamp",
   });
   // Back to the default: the option is omitted rather than sent as "".
-  await page.getByPlaceholder("Set the mood…").fill("A second request");
+  const request = page.getByPlaceholder("Set the mood…");
+  // Typing is only safe once the app has cleared the field it clears after an
+  // accepted request; filling earlier could be wiped a moment later.
+  await expect(request).toHaveValue("");
+  await request.fill("A second request");
   await chooseOption(page, "Search with", "Server default");
   await page
     .getByRole("button", { name: "Add to the queue", exact: true })
