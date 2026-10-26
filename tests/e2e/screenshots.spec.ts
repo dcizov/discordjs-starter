@@ -16,13 +16,15 @@ import { resolve } from "node:path";
  *
  *   VISUAL_EVIDENCE=1 npx playwright test tests/e2e/screenshots.spec.ts
  *
- * Output: `test-results/screenshots/*.png` (uploaded as a CI artifact on every
- * run of the `visual-evidence` job).
+ * Output: `visual-evidence/*.png`, deliberately **outside** `test-results/`:
+ * Playwright wipes its own output directory at the start of every run, so files
+ * written there are gone before the upload step of the following run. The CI
+ * `verify` job uploads this directory as `dashboard-screenshots`.
  */
 const enabled = process.env.VISUAL_EVIDENCE === "1";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
-const outputDir = resolve("test-results/screenshots");
+const outputDir = resolve("visual-evidence");
 
 const desktop = { width: 1440, height: 900 };
 const mobile = { width: 390, height: 844 };
