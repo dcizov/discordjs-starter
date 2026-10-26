@@ -2,8 +2,9 @@
 import { useState } from "react";
 import type { NewsRoutingPreview as Preview } from "@orbit/core/feed-routing";
 import { useWorkspace } from "./workspace";
-import { Card, Field, Input, Select, Textarea } from "./ui/primitives";
+import { Card, Field, Input, Textarea } from "./ui/primitives";
 import { Button } from "./ui/button";
+import { Combobox } from "./ui/combobox";
 export function NewsRoutingPreview() {
   const { data, api } = useWorkspace(),
     sources = data.resources.filter((r) => r.kind === "source");
@@ -53,23 +54,24 @@ export function NewsRoutingPreview() {
           }}
         >
           <Field label="Preview source" required>
-            <Select
+            <Combobox
               disabled={busy}
-              required
               value={sourceId}
-              onChange={(e) => {
-                setSource(e.target.value);
+              onValueChange={(next) => {
+                setSource(next);
                 invalidate();
               }}
-            >
-              <option value="">Choose a source</option>
-              {sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                  {source.enabled ? "" : " (disabled)"}
-                </option>
-              ))}
-            </Select>
+              placeholder="Choose a source"
+              searchPlaceholder="Search sources…"
+              options={[
+                { value: "", label: "Choose a source" },
+                ...sources.map((source) => ({
+                  value: source.id,
+                  label: source.name,
+                  hint: source.enabled ? undefined : "disabled",
+                })),
+              ]}
+            />
           </Field>
           <Field label="Sample headline" required>
             <Input

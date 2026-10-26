@@ -14,7 +14,7 @@ import {
   EmptyState,
   ErrorState,
   SearchInput,
-  Select,
+  FormSelect,
   Skeleton,
 } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
@@ -113,19 +113,19 @@ export function CommandsPage() {
           onChange={setQuery}
           placeholder="Search commands, arguments, or permissions…"
         />
-        <Select
+        <FormSelect
           aria-label="Filter command module"
           value={module}
-          onChange={(e) => setModule(e.target.value)}
+          onValueChange={setModule}
           className="h-9 sm:w-44"
-        >
-          <option value="all">All modules</option>
-          {Object.entries(commandModuleLabels).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </Select>
+          options={[
+            { value: "all", label: "All modules" },
+            ...Object.entries(commandModuleLabels).map(([key, label]) => ({
+              value: key,
+              label,
+            })),
+          ]}
+        />
       </div>
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2">

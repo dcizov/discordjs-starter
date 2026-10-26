@@ -1,8 +1,16 @@
 "use client";
-import { createContext, useContext, useId } from "react";
+import { useContext, useId } from "react";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Inbox, Loader2, RefreshCw, Search } from "lucide-react";
 import { Button } from "./button";
+import { FieldContext } from "./field-context";
+import {
+  Select as RadixSelect,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./select";
 export function Card({
   className,
   children,
@@ -54,11 +62,6 @@ export function Badge({
     </span>
   );
 }
-const FieldContext = createContext<{
-  label: string;
-  id: string;
-  hintId?: string;
-} | null>(null);
 export function Input({
   className,
   ...props
@@ -77,7 +80,13 @@ export function Input({
     />
   );
 }
-export function Select({
+/**
+ * Native `<select>`, kept for the two cases where the platform control is
+ * genuinely better: the ~400-entry IANA timezone list (browser/OS type-ahead
+ * and list rendering) and any future list too long to render as menu items.
+ * Everything else uses `FormSelect` so triggers, focus rings and menus match.
+ */
+export function NativeSelect({
   className,
   children,
   ...props
@@ -96,6 +105,68 @@ export function Select({
     >
       {children}
     </select>
+  );
+}
+
+/**
+ * Radix `Select` for a fixed single-choice list.
+ *
+ * It reads `Field` from context, so every call site gets the same label,
+ * `aria-describedby` hint wiring and control height without repeating them. An
+ * empty-string value is how Orbit spells "none / server default"; Radix reserves
+ * `""` for "no value", so it is mapped to a private sentinel at this boundary
+ * and mapped back before the caller sees it.
+ */
+const EMPTY_OPTION = "__orbit-empty__";
+export function FormSelect({
+  value,
+  onValueChange,
+  options,
+  placeholder = "Select…",
+  disabled,
+  className,
+  id,
+  "aria-label": ariaLabel,
+  "aria-describedby": ariaDescribedBy,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: { value: string; label: string; disabled?: boolean }[];
+  placeholder?: string;
+  disabled?: boolean;
+  className?: string;
+  id?: string;
+  "aria-label"?: string;
+  "aria-describedby"?: string;
+}) {
+  const field = useContext(FieldContext);
+  const hasEmpty = options.some((option) => option.value === "");
+  return (
+    <RadixSelect
+      value={value === "" ? (hasEmpty ? EMPTY_OPTION : undefined) : value}
+      onValueChange={(next) => onValueChange(next === EMPTY_OPTION ? "" : next)}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        id={id ?? field?.id}
+        aria-label={ariaLabel ?? field?.label}
+        aria-describedby={ariaDescribedBy ?? field?.hintId}
+        className={className}
+      >
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem
+            key={option.value || EMPTY_OPTION}
+            value={option.value === "" ? EMPTY_OPTION : option.value}
+            disabled={option.disabled}
+          >
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </RadixSelect>
   );
 }
 export function Textarea({

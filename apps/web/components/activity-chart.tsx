@@ -2,7 +2,7 @@
 import type { ActivityRange } from "@orbit/core/activity";
 import { number } from "@/lib/utils";
 import { useState } from "react";
-import { Card, Select } from "./ui/primitives";
+import { Card, FormSelect } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
 
 function curve(points: [number, number][]) {
@@ -54,18 +54,19 @@ export function ActivityChart({ range }: { range: string }) {
             {window.end}
           </p>
         </div>
-        <Select
+        <FormSelect
           aria-label="Chart metric"
           value={metric}
-          onChange={(event) => {
-            setMetric(event.target.value as typeof metric);
+          onValueChange={(next) => {
+            setMetric(next as typeof metric);
             setHover(null);
           }}
-          className="h-8 w-40 rounded-md px-2 text-[10px]"
-        >
-          <option value="events">Reward events</option>
-          <option value="members">Rewarded members</option>
-        </Select>
+          options={[
+            { value: "events", label: "Reward events" },
+            { value: "members", label: "Rewarded members" },
+          ]}
+          className="h-8 w-40 rounded-md text-[10px]"
+        />
       </div>
       <div className="mx-5 mt-2 flex flex-wrap gap-4 text-[9px] text-muted-foreground">
         <span className="flex items-center gap-1.5">

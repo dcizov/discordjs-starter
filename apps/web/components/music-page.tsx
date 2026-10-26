@@ -45,10 +45,11 @@ import {
   Field,
   Input,
   SectionHeader,
-  Select,
+  FormSelect,
   Spinner,
 } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
+import { Combobox } from "./ui/combobox";
 const SOURCE_NAMES: Record<string, string> = {
   youtube: "YouTube",
   soundcloud: "SoundCloud",
@@ -442,17 +443,17 @@ export function MusicPage() {
                 label="Search with"
                 hint="Direct links are always routed by their hostname; this choice only applies to a text search."
               >
-                <Select
+                <FormSelect
                   value={source}
-                  onChange={(e) => setSource(e.target.value)}
-                >
-                  <option value="">Server default</option>
-                  {MUSIC_SEARCH_PROVIDERS.map((provider) => (
-                    <option key={provider.id} value={provider.id}>
-                      {provider.label}
-                    </option>
-                  ))}
-                </Select>
+                  onValueChange={setSource}
+                  options={[
+                    { value: "", label: "Server default" },
+                    ...MUSIC_SEARCH_PROVIDERS.map((provider) => ({
+                      value: provider.id,
+                      label: provider.label,
+                    })),
+                  ]}
+                />
               </Field>
               <Button
                 className="w-full"
@@ -614,21 +615,20 @@ export function MusicPage() {
               label="DJ role"
               hint="Members with Manage Server can always control playback."
             >
-              <Select
+              <Combobox
                 value={config.djRoleId}
-                onChange={(e) =>
-                  setConfig({ ...config, djRoleId: e.target.value })
+                onValueChange={(next) =>
+                  setConfig({ ...config, djRoleId: next })
                 }
-              >
-                <option value="">Everyone in the voice channel</option>
-                {data.guild.roles
-                  .filter((r) => !r.managed)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-              </Select>
+                placeholder="Everyone in the voice channel"
+                searchPlaceholder="Search roles…"
+                options={[
+                  { value: "", label: "Everyone in the voice channel" },
+                  ...data.guild.roles
+                    .filter((r) => !r.managed)
+                    .map((r) => ({ value: r.id, label: r.name })),
+                ]}
+              />
             </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Default volume (%)">

@@ -9,8 +9,9 @@ import {
   type PermissionName,
 } from "@orbit/core/permissions";
 import { useState } from "react";
-import { Badge, Card, Field, Select } from "./ui/primitives";
+import { Badge, Card, Field } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
+import { Combobox } from "./ui/combobox";
 const label = (name: PermissionName) =>
   name.replace(/([a-z])([A-Z])/g, "$1 $2");
 export function PermissionSetup() {
@@ -56,25 +57,22 @@ export function PermissionSetup() {
         </div>
         <div className="mt-5 max-w-md">
           <Field label="Check a synced channel">
-            <Select
+            <Combobox
               aria-label="Permission check channel"
               value={channelId}
-              onChange={(event) => setChannelId(event.target.value)}
-            >
-              {!data.guild.channels.length && (
-                <option value="">No synced channels</option>
-              )}
-              {data.guild.channels.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.type === "voice"
-                    ? "Voice: "
-                    : item.type === "stage"
-                      ? "Stage (unsupported): "
-                      : "#"}
-                  {item.name}
-                </option>
-              ))}
-            </Select>
+              onValueChange={setChannelId}
+              disabled={!data.guild.channels.length}
+              placeholder={
+                data.guild.channels.length
+                  ? "Choose a channel"
+                  : "No synced channels"
+              }
+              searchPlaceholder="Search channels…"
+              options={data.guild.channels.map((item) => ({
+                value: item.id,
+                label: `${item.type === "voice" ? "Voice: " : item.type === "stage" ? "Stage (unsupported): " : "#"}${item.name}`,
+              }))}
+            />
           </Field>
         </div>
         <div className="mt-5 overflow-x-auto">

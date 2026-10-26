@@ -8,7 +8,7 @@ import {
 } from "@orbit/core/community";
 import { useWorkspace } from "../../workspace";
 import { Button } from "../../ui/button";
-import { Checkbox, Field, Input, Select, Textarea } from "../../ui/primitives";
+import { Checkbox, Field, Input, Textarea } from "../../ui/primitives";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../ui/dialog";
+import { Combobox } from "../../ui/combobox";
 export function PostEditor({
   kind,
   post,
@@ -130,18 +131,16 @@ export function PostEditor({
             required
             hint="Ordinary server text channels only in this release. Bot sync must identify supported poll destinations."
           >
-            <Select
-              required
+            <Combobox
               value={channelId}
-              onChange={(e) => setChannel(e.target.value)}
-            >
-              <option value="">Choose a channel</option>
-              {channels.map((c) => (
-                <option key={c.id} value={c.id}>
-                  #{c.name}
-                </option>
-              ))}
-            </Select>
+              onValueChange={setChannel}
+              placeholder="Choose a channel"
+              searchPlaceholder="Search channels…"
+              options={[
+                { value: "", label: "Choose a channel" },
+                ...channels.map((c) => ({ value: c.id, label: `#${c.name}` })),
+              ]}
+            />
           </Field>
           {poll ? (
             <>

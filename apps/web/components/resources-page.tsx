@@ -60,7 +60,7 @@ import {
   Card,
   EmptyState,
   SearchInput,
-  Select,
+  FormSelect,
   Spinner,
 } from "./ui/primitives";
 import { Switch } from "./ui/switch";
@@ -429,19 +429,20 @@ export function ResourcesPage({
               : `Search ${kindNames[kind]}s…`
           }
         />
-        <Select
+        <FormSelect
           aria-label="Filter by status"
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onValueChange={setFilter}
           className="h-9 w-32 text-[11px]"
-        >
-          <option value="all">All statuses</option>
-          <option value="enabled">Enabled</option>
-          <option value="paused">Paused</option>
-          {section === "news" && tab === "main" && (
-            <option value="needs-setup">Needs setup</option>
-          )}
-        </Select>
+          options={[
+            { value: "all", label: "All statuses" },
+            { value: "enabled", label: "Enabled" },
+            { value: "paused", label: "Paused" },
+            ...(section === "news" && tab === "main"
+              ? [{ value: "needs-setup", label: "Needs setup" }]
+              : []),
+          ]}
+        />
       </div>
       {tab === "history" ? (
         <Card>

@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { cn, number } from "@/lib/utils";
 import { useWorkspace } from "../../workspace";
-import { Badge, Card, Select } from "../../ui/primitives";
+import { Badge, Card, FormSelect } from "../../ui/primitives";
 import { Switch } from "../../ui/switch";
 const modules: {
   key: ModuleKey;
@@ -152,18 +152,19 @@ export function OverviewToolkit() {
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <Select
+          <FormSelect
             aria-label="Filter module setup"
             value={moduleFilter}
-            onChange={(event) => setModuleFilter(event.target.value)}
+            onValueChange={setModuleFilter}
             className="h-8 w-36 text-[10px]"
-          >
-            <option value="all">All modules</option>
-            <option value="enabled">Enabled</option>
-            <option value="needs-setup">Needs setup</option>
-            <option value="not-verified">Not verified</option>
-            <option value="paused">Paused</option>
-          </Select>
+            options={[
+              { value: "all", label: "All modules" },
+              { value: "enabled", label: "Enabled" },
+              { value: "needs-setup", label: "Needs setup" },
+              { value: "not-verified", label: "Not verified" },
+              { value: "paused", label: "Paused" },
+            ]}
+          />
           <button
             onClick={() => navigate("settings")}
             className="flex items-center gap-1.5 text-[10px] font-medium text-muted-foreground hover:text-primary"

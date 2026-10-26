@@ -51,9 +51,10 @@ import {
   Input,
   SearchInput,
   SectionHeader,
-  Select,
+  FormSelect,
   Spinner,
 } from "./ui/primitives";
+import { Combobox } from "./ui/combobox";
 import { Switch } from "./ui/switch";
 import { TabBar, TabPanel } from "./ui/tabs";
 import { useWorkspace } from "./workspace";
@@ -331,17 +332,19 @@ export function EconomyPage() {
               }
             />
             {tab === "transactions" && (
-              <Select
+              <FormSelect
                 value={filter}
-                onChange={(e) => setFilter(e.target.value)}
+                onValueChange={setFilter}
                 className="h-9 w-36 text-[11px]"
                 aria-label="Transaction type"
-              >
-                <option value="all">All transactions</option>
-                {["daily", "activity", "transfer", "purchase"].map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </Select>
+                options={[
+                  { value: "all", label: "All transactions" },
+                  ...["daily", "activity", "transfer", "purchase"].map((t) => ({
+                    value: t,
+                    label: t[0].toUpperCase() + t.slice(1),
+                  })),
+                ]}
+              />
             )}
           </div>
           {tab === "shop" ? (
@@ -689,15 +692,15 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
         <form className="space-y-5" onSubmit={submit}>
           <Field label="Send to" required>
             {data.demo ? (
-              <Select value={to} onChange={(e) => setTo(e.target.value)}>
-                {data.accounts
+              <Combobox
+                value={to}
+                onValueChange={setTo}
+                placeholder="Choose a member"
+                searchPlaceholder="Search members…"
+                options={data.accounts
                   .filter((a) => a.userId !== data.user.id)
-                  .map((a) => (
-                    <option key={a.userId} value={a.userId}>
-                      {a.name}
-                    </option>
-                  ))}
-              </Select>
+                  .map((a) => ({ value: a.userId, label: a.name }))}
+              />
             ) : (
               <Input
                 required

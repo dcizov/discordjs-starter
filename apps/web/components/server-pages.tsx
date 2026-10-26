@@ -34,6 +34,7 @@ import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { RolePicker } from "./resource-editor";
 import { Button } from "./ui/button";
+import { Combobox } from "./ui/combobox";
 import { TabBar } from "./ui/tabs";
 import {
   Dialog,
@@ -46,9 +47,10 @@ import {
   Badge,
   Card,
   Field,
+  FormSelect,
   Input,
+  NativeSelect,
   SearchInput,
-  Select,
   Spinner,
 } from "./ui/primitives";
 import { Switch } from "./ui/switch";
@@ -124,19 +126,20 @@ export function ChannelsPage() {
               placeholder={`Search ${tab}…`}
             />
             {tab === "channels" && (
-              <Select
+              <FormSelect
                 className="h-9 w-32 text-[11px]"
                 value={filter}
-                onChange={(e) => setFilter(e.target.value)}
+                onValueChange={setFilter}
                 aria-label="Channel type"
-              >
-                <option value="all">All channels</option>
-                <option value="text">Text</option>
-                <option value="voice">Voice</option>
-                <option value="category">Categories</option>
-                <option value="stage">Stage (unsupported)</option>
-                <option value="forum">Forums</option>
-              </Select>
+                options={[
+                  { value: "all", label: "All channels" },
+                  { value: "text", label: "Text" },
+                  { value: "voice", label: "Voice" },
+                  { value: "category", label: "Categories" },
+                  { value: "stage", label: "Stage (unsupported)" },
+                  { value: "forum", label: "Forums" },
+                ]}
+              />
             )}
           </div>
           <Card>
@@ -363,17 +366,16 @@ export function AuditPage() {
           onChange={setQ}
           placeholder="Search people, changes, and settings…"
         />
-        <Select
+        <FormSelect
           aria-label="Filter audit action"
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onValueChange={setFilter}
           className="h-9 w-36 text-[11px]"
-        >
-          <option value="all">All actions</option>
-          {actions.map((a) => (
-            <option key={a}>{a}</option>
-          ))}
-        </Select>
+          options={[
+            { value: "all", label: "All actions" },
+            ...actions.map((a) => ({ value: a, label: a })),
+          ]}
+        />
       </div>
       <Card>
         <HistoryTable<AuditEntry>
@@ -610,21 +612,28 @@ export function SettingsPage() {
               label="Preferred locale"
               hint="Saved server preference. Dashboard and command copy currently use English."
             >
-              <Select
+              <FormSelect
                 value={v.locale}
-                onChange={(e) => setV({ ...v, locale: e.target.value })}
-              >
-                <option value="en">English</option>
-                <option value="de">Deutsch</option>
-                <option value="fr">Français</option>
-                <option value="es">Español</option>
-              </Select>
+                onValueChange={(next) => setV({ ...v, locale: next })}
+                options={[
+                  { value: "en", label: "English" },
+                  { value: "de", label: "Deutsch" },
+                  { value: "fr", label: "Français" },
+                  { value: "es", label: "Español" },
+                ]}
+              />
             </Field>
             <Field
               label="Timezone"
               hint="Used for display. Polling intervals are elapsed time, not wall-clock schedules."
             >
-              <Select
+              {/*
+                Deliberately native: the full IANA list is 400+ entries, and the
+                browser's own select gives OS type-ahead and list rendering that a
+                menu of 400 Radix items would not. `Location` keeps the display
+                order and label the settings page has always used.
+              */}
+              <NativeSelect
                 value={v.timezone}
                 onChange={(e) => setV({ ...v, timezone: e.target.value })}
               >
@@ -640,7 +649,7 @@ export function SettingsPage() {
                 ].map((t) => (
                   <option key={t}>{t}</option>
                 ))}
-              </Select>
+              </NativeSelect>
             </Field>
             <Field label="Server ID">
               <div className="flex h-10 items-center rounded-lg border bg-muted/30 px-3 font-mono text-[12px] text-muted-foreground">
@@ -660,37 +669,38 @@ export function SettingsPage() {
               label="Moderation audit channel"
               hint="Warnings, timeouts, and other moderation cases are logged here."
             >
-              <Select
+              <Combobox
                 value={v.auditChannelId}
-                onChange={(e) => setV({ ...v, auditChannelId: e.target.value })}
-              >
-                <option value="">No audit channel</option>
-                {textChannels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name}
-                  </option>
-                ))}
-              </Select>
+                onValueChange={(next) => setV({ ...v, auditChannelId: next })}
+                placeholder="No audit channel"
+                searchPlaceholder="Search channels…"
+                options={[
+                  { value: "", label: "No audit channel" },
+                  ...textChannels.map((c) => ({
+                    value: c.id,
+                    label: `#${c.name}`,
+                  })),
+                ]}
+              />
             </Field>
             <Field
               label="Default notification role"
               hint="Optional. Sources can override this role. @everyone is never allowed."
             >
-              <Select
+              <Combobox
                 value={v.notificationRoleId}
-                onChange={(e) =>
-                  setV({ ...v, notificationRoleId: e.target.value })
+                onValueChange={(next) =>
+                  setV({ ...v, notificationRoleId: next })
                 }
-              >
-                <option value="">No default notification</option>
-                {data.guild.roles
-                  .filter((r) => !r.managed && r.id !== data.guild.id)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      @{r.name}
-                    </option>
-                  ))}
-              </Select>
+                placeholder="No default notification"
+                searchPlaceholder="Search roles…"
+                options={[
+                  { value: "", label: "No default notification" },
+                  ...data.guild.roles
+                    .filter((r) => !r.managed && r.id !== data.guild.id)
+                    .map((r) => ({ value: r.id, label: `@${r.name}` })),
+                ]}
+              />
             </Field>
           </div>
         </Card>
