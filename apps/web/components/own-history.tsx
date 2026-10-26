@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import type { DashboardData } from "@orbit/core";
 import { communityDate } from "@orbit/core/community";
 import { useWorkspace } from "./workspace";
-import { ErrorState, Card } from "./ui/primitives";
-import { TablePagination } from "./data-table";
+import { Card } from "./ui/primitives";
+import { DataTable } from "./data-table";
 export function OwnHistory() {
   const { data, api } = useWorkspace();
   const [history, setHistory] = useState<
@@ -39,60 +39,74 @@ export function OwnHistory() {
           Sample economy history — no real currency.
         </p>
       )}
-      <table className="mt-4 w-full text-left text-xs">
-        <caption className="sr-only">
-          Your transactions, shown in {data.guild.config.timezone}
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col" className="pb-2">
-              Activity
-            </th>
-            <th scope="col" className="pb-2 text-right">
-              Change
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {history.rows.map((row) => (
-            <tr key={row.id} className="border-t border-border">
-              <th scope="row" className="py-3 pr-2 font-normal">
-                <span className="font-medium">{row.type}</span>
-                <span className="mt-1 block break-words text-[11px] text-muted-foreground">
-                  {row.note}
+      {/*
+       * The API owns the slice (page/pageSize), so this table runs in server
+       * mode: it reports page changes and never sorts or filters the five rows
+       * it happens to hold. The page size the server returned is passed through
+       * so the page count is the server's count, not a guessed default.
+       */}
+      <div className="mt-4 overflow-hidden rounded-lg border">
+        <DataTable
+          label="Your transactions"
+          rows={history.rows}
+          pageSize={history.pageSize}
+          loading={busy}
+          error={error}
+          onRetry={() => void load(history.page)}
+          footerNote={`Times shown in ${data.guild.config.timezone}`}
+          pagination={{
+            page: history.page,
+            total: history.total,
+            onPage: (page) => void load(page),
+          }}
+          columns={[
+            {
+              key: "type",
+              label: "Activity",
+              render: (row) => (
+                <span className="block min-w-0">
+                  <span className="block font-medium capitalize">
+                    {row.type}
+                  </span>
+                  <span className="mt-0.5 block break-words text-[11px] text-muted-foreground">
+                    {row.note}
+                  </span>
+                  <time
+                    dateTime={row.createdAt}
+                    className="mt-0.5 block text-[10px] text-muted-foreground"
+                  >
+                    {communityDate(row.createdAt, data.guild.config.timezone)}
+                  </time>
                 </span>
-                <time
-                  dateTime={row.createdAt}
-                  className="mt-1 block text-[10px] text-muted-foreground"
+              ),
+            },
+            {
+              key: "change",
+              label: "Change",
+              align: "right",
+              header: (
+                <span className="block text-right">
+                  Change ({data.guild.config.economy.symbol})
+                </span>
+              ),
+              render: (row) => (
+                <span
+                  className={
+                    row.amount > 0
+                      ? "tabular-nums text-emerald-700 dark:text-emerald-400"
+                      : "tabular-nums text-muted-foreground"
+                  }
                 >
-                  {communityDate(row.createdAt, data.guild.config.timezone)}
-                </time>
-              </th>
-              <td className="whitespace-nowrap text-right align-top pt-3 tabular-nums">
-                {row.amount > 0 ? "+" : ""}
-                {row.amount} {data.guild.config.economy.symbol}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {!history.rows.length && (
-        <p className="py-4 text-xs text-muted-foreground">
-          No transactions yet.
-        </p>
-      )}
-      {error && <ErrorState detail={error} className="px-0 py-4" />}
-      <TablePagination
-        className="mt-3 border-t-0 px-0 pb-0"
-        page={history.page}
-        pageCount={Math.max(1, Math.ceil(history.total / history.pageSize))}
-        totalItems={history.total}
-        pageSize={history.pageSize}
-        onPage={(page) => {
-          if (busy) return;
-          void load(page);
-        }}
-      />
+                  {row.amount > 0 ? "+" : ""}
+                  {row.amount}
+                </span>
+              ),
+            },
+          ]}
+          emptyTitle="No transactions yet"
+          emptyDescription="Earning, spending and transfers in this server will appear here."
+        />
+      </div>
     </Card>
   );
 }

@@ -65,7 +65,7 @@ export function TableRow({
   return (
     <tr
       className={cn(
-        "border-b border-border/70 transition-colors hover:bg-muted/25 data-[state=selected]:bg-violet-50 dark:data-[state=selected]:bg-violet-500/10",
+        "border-b border-border/60 transition-colors hover:bg-muted/40 data-[state=selected]:bg-violet-50 dark:data-[state=selected]:bg-violet-500/10",
         className
       )}
       {...props}
@@ -80,7 +80,9 @@ export function TableHead({
     <th
       scope="col"
       className={cn(
-        "h-9 whitespace-nowrap bg-muted/25 px-4 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground",
+        // Readable at a glance: normal case, 11.5 px, medium weight. The old
+        // 10 px uppercase tracking was both cramped and harder to scan.
+        "h-9 whitespace-nowrap bg-muted/40 px-3 py-2 text-[11.5px] font-medium text-muted-foreground",
         className
       )}
       {...props}
@@ -93,7 +95,7 @@ export function TableCell({
 }: React.TdHTMLAttributes<HTMLTableCellElement>) {
   return (
     <td
-      className={cn("px-4 py-3 align-middle text-[11px]", className)}
+      className={cn("px-3 py-2.5 align-middle text-xs", className)}
       {...props}
     />
   );

@@ -31,6 +31,7 @@ import {
 } from "../../ui/dropdown-menu";
 import { Badge, Card } from "../../ui/primitives";
 
+import { auditActionLabel } from "@orbit/core/audit-actions";
 import { useWorkspace } from "../../workspace";
 import { ActorAvatar } from "../../identity/actor-avatar";
 import { OverviewToolkit } from "./toolkit";
@@ -255,7 +256,9 @@ export function Overview() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[11px]">
                     <strong className="font-medium">{a.actorName}</strong>{" "}
-                    <span className="text-muted-foreground">{a.action}</span>{" "}
+                    <span className="text-muted-foreground">
+                      {auditActionLabel(a.action)}
+                    </span>{" "}
                     {a.target}
                   </p>
                   <p className="mt-1 text-[9px] text-muted-foreground">

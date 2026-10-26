@@ -28,7 +28,13 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "./copy-button";
+import { IdentityCell } from "./identity/identity-cell";
 import { ActorAvatar } from "./identity/actor-avatar";
+import {
+  AUDIT_ACTIONS,
+  auditActionLabel,
+  auditActionTone,
+} from "@orbit/core/audit-actions";
 import { DataTable } from "./data-table";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
@@ -50,7 +56,6 @@ import {
   FormSelect,
   Input,
   NativeSelect,
-  SearchInput,
   Spinner,
 } from "./ui/primitives";
 import { Switch } from "./ui/switch";
@@ -126,33 +131,36 @@ export function ChannelsPage() {
       />
       {tab !== "permissions" ? (
         <>
-          <div className="mb-4 flex justify-between gap-3">
-            <SearchInput
-              value={q}
-              onChange={setQ}
-              placeholder={`Search ${tab}…`}
-            />
-            {tab === "channels" && (
-              <FormSelect
-                className="h-9 w-32 text-[11px]"
-                value={filter}
-                onValueChange={setFilter}
-                aria-label="Channel type"
-                options={[
-                  { value: "all", label: "All channels" },
-                  { value: "text", label: "Text" },
-                  { value: "voice", label: "Voice" },
-                  { value: "category", label: "Categories" },
-                  { value: "stage", label: "Stage (unsupported)" },
-                  { value: "forum", label: "Forums" },
-                ]}
-              />
-            )}
-          </div>
           <Card>
             {tab === "channels" ? (
               <DataTable
+                label="Channels"
                 rows={channels}
+                search={{
+                  value: q,
+                  onChange: setQ,
+                  placeholder: "Search channels…",
+                  label: "Search channels",
+                }}
+                filters={[
+                  {
+                    key: "channel-type",
+                    label: "Filter channel type",
+                    title: "Channel type",
+                    value: filter,
+                    allValue: "all",
+                    onChange: setFilter,
+                    searchable: false,
+                    options: [
+                      { value: "all", label: "All channels" },
+                      { value: "text", label: "Text" },
+                      { value: "voice", label: "Voice" },
+                      { value: "category", label: "Categories" },
+                      { value: "stage", label: "Stage (unsupported)" },
+                      { value: "forum", label: "Forums" },
+                    ],
+                  },
+                ]}
                 columns={[
                   {
                     key: "name",
@@ -234,8 +242,17 @@ export function ChannelsPage() {
                 emptyDescription="Try a different filter. In live mode, Orbit syncs channels from Discord."
               />
             ) : (
+              // A sorted copy: sorting the prop array in place mutated data
+              // shared with the rest of the dashboard.
               <DataTable
-                rows={roles.sort((a, b) => b.position - a.position)}
+                label="Roles"
+                rows={[...roles].sort((a, b) => b.position - a.position)}
+                search={{
+                  value: q,
+                  onChange: setQ,
+                  placeholder: "Search roles…",
+                  label: "Search roles",
+                }}
                 columns={[
                   {
                     key: "name",
@@ -353,7 +370,12 @@ export function AuditPage() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
   const [detail, setDetail] = useState<AuditEntry | null>(null);
-  const actions = [...new Set(data.audit.map((a) => a.action))];
+  // The canonical verbs, plus anything this page actually returned, so a filter
+  // can never offer a value the log does not contain — and never hide one it
+  // does because it happened to be on a later page.
+  const actions = [
+    ...new Set([...AUDIT_ACTIONS, ...data.audit.map((a) => a.action)]),
+  ];
   return (
     <>
       <PageHeader
@@ -366,42 +388,36 @@ export function AuditPage() {
         refreshed, so an entry shows who acted then — not necessarily their
         current avatar.
       </p>
-      <div className="mb-4 flex justify-between gap-3">
-        <SearchInput
-          value={q}
-          onChange={setQ}
-          placeholder="Search people, changes, and settings…"
-        />
-        <FormSelect
-          aria-label="Filter audit action"
-          value={filter}
-          onValueChange={setFilter}
-          className="h-9 w-36 text-[11px]"
-          options={[
-            { value: "all", label: "All actions" },
-            ...actions.map((a) => ({ value: a, label: a })),
-          ]}
-        />
-      </div>
       <Card>
         <HistoryTable<AuditEntry>
           kind="audit"
           query={q}
           filter={filter}
+          onQueryChange={setQ}
+          onFilterChange={setFilter}
+          searchLabel="Search the audit log"
+          searchPlaceholder="Search people, changes, and settings…"
+          facetLabel="Filter audit action"
+          facetTitle="Action"
+          facetOptions={[
+            { value: "all", label: "All actions" },
+            ...actions.map((a) => ({ value: a, label: auditActionLabel(a) })),
+          ]}
           columns={[
             {
               key: "person",
               label: "Who",
               sortKey: "actorName",
+              canHide: false,
+              // The avatar recorded with the action, not the actor's current
+              // picture: audit rows are evidence, so they are never refreshed.
               render: (r) => (
-                <span className="flex items-center gap-2.5">
-                  <ActorAvatar
-                    id={r.actorId}
-                    name={r.actorName}
-                    src={r.actorAvatarUrl}
-                  />
-                  <span className="font-medium">{r.actorName}</span>
-                </span>
+                <IdentityCell
+                  id={r.actorId}
+                  name={r.actorName}
+                  src={r.actorAvatarUrl}
+                  detail={r.actorAvatarUrl ? undefined : "no avatar recorded"}
+                />
               ),
             },
             {
@@ -409,18 +425,8 @@ export function AuditPage() {
               label: "What changed",
               sortKey: "action",
               render: (r) => (
-                <Badge
-                  tone={
-                    r.action === "deleted"
-                      ? "red"
-                      : r.action === "created"
-                        ? "green"
-                        : r.action === "moderated"
-                          ? "amber"
-                          : "purple"
-                  }
-                >
-                  {r.action}
+                <Badge tone={auditActionTone(r.action)}>
+                  {auditActionLabel(r.action)}
                 </Badge>
               ),
             },
@@ -506,7 +512,14 @@ export function AuditPage() {
             {[
               ["Event ID", detail?.id],
               ["Actor", `${detail?.actorName} (${detail?.actorId})`],
-              ["Action", detail?.action],
+              // The stored token stays visible next to the human word so the
+              // detail view still shows exactly what was recorded.
+              [
+                "Action",
+                detail?.action
+                  ? `${auditActionLabel(detail.action)} (${detail.action})`
+                  : null,
+              ],
               ["Target", detail?.target],
               ["Summary", detail?.detail],
               // Older rows have no separate diagnostic; the summary stands in.
@@ -531,7 +544,21 @@ export function AuditPage() {
                       "font-mono text-[11px]"
                   )}
                 >
-                  {v}
+                  {k === "Actor" && detail ? (
+                    <span className="flex items-center gap-2">
+                      {/* Same historical identity as the row that opened this
+                          dialog; no fresh lookup when the dialog appears. */}
+                      <ActorAvatar
+                        id={detail.actorId}
+                        name={detail.actorName}
+                        src={detail.actorAvatarUrl}
+                        size={24}
+                      />
+                      <span>{v}</span>
+                    </span>
+                  ) : (
+                    v
+                  )}
                 </dd>
               </div>
             ))}

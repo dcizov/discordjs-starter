@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useWorkspace } from "./workspace";
 import { historyQueryString } from "@orbit/core/history-query";
 import { DataTable, type Column } from "./data-table";
+import type { FacetFilter } from "./table-facet";
 import { Skeleton } from "./ui/primitives";
 export function HistoryTable<T extends { id: string }>({
   kind,
@@ -11,6 +12,14 @@ export function HistoryTable<T extends { id: string }>({
   columns,
   emptyTitle,
   emptyDescription,
+  searchLabel,
+  searchPlaceholder,
+  onQueryChange,
+  facetLabel,
+  facetTitle,
+  facetOptions,
+  onFilterChange,
+  footerNote,
 }: {
   kind: "audit" | "ledger" | "deliveries" | "cases";
   query?: string;
@@ -18,6 +27,19 @@ export function HistoryTable<T extends { id: string }>({
   columns: Column<T>[];
   emptyTitle?: string;
   emptyDescription?: string;
+  /**
+   * Search and facet chrome belong to the table. A caller that also filters
+   * other views with the same term passes the handlers and keeps ownership of
+   * the state; a caller that does not gets no search box at all.
+   */
+  searchLabel?: string;
+  searchPlaceholder?: string;
+  onQueryChange?: (value: string) => void;
+  facetLabel?: string;
+  facetTitle?: string;
+  facetOptions?: { value: string; label: string }[];
+  onFilterChange?: (value: string) => void;
+  footerNote?: React.ReactNode;
 }) {
   const { api, data } = useWorkspace();
   const [page, setPage] = useState(1);
@@ -112,8 +134,50 @@ export function HistoryTable<T extends { id: string }>({
           );
         },
       }}
-      emptyTitle={emptyTitle}
-      emptyDescription={emptyDescription}
+      label={
+        kind === "audit"
+          ? "Audit events"
+          : kind === "ledger"
+            ? "Transaction history"
+            : kind === "deliveries"
+              ? "Delivery history"
+              : "Moderation cases"
+      }
+      search={
+        onQueryChange && searchLabel
+          ? {
+              value: query,
+              onChange: onQueryChange,
+              placeholder: searchPlaceholder ?? "Search…",
+              label: searchLabel,
+            }
+          : undefined
+      }
+      filters={
+        onFilterChange && facetOptions?.length
+          ? ([
+              {
+                key: `${kind}-facet`,
+                label: facetLabel ?? facetTitle ?? "Filter",
+                title: facetTitle ?? "Filter",
+                value: filter,
+                allValue: "all",
+                onChange: onFilterChange,
+                options: facetOptions,
+                searchable: facetOptions.length > 6,
+              },
+            ] satisfies FacetFilter[])
+          : undefined
+      }
+      footerNote={footerNote}
+      // A filter that matches nothing is not an empty history. The copy names
+      // the search rather than claiming the community has no records yet.
+      emptyTitle={query || filter !== "all" ? "No records match" : emptyTitle}
+      emptyDescription={
+        query || filter !== "all"
+          ? "Try a shorter search term or a different filter. The search and filters above stay available."
+          : emptyDescription
+      }
       error={error}
       onRetry={retryRequest}
     />

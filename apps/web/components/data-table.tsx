@@ -12,15 +12,20 @@ import {
   type PaginationState,
   type RowData,
   type SortingState,
+  type Updater,
 } from "@tanstack/react-table";
 import {
   ArrowDown,
   ArrowUp,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronsUpDown,
   MoreHorizontal,
+  Search,
   Settings2,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -35,7 +40,8 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Checkbox } from "./ui/checkbox";
-import { EmptyState, ErrorState, FormSelect } from "./ui/primitives";
+import { EmptyState, ErrorState, FormSelect, Input } from "./ui/primitives";
+import { FacetFilterButton, type FacetFilter } from "./table-facet";
 import {
   Table,
   TableBody,
@@ -49,16 +55,22 @@ import {
 /**
  * The dashboard's table foundation (TanStack Table, headless).
  *
- * Every history-sized dataset in Orbit is fetched from the API a page at a time,
- * and the API owns ordering and filtering (`GET /api/guilds/:id/history`). The
- * table therefore runs TanStack in **manual** modes: it renders the rows it is
- * given, reports sort/page intent, and never sorts or slices a page in the
- * browser — sorting one page of 7 results and calling it "sorted by date" would
- * misrepresent the 900 rows the reader cannot see.
+ * Two honest modes, chosen by the data the caller actually has:
  *
- * One table component, no option soup: the capabilities enabled here are the
- * ones every history screen needs. A screen that needs something else composes
- * its own toolbar (as the resource lists do) instead of growing this signature.
+ * - **Server** (`pagination` supplied): the API owns ordering, filtering and
+ *   slicing (`GET /api/guilds/:id/history`). TanStack runs in manual modes, so
+ *   it reports intent and never sorts or slices a page in the browser — sorting
+ *   one page of 7 results and calling it "sorted by date" would misrepresent the
+ *   900 rows the reader cannot see.
+ * - **Client** (`pageSize` supplied, `pagination` absent): the list arrived
+ *   complete, so TanStack owns sorting and paging through its own row models.
+ *   The leaderboard and the channel/role lists are this case.
+ *
+ * Composition follows the shadcn tasks table: one toolbar with search and
+ * faceted filters on the left, view/column controls and real actions on the
+ * right, and one footer that states a single accurate range plus page controls.
+ * There is no second "N rows" line above the table, and the page controls are
+ * present (disabled) rather than missing when everything fits on one page.
  */
 const features = tableFeatures({
   columnVisibilityFeature,
@@ -88,6 +100,8 @@ export type DataColumn<T> = {
   /** Columns that carry the row's identity stay visible. */
   canHide?: boolean;
   header?: React.ReactNode;
+  /** Header alignment for numeric columns. */
+  align?: "left" | "right";
 };
 
 export type DataTableSort = {
@@ -96,22 +110,40 @@ export type DataTableSort = {
   onChange: (field: string) => void;
 };
 
+export type DataTableSearch = {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  /** Accessible name; the placeholder is not a label. */
+  label: string;
+};
+
 export type DataTableProps<T extends { id: string }> = {
   rows: T[];
   columns: DataColumn<T>[];
   emptyTitle?: string;
   emptyDescription?: string;
-  /** Rows per page. Server default is 7; a caller may align with the API. */
+  /**
+   * Client pagination: the list is complete, so TanStack pages it. Omit for a
+   * short list that should simply render all of its rows.
+   */
   pageSize?: number;
-  /** Server pagination. Omit for a small, fully-loaded list. */
+  /** Server pagination. Omit for a client dataset. */
   pagination?: {
     page: number;
     total: number;
     onPage: (page: number) => void;
     onPageSize?: (size: number) => void;
+    pageSizes?: number[];
   };
   /** Server sorting. Changing it must reset the page in the same update. */
   sort?: DataTableSort;
+  /** Toolbar search. Debounced here; the caller owns the query state. */
+  search?: DataTableSearch;
+  /** Toolbar facets, each a single-choice filter owned by the caller. */
+  filters?: FacetFilter[];
+  /** Real actions for this dataset, right-aligned next to the view menu. */
+  actions?: React.ReactNode;
   loading?: boolean;
   error?: string;
   onRetry?: () => void;
@@ -121,7 +153,6 @@ export type DataTableProps<T extends { id: string }> = {
   selection?: {
     selected: string[];
     onChange: (ids: string[]) => void;
-    /** Accessible name of the leading checkbox. */
     label?: string;
   };
   /** Per-row overflow menu rendered in a trailing cell. */
@@ -131,8 +162,10 @@ export type DataTableProps<T extends { id: string }> = {
       row: T
     ) => { label: string; icon?: React.ReactNode; onSelect: () => void }[];
   };
-  /** Extra toolbar content rendered above the table, inside its card. */
+  /** Extra toolbar content (segments, banners) rendered above the controls. */
   toolbar?: React.ReactNode;
+  /** Quiet clause appended to the footer range, e.g. a dataset caveat. */
+  footerNote?: React.ReactNode;
 };
 
 export function DataTable<T extends { id: string }>({
@@ -140,9 +173,12 @@ export function DataTable<T extends { id: string }>({
   columns,
   emptyTitle = "Nothing here just yet",
   emptyDescription = "New activity will appear here as your community gets going.",
-  pageSize = 7,
+  pageSize,
   pagination,
   sort,
+  search,
+  filters = [],
+  actions,
   loading = false,
   error = "",
   onRetry,
@@ -150,20 +186,61 @@ export function DataTable<T extends { id: string }>({
   selection,
   rowActions,
   toolbar,
+  footerNote,
 }: DataTableProps<T>) {
   const [hidden, setHidden] = useState<string[]>(() =>
     columns.filter((c) => c.defaultHidden).map((c) => c.key)
   );
+  const server = !!pagination;
+  const [clientPage, setClientPage] = useState(0);
+  // A client list pages when the caller asked for a size; otherwise it is a
+  // complete reference list (channels, roles) and every row renders. A paged
+  // client list keeps its own page size, so "Rows per page" is a real control
+  // rather than a fixed number dressed up as one.
+  const [clientSize, setClientSize] = useState(pageSize ?? 7);
+  const pagedClient = !server && pageSize !== undefined;
+  const size = server
+    ? (pageSize ?? 7)
+    : pageSize
+      ? clientSize
+      : Math.max(rows.length, 1);
+  const [clientSort, setClientSort] = useState<SortingState>([]);
+  const [draft, setDraft] = useState(search?.value ?? "");
+  const [pendingQuery, setPendingQuery] = useState(search?.value ?? "");
 
-  // Every column is a display column: the server owns ordering, so no accessor
-  // is needed and the definition type stays uniform.
+  const searchValue = search?.value ?? "";
+  const searchChange = search?.onChange;
+  const facetValues = filters.map((facet) => facet.value).join("\u0000");
+  // Committed query only changes after the reader stops typing, so a server
+  // table issues one request per pause instead of one per keystroke.
+  useEffect(() => {
+    if (!searchChange) return;
+    setDraft(searchValue);
+    setPendingQuery(searchValue);
+  }, [searchValue, searchChange]);
+  useEffect(() => {
+    if (!searchChange || pendingQuery === searchValue) return;
+    const timer = setTimeout(() => searchChange(pendingQuery), 250);
+    return () => clearTimeout(timer);
+  }, [pendingQuery, searchValue, searchChange]);
+  // A new query or facet means page 1 of the *new* result set, always.
+  useEffect(() => {
+    setClientPage(0);
+  }, [searchValue, facetValues]);
+
   const columnDefs = useMemo<ColumnDef<TableFeatures, T>[]>(() => {
     const defs: ColumnDef<TableFeatures, T>[] = columns.map((column) => ({
       id: column.key,
       header: () => column.header ?? column.label,
       cell: ({ row }) => column.render(row.original),
-      enableSorting: false,
+      // A client list sorts through TanStack's row model; a server list passes
+      // its field to the API and leaves the page untouched.
+      enableSorting: server ? false : column.sortValue ? true : false,
+      accessorFn: column.sortValue
+        ? (row: T) => column.sortValue!(row)
+        : undefined,
       enableHiding: column.canHide !== false,
+      meta: { align: column.align },
     }));
     if (rowActions) {
       defs.push({
@@ -220,57 +297,27 @@ export function DataTable<T extends { id: string }>({
       });
     }
     return defs;
-  }, [columns, rowActions, selection, rows]);
-
-  // Client lists (news sources, role panels, channels…) arrive complete, so
-  // ordering them in the browser is honest. Server-paginated tables never are.
-  const [clientSort, setClientSort] = useState<{
-    key: string;
-    dir: "asc" | "desc";
-  } | null>(null);
-  const canClientSort = !sort && columns.some((column) => column.sortValue);
-  const orderedRows = useMemo(() => {
-    if (!clientSort) return rows;
-    const column = columns.find((item) => item.key === clientSort.key);
-    if (!column?.sortValue) return rows;
-    const factor = clientSort.dir === "asc" ? 1 : -1;
-    return [...rows].sort((a, b) => {
-      const left = column.sortValue!(a);
-      const right = column.sortValue!(b);
-      if (typeof left === "number" && typeof right === "number")
-        return (left - right) * factor;
-      return (
-        String(left).localeCompare(String(right), undefined, {
-          numeric: true,
-          sensitivity: "base",
-        }) * factor
-      );
-    });
-  }, [clientSort, columns, rows]);
-  const toggleClientSort = (key: string) =>
-    setClientSort((current) =>
-      current?.key === key
-        ? { key, dir: current.dir === "asc" ? "desc" : "asc" }
-        : { key, dir: "asc" }
-    );
+  }, [columns, rowActions, selection, rows, server]);
 
   const totalItems = pagination?.total ?? rows.length;
-  const [internalPage, setInternalPage] = useState(0);
-  const pageIndex = pagination
-    ? Math.max(0, pagination.page - 1)
-    : internalPage;
+  const pageIndex = server ? Math.max(0, pagination!.page - 1) : clientPage;
   const paginationState = useMemo<PaginationState>(
-    () => ({ pageIndex, pageSize }),
-    [pageIndex, pageSize]
+    () => ({ pageIndex, pageSize: size }),
+    [pageIndex, size]
   );
   const sorting = useMemo<SortingState>(
-    () => (sort ? [{ id: sort.field, desc: sort.dir === "desc" }] : []),
-    [sort]
+    () =>
+      server
+        ? sort
+          ? [{ id: sort.field, desc: sort.dir === "desc" }]
+          : []
+        : clientSort,
+    [server, sort, clientSort]
   );
 
   const table = useTable({
     features,
-    data: orderedRows,
+    data: rows,
     columns: columnDefs,
     state: {
       sorting,
@@ -279,19 +326,25 @@ export function DataTable<T extends { id: string }>({
         hidden.map((key) => [key, false])
       ) as ColumnVisibilityState,
     },
-    manualSorting: true,
-    manualPagination: true,
-    rowCount: totalItems,
-    enableSorting: !!sort,
+    manualSorting: server,
+    manualPagination: server,
+    rowCount: server ? totalItems : undefined,
     enableSortingRemoval: false,
-    onSortingChange: () => undefined,
-    onPaginationChange: (updater) => {
+    autoResetPageIndex: false,
+    onSortingChange: (updater: Updater<SortingState>) => {
+      if (server) return;
+      setClientSort((current) =>
+        typeof updater === "function" ? updater(current) : updater
+      );
+      setClientPage(0);
+    },
+    onPaginationChange: (updater: Updater<PaginationState>) => {
       const next =
         typeof updater === "function" ? updater(paginationState) : updater;
-      if (pagination) pagination.onPage(next.pageIndex + 1);
-      else setInternalPage(next.pageIndex);
+      if (server) pagination!.onPage(next.pageIndex + 1);
+      else setClientPage(next.pageIndex);
     },
-    onColumnVisibilityChange: (updater) => {
+    onColumnVisibilityChange: (updater: Updater<ColumnVisibilityState>) => {
       const current = Object.fromEntries(hidden.map((key) => [key, false]));
       const next =
         typeof updater === "function" ? updater(current as never) : updater;
@@ -303,56 +356,106 @@ export function DataTable<T extends { id: string }>({
     },
   });
 
-  const pageCount = Math.max(1, Math.ceil(totalItems / pageSize));
+  const pageCount = Math.max(1, Math.ceil(totalItems / size));
   // A filter or a mutation can strand the reader past the last page.
   useEffect(() => {
-    if (pagination && pagination.page > pageCount) pagination.onPage(pageCount);
-  }, [pagination, pageCount]);
+    if (server && pagination!.page > pageCount) pagination!.onPage(pageCount);
+    if (!server && clientPage > pageCount - 1) setClientPage(pageCount - 1);
+  }, [server, pagination, pageCount, clientPage]);
 
   const hideable = columns.filter((c) => c.canHide !== false);
-
+  const activeFilters = filters.filter(
+    (facet) => facet.value !== facet.allValue
+  );
   // A failed fetch is not an empty result: never show "nothing here" for it.
   if (error) return <ErrorState detail={error} onRetry={onRetry} />;
 
+  const rowsOnPage = table.getRowModel().rows.length;
+
   return (
-    <div>
+    <div className="min-w-0">
       {toolbar}
-      <TableToolbar
-        totalItems={totalItems}
-        sort={
-          sort ??
-          (clientSort
-            ? {
-                field:
-                  columns.find((c) => c.key === clientSort.key)?.label ??
-                  clientSort.key,
-                dir: clientSort.dir,
-                onChange: () => undefined,
+      <div className="flex flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+          {search && (
+            <div className="relative w-full min-w-0 sm:max-w-[260px]">
+              <Search
+                size={13}
+                aria-hidden
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                type="search"
+                value={draft}
+                aria-label={search.label}
+                placeholder={search.placeholder}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  setPendingQuery(event.target.value);
+                }}
+                className="h-8 rounded-lg pl-8 text-[11.5px]"
+              />
+            </div>
+          )}
+          {filters.map((facet) => (
+            <FacetFilterButton key={facet.key} facet={facet} />
+          ))}
+          {activeFilters.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2 text-[11.5px] text-muted-foreground"
+              onClick={() => {
+                activeFilters.forEach((facet) =>
+                  facet.onChange(facet.allValue)
+                );
+                if (search) search.onChange("");
+              }}
+            >
+              Reset
+              <X size={12} aria-hidden />
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 sm:ml-auto">
+          {actions}
+          {hideable.length > 1 && (
+            <ColumnMenu
+              hideable={hideable}
+              hidden={hidden}
+              visibleCount={table.getVisibleLeafColumns().length}
+              onToggle={(key) =>
+                setHidden((current) =>
+                  current.includes(key)
+                    ? current.filter((item) => item !== key)
+                    : [...current, key]
+                )
               }
-            : undefined)
-        }
-        columns={columns}
-        hidden={hidden}
-        onToggleColumn={(key) =>
-          setHidden((current) =>
-            current.includes(key)
-              ? current.filter((item) => item !== key)
-              : [...current, key]
-          )
-        }
-        hideable={hideable}
-        visibleCount={table.getVisibleLeafColumns().length}
-        selection={
-          selection
-            ? {
-                count: selection.selected.length,
-                onClear: () => selection.onChange([]),
-              }
-            : undefined
-        }
-      />
+            />
+          )}
+        </div>
+      </div>
       {!rows.length ? (
-        <EmptyState title={emptyTitle} description={emptyDescription} />
+        <EmptyState
+          title={emptyTitle}
+          description={emptyDescription}
+          action={
+            activeFilters.length ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  activeFilters.forEach((facet) =>
+                    facet.onChange(facet.allValue)
+                  );
+                  if (search) search.onChange("");
+                }}
+              >
+                Clear filters
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <div
           aria-busy={loading}
@@ -369,16 +472,20 @@ export function DataTable<T extends { id: string }>({
                     {headerGroup.headers.map((header) => {
                       const column = columns.find((c) => c.key === header.id);
                       const serverSortable = !!sort && !!column?.sortKey;
-                      const clientSortable =
-                        canClientSort && !!column?.sortValue;
+                      const clientSortable = !server && !!column?.sortValue;
                       const sortable = serverSortable || clientSortable;
+                      const clientEntry = clientSort.find(
+                        (entry) => entry.id === header.id
+                      );
                       const active = serverSortable
                         ? sort!.field === column!.sortKey
-                        : clientSort?.key === header.id;
+                        : !!clientEntry;
                       const dir = serverSortable
                         ? sort!.dir
-                        : clientSort?.key === header.id
-                          ? clientSort.dir
+                        : clientEntry
+                          ? clientEntry.desc
+                            ? "desc"
+                            : "asc"
                           : undefined;
                       return (
                         <TableHead
@@ -393,18 +500,32 @@ export function DataTable<T extends { id: string }>({
                           className={cn(
                             header.id === "__select" && "w-10 pr-0",
                             header.id === "__actions" && "w-10 text-right",
+                            column?.align === "right" && "text-right",
                             column?.className
                           )}
                         >
                           {sortable ? (
                             <SortButton
                               label={column!.label}
-                              active={active}
+                              active={!!active}
                               dir={active ? dir : undefined}
+                              align={column?.align}
                               onClick={() =>
                                 serverSortable
                                   ? sort!.onChange(column!.sortKey!)
-                                  : toggleClientSort(header.id)
+                                  : table.setSorting((current) => {
+                                      const existing = current.find(
+                                        (entry) => entry.id === header.id
+                                      );
+                                      return [
+                                        {
+                                          id: header.id,
+                                          desc: existing
+                                            ? !existing.desc
+                                            : false,
+                                        },
+                                      ];
+                                    })
                               }
                             />
                           ) : header.isPlaceholder ? null : (
@@ -436,6 +557,8 @@ export function DataTable<T extends { id: string }>({
                           className={cn(
                             cell.column.id === "__select" && "w-10 pr-0",
                             cell.column.id === "__actions" && "text-right",
+                            column?.align === "right" &&
+                              "text-right tabular-nums",
                             column?.className
                           )}
                         >
@@ -448,24 +571,34 @@ export function DataTable<T extends { id: string }>({
               </TableBody>
             </Table>
           </TableWrap>
-          {pageCount > 1 || totalItems > pageSize ? (
-            <TablePagination
-              page={pageIndex + 1}
-              pageCount={pageCount}
-              totalItems={totalItems}
-              pageSize={pageSize}
-              onPageSize={pagination?.onPageSize}
-              onPage={(next) => {
-                const target = Math.min(Math.max(1, next), pageCount);
-                if (pagination) pagination.onPage(target);
-                else setInternalPage(target - 1);
-              }}
-            />
-          ) : (
-            <p className="border-t px-4 py-2.5 text-[10px] text-muted-foreground">
-              {totalItems} {totalItems === 1 ? "record" : "records"}
-            </p>
-          )}
+          <TableFooter
+            page={pageIndex + 1}
+            pageCount={pageCount}
+            pageSize={size}
+            totalItems={totalItems}
+            rangeStart={
+              totalItems === 0 || rowsOnPage === 0 ? 0 : pageIndex * size + 1
+            }
+            rangeEnd={Math.min(pageIndex * size + rowsOnPage, totalItems)}
+            pageSizes={pagination?.pageSizes}
+            onPageSize={
+              pagination?.onPageSize ??
+              // A paged client list changes its own page size; a complete
+              // reference list that renders every row has nothing to change.
+              (pagedClient
+                ? (next) => {
+                    setClientSize(next);
+                    setClientPage(0);
+                  }
+                : undefined)
+            }
+            onPage={(next) => {
+              const target = Math.min(Math.max(1, next), pageCount);
+              if (server) pagination!.onPage(target);
+              else setClientPage(target - 1);
+            }}
+            note={footerNote}
+          />
         </div>
       )}
     </div>
@@ -494,11 +627,13 @@ function SortButton({
   label,
   active,
   dir,
+  align,
   onClick,
 }: {
   label: string;
   active: boolean;
-  dir?: "asc" | "desc";
+  dir?: string;
+  align?: "left" | "right";
   onClick: () => void;
 }) {
   const Icon = !active ? ChevronsUpDown : dir === "asc" ? ArrowUp : ArrowDown;
@@ -507,208 +642,201 @@ function SortButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1 rounded-sm uppercase tracking-wide underline-offset-2 transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400",
-        active && "text-foreground"
+        "-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 transition hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400",
+        active && "text-foreground",
+        align === "right" && "flex-row-reverse"
       )}
     >
       {label}
-      <Icon size={11} aria-hidden className={cn(!active && "opacity-50")} />
+      <Icon
+        size={12}
+        aria-hidden
+        className={cn(!active && "opacity-40", active && "text-primary")}
+      />
       <span className="sr-only">
         {active
           ? dir === "asc"
             ? ", sorted ascending, activate to reverse"
             : ", sorted descending, activate to reverse"
-          : ", activate to sort descending"}
+          : ", activate to sort ascending"}
       </span>
     </button>
   );
 }
 
-function TableToolbar({
-  totalItems,
-  sort,
-  hidden,
-  onToggleColumn,
+function ColumnMenu({
   hideable,
+  hidden,
   visibleCount,
-  selection,
+  onToggle,
 }: {
-  totalItems: number;
-  sort?: DataTableSort;
-  columns: DataColumn<never>[];
-  hidden: string[];
-  onToggleColumn: (key: string) => void;
   hideable: { key: string; label: string }[];
+  hidden: string[];
   visibleCount: number;
-  selection?: { count: number; onClear: () => void };
+  onToggle: (key: string) => void;
 }) {
   return (
-    <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
-      <p className="text-[10px] text-muted-foreground" aria-live="polite">
-        {selection && selection.count > 0 ? (
-          <span className="flex items-center gap-2">
-            <span className="font-medium text-foreground">
-              {selection.count} selected
-            </span>
-            <button
-              type="button"
-              onClick={selection.onClear}
-              className="rounded underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400"
-            >
-              Clear selection
-            </button>
-          </span>
-        ) : totalItems === 0 ? (
-          "No matching records"
-        ) : (
-          <>
-            {totalItems} {totalItems === 1 ? "row" : "rows"}
-            {sort
-              ? ` · sorted by ${sort.field} (${sort.dir === "asc" ? "ascending" : "descending"})`
-              : ""}
-          </>
-        )}
-      </p>
-      {hideable.length > 2 ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="h-7 text-[10px]">
-              <Settings2 size={12} aria-hidden />
-              Columns
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuLabel className="text-[10px] uppercase tracking-wide">
-              Show columns
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {hideable.map((column) => (
-              <DropdownMenuCheckboxItem
-                key={column.key}
-                checked={!hidden.includes(column.key)}
-                // The last visible column stays visible: an empty table with no
-                // header cannot be told apart from a failed load.
-                disabled={!hidden.includes(column.key) && visibleCount <= 1}
-                onCheckedChange={() => onToggleColumn(column.key)}
-                onSelect={(event) => event.preventDefault()}
-              >
-                {column.label}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : null}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5 text-[11.5px]"
+        >
+          <Settings2 size={12} aria-hidden />
+          Columns
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuLabel className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          Show columns
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {hideable.map((column) => (
+          <DropdownMenuCheckboxItem
+            key={column.key}
+            checked={!hidden.includes(column.key)}
+            // The last visible column stays visible: an empty table with no
+            // header cannot be told apart from a failed load.
+            disabled={!hidden.includes(column.key) && visibleCount <= 1}
+            onCheckedChange={() => onToggle(column.key)}
+            onSelect={(event) => event.preventDefault()}
+          >
+            {column.label}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
 /**
- * Footer shared by every paginated table: range, page count and navigation.
- *
- * Orbit has server-paginated data, so page jumps to "page 14 of 900" are not
- * offered — but first/previous/next/last are, which is what actually helps when
- * you are paging through an audit log.
+ * One footer for every table: a single accurate range, then page size and
+ * navigation. The controls stay present and disabled when everything fits on
+ * one page, so nothing disappears at exactly the moment a second page appears.
  */
-export function TablePagination({
+function TableFooter({
   page,
   pageCount,
-  totalItems,
   pageSize,
-  onPage,
-  onPageSize,
+  totalItems,
+  rangeStart,
+  rangeEnd,
   pageSizes = [7, 15, 25, 50],
-  className,
+  onPageSize,
+  onPage,
+  note,
 }: {
   page: number;
   pageCount: number;
-  totalItems: number;
   pageSize: number;
-  onPage: (page: number) => void;
-  /** Omit where the API has a single fixed page size. */
-  onPageSize?: (size: number) => void;
+  totalItems: number;
+  rangeStart: number;
+  rangeEnd: number;
   pageSizes?: number[];
-  className?: string;
+  onPageSize?: (size: number) => void;
+  onPage: (page: number) => void;
+  note?: React.ReactNode;
 }) {
-  const first = totalItems === 0 ? 0 : (page - 1) * pageSize + 1;
-  const last = Math.min(page * pageSize, totalItems);
   return (
-    <div
-      className={cn(
-        "flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5",
-        className
-      )}
-    >
-      <p className="text-[10px] text-muted-foreground">
-        Showing{" "}
-        <span className="font-medium text-foreground">
-          {first}–{last}
-        </span>{" "}
-        of {totalItems} matching rows
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t px-3 py-2">
+      <p className="text-[11px] text-muted-foreground" aria-live="polite">
+        {totalItems === 0 ? (
+          "No matching rows"
+        ) : (
+          <>
+            Showing{" "}
+            <span className="font-medium tabular-nums text-foreground">
+              {rangeStart}–{rangeEnd}
+            </span>{" "}
+            of <span className="tabular-nums">{totalItems}</span>
+            {note ? <> {note}</> : null}
+          </>
+        )}
       </p>
+      {/*
+        The page controls are always present. A filtered list that fits on one
+        page still shows "Page 1 of 1" with the arrows disabled: the controls do
+        not vanish and reappear depending on how many rows are left.
+      */}
       <div className="flex flex-wrap items-center gap-3">
         {onPageSize ? (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-muted-foreground">Rows</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-muted-foreground">Rows</span>
             <FormSelect
               aria-label="Rows per page"
               value={String(pageSize)}
               onValueChange={(next) => onPageSize(Number(next))}
-              options={pageSizes.map((size) => ({
-                value: String(size),
-                label: String(size),
-              }))}
-              className="h-7 w-16 text-[10px]"
+              options={[...new Set([pageSize, ...pageSizes])]
+                .sort((a, b) => a - b)
+                .map((option) => ({
+                  value: String(option),
+                  label: String(option),
+                }))}
+              className="h-7 w-[68px] text-[11px]"
             />
           </div>
         ) : null}
         <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
+          <PageButton
+            label="Go to first page"
             disabled={page <= 1}
             onClick={() => onPage(1)}
-            aria-label="First page"
           >
-            <span className="sr-only">Go to first page</span>
-            <ChevronLeft size={13} aria-hidden />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
+            <ChevronsLeft size={13} aria-hidden />
+          </PageButton>
+          <PageButton
+            label="Previous page"
             disabled={page <= 1}
             onClick={() => onPage(page - 1)}
-            aria-label="Previous page"
           >
             <ChevronLeft size={13} aria-hidden />
-          </Button>
-          <span className="px-2 text-[10px] text-muted-foreground">
+          </PageButton>
+          <span className="px-1.5 text-[11px] tabular-nums text-muted-foreground">
             Page {page} of {pageCount}
           </span>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
+          <PageButton
+            label="Next page"
             disabled={page >= pageCount}
             onClick={() => onPage(page + 1)}
-            aria-label="Next page"
           >
             <ChevronRight size={13} aria-hidden />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            className="size-7"
+          </PageButton>
+          <PageButton
+            label="Go to last page"
             disabled={page >= pageCount}
             onClick={() => onPage(pageCount)}
-            aria-label="Last page"
           >
-            <ChevronRight size={13} aria-hidden />
-          </Button>
+            <ChevronsRight size={13} aria-hidden />
+          </PageButton>
         </div>
       </div>
     </div>
+  );
+}
+
+function PageButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      className="size-7"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={label}
+    >
+      {children}
+    </Button>
   );
 }
 
@@ -744,6 +872,10 @@ function RowActions({
   );
 }
 
+/**
+ * Standalone footer for callers that own their own markup (the personal
+ * transaction history predates the table foundation and keeps its own rows).
+ */
 export type Column<T> = DataColumn<T>;
 export type TableSort = DataTableSort;
 export type { RowData };

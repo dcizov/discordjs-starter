@@ -24,6 +24,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "./data-table";
+import { IdentityCell } from "./identity/identity-cell";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { ResourceEditor } from "./resource-editor";
@@ -51,7 +52,6 @@ import {
   Input,
   SearchInput,
   SectionHeader,
-  FormSelect,
   Spinner,
 } from "./ui/primitives";
 import { Combobox } from "./ui/combobox";
@@ -73,6 +73,21 @@ export function EconomyPage() {
   const ec = data.guild.config.economy;
   const me =
     data.wallet ?? data.accounts.find((a) => a.userId === data.user.id);
+  const [memberQuery, setMemberQuery] = useState("");
+  // Rank is computed over the whole authorized snapshot, then narrowed by the
+  // search — so "rank 3" keeps meaning third place, not third match.
+  const leaderboard = data.accounts
+    // Ranks are assigned before the search runs, so filtering never renumbers
+    // the people who are still on screen. `id` is the stable row key.
+    .map((account, index) => ({
+      ...account,
+      id: account.userId,
+      rank: index + 1,
+    }))
+    .filter((account) =>
+      account.name.toLowerCase().includes(memberQuery.trim().toLowerCase())
+    );
+  const shopItems = data.resources.filter((r) => r.kind === "shop");
   const shop = data.resources.filter(
     (r) =>
       r.kind === "shop" && r.name.toLowerCase().includes(query.toLowerCase())
@@ -178,81 +193,132 @@ export function EconomyPage() {
         }}
         tabs={[
           { id: "overview", label: "Overview" },
-          { id: "shop", label: "Community shop" },
+          {
+            id: "shop",
+            label: "Community shop",
+            badge: shopItems.length,
+          },
           { id: "transactions", label: "Transaction history" },
         ]}
       />
       {tab === "overview" ? (
         <TabPanel id="economy" tab="overview">
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <Card>
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <Card className="self-start">
               <SectionHeader
                 title="A constellation of contributors"
                 aside={
                   <Badge tone="amber">
-                    <Trophy size={10} />
+                    <Trophy size={10} aria-hidden />
                     Leaderboard
                   </Badge>
                 }
               />
               <DataTable
-                rows={data.accounts.map((a, i) => ({
-                  ...a,
-                  id: a.userId,
-                  rank: i + 1,
-                }))}
+                label="Contributors by balance"
+                pageSize={10}
+                search={{
+                  value: memberQuery,
+                  onChange: setMemberQuery,
+                  placeholder: "Find a member…",
+                  label: "Search the leaderboard",
+                }}
+                rows={leaderboard}
                 columns={[
                   {
                     key: "rank",
                     label: "Rank",
+                    canHide: false,
+                    sortValue: (r) => r.rank,
+                    className: "w-16",
                     render: (r) => (
-                      <span
-                        className={cn(
-                          "flex size-6 items-center justify-center rounded-full text-[11px] font-semibold",
-                          r.rank === 1
-                            ? "bg-amber-50 text-amber-500"
-                            : r.rank === 2
-                              ? "bg-slate-100 text-slate-500"
-                              : r.rank === 3
-                                ? "bg-orange-50 text-orange-400"
-                                : "text-muted-foreground"
+                      <span className="flex items-center gap-1.5 tabular-nums">
+                        <span
+                          className={cn(
+                            "inline-flex size-5 items-center justify-center rounded-full text-[11px] font-semibold",
+                            r.rank === 1
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                              : r.rank === 2
+                                ? "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
+                                : r.rank === 3
+                                  ? "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300"
+                                  : "text-muted-foreground"
+                          )}
+                        >
+                          {r.rank}
+                        </span>
+                        {/* The medal decorates the top three; the number is the
+                            rank, so a colour or a glyph is never the only cue. */}
+                        {r.rank <= 3 && (
+                          <Medal
+                            size={11}
+                            aria-hidden
+                            className="text-amber-600 dark:text-amber-300"
+                          />
                         )}
-                      >
-                        {r.rank <= 3 ? <Medal size={14} /> : r.rank}
+                        <span className="sr-only">
+                          {r.rank === 1
+                            ? "first place"
+                            : r.rank === 2
+                              ? "second place"
+                              : r.rank === 3
+                                ? "third place"
+                                : `rank ${r.rank}`}
+                        </span>
                       </span>
                     ),
                   },
                   {
                     key: "member",
                     label: "Member",
+                    canHide: false,
+                    sortValue: (r) => r.name,
                     render: (r) => (
-                      <span className="flex items-center gap-2.5">
-                        <span className="flex size-7 items-center justify-center rounded-full bg-violet-50 text-violet-400 dark:bg-violet-500/10">
-                          {r.name.slice(0, 1)}
-                        </span>
-                        <span className="font-medium">
-                          {r.name}
-                          {r.userId === data.user.id && (
-                            <span className="ml-1.5 text-[9px] text-muted-foreground">
-                              you
-                            </span>
-                          )}
-                        </span>
-                      </span>
+                      <IdentityCell
+                        id={r.userId}
+                        name={r.name}
+                        src={r.avatarUrl}
+                        badge={
+                          r.userId === data.user.id ? (
+                            <Badge tone="purple">You</Badge>
+                          ) : null
+                        }
+                        detail={r.avatarUrl ? undefined : "no avatar captured"}
+                      />
                     ),
                   },
                   {
                     key: "balance",
-                    label: "Balance",
+                    label: `${ec.currency} balance`,
+                    canHide: false,
+                    align: "right",
+                    sortValue: (r) => r.balance,
                     render: (r) => (
-                      <span className="font-medium tabular-nums text-amber-700 dark:text-amber-300">
-                        {ec.symbol} {number(r.balance)}
+                      <span className="font-medium text-amber-800 tabular-nums dark:text-amber-300">
+                        {number(r.balance)}{" "}
+                        <span className="text-[10px] font-normal text-muted-foreground">
+                          {ec.symbol}
+                        </span>
                       </span>
                     ),
                   },
                 ]}
-                emptyTitle="Every constellation starts with one star"
-                emptyDescription="Members will appear here after earning their first daily or activity reward."
+                footerNote={
+                  data.accounts.length <
+                  (data.stats?.accountCount ?? data.accounts.length)
+                    ? "· top contributors by balance"
+                    : undefined
+                }
+                emptyTitle={
+                  memberQuery
+                    ? "No member matches that search"
+                    : "Every constellation starts with one star"
+                }
+                emptyDescription={
+                  memberQuery
+                    ? "Try the first letters of a display name, or clear the search."
+                    : "Members will appear here after earning their first daily or activity reward."
+                }
               />
             </Card>
             <div className="space-y-5">
@@ -323,32 +389,15 @@ export function EconomyPage() {
         </TabPanel>
       ) : (
         <TabPanel id="economy" tab={tab}>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <SearchInput
-              value={query}
-              onChange={setQuery}
-              placeholder={
-                tab === "shop"
-                  ? "Find a little something…"
-                  : "Search transactions…"
-              }
-            />
-            {tab === "transactions" && (
-              <FormSelect
-                value={filter}
-                onValueChange={setFilter}
-                className="h-9 w-36 text-[11px]"
-                aria-label="Transaction type"
-                options={[
-                  { value: "all", label: "All transactions" },
-                  ...["daily", "activity", "transfer", "purchase"].map((t) => ({
-                    value: t,
-                    label: t[0].toUpperCase() + t.slice(1),
-                  })),
-                ]}
+          {tab === "shop" && (
+            <div className="mb-4">
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder="Find a little something…"
               />
-            )}
-          </div>
+            </div>
+          )}
           {tab === "shop" ? (
             shop.length ? (
               <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -468,16 +517,37 @@ export function EconomyPage() {
                 kind="ledger"
                 query={query}
                 filter={filter}
+                onQueryChange={setQuery}
+                onFilterChange={setFilter}
+                searchLabel="Search transactions"
+                searchPlaceholder="Search notes, types, and members…"
+                facetLabel="Filter transaction type"
+                facetTitle="Type"
+                facetOptions={[
+                  { value: "all", label: "All transactions" },
+                  { value: "daily", label: "Daily" },
+                  { value: "activity", label: "Activity" },
+                  { value: "transfer", label: "Transfer" },
+                  { value: "purchase", label: "Purchase" },
+                ]}
                 columns={[
                   {
                     key: "member",
                     label: "Member",
-                    render: (r) => (
-                      <span className="font-medium">
-                        {data.accounts.find((a) => a.userId === r.userId)
-                          ?.name ?? r.userId}
-                      </span>
-                    ),
+                    canHide: false,
+                    render: (r) => {
+                      const account = data.accounts.find(
+                        (a) => a.userId === r.userId
+                      );
+                      return (
+                        <IdentityCell
+                          id={r.userId}
+                          name={account?.name ?? "Unknown member"}
+                          src={account?.avatarUrl}
+                          detail={account ? undefined : "not in this snapshot"}
+                        />
+                      );
+                    },
                   },
                   {
                     key: "type",
@@ -701,7 +771,11 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
                 searchPlaceholder="Search members…"
                 options={data.accounts
                   .filter((a) => a.userId !== data.user.id)
-                  .map((a) => ({ value: a.userId, label: a.name }))}
+                  .map((a) => ({
+                    value: a.userId,
+                    label: a.name,
+                    person: { id: a.userId, name: a.name, src: a.avatarUrl },
+                  }))}
               />
             ) : (
               <Input
