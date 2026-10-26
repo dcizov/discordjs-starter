@@ -647,6 +647,31 @@ describe("playback failure reports", () => {
     expect(report.details).toContain("ANDROID_VR");
     expect(report.details).toContain("No supported audio streams available");
   });
+  it("describes the provider challenge without claiming a universal cause", () => {
+    const report = musicSourceFailureReport(
+      {
+        message: "All clients failed to load the item.",
+        severity: "fault" as const,
+        cause:
+          "Client [ANDROID_VR] failed: This video requires login.\nClient [WEB] failed: No supported audio streams available.",
+      },
+      { stage: "playback", source: "youtube", info }
+    );
+    const text = report.summary.toLowerCase();
+    // Observed evidence, not a diagnosis of the item or the deployment.
+    expect(text).toContain("provider asked for a signed-in/verified session");
+    expect(text).not.toContain("only serves this item");
+    // Kept apart from the two other things a listener tends to blame.
+    expect(text).toContain("not a discord voice-permission problem");
+    expect(text).toContain("not a lavalink connection problem");
+    // No credentials, cookies or stack traces in the user-facing text.
+    expect(text).not.toMatch(
+      /cookie|token|refresh|bearer|at java\.|exception:/
+    );
+    // The short summary stays short; details keep the client lines for operators.
+    expect(report.summary.length).toBeLessThanOrEqual(300);
+    expect(report.details).toContain("ANDROID_VR");
+  });
   it.each([
     ["DRM protected stream", "drm"],
     ["No playable stream found", "no-streams"],

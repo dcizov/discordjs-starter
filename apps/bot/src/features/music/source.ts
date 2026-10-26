@@ -125,12 +125,13 @@ export type MusicFailureCategory =
   | "unknown";
 
 /**
- * Classify a Lavalink track failure.
+ * Classify a Lavalink track failure from the evidence in the exception.
  *
  * The reported production failure ("ANDROID_VR: This video requires login" +
- * "WEB: No supported audio streams available") is a provider restriction, not a
- * voice or permission problem, so it needs its own bucket instead of the generic
- * "something went wrong" text.
+ * "WEB: No supported audio streams available") is a provider-side restriction,
+ * not a voice or permission problem, so it gets its own bucket instead of the
+ * generic "something went wrong" text. The bucket names what the provider
+ * answered; it does not claim one universal cause for every item in it.
  */
 export function musicFailureCategory(
   exception: Partial<Exception>
@@ -163,7 +164,7 @@ export function musicFailureCategory(
 
 const CATEGORY_NEXT: Record<MusicFailureCategory, string> = {
   "provider-login":
-    "The provider only serves this item to a signed-in session. Choose another public item; an operator can explicitly enable the documented provider sign-in (see docs/MUSIC.md) — Orbit never fakes a login or reuses somebody’s cookies.",
+    "The provider asked for a signed-in/verified session or rejected this backend’s client (for example “requires login” or “…not a bot”). That is a provider-side challenge: it is not a Discord voice-permission problem and not a Lavalink connection problem, and Orbit never reuses cookies, tokens or somebody else’s account. Playback of this item stays unavailable here. Try another public item, or ask an operator to inspect the source diagnostics with npm run music:doctor.",
   "no-streams":
     "The provider returned no audio stream for this item. Try another public track or URL; private, region-locked and removed items stay unsupported.",
   drm: "Protected/encrypted items are not supported. Choose an authorized public, unencrypted item.",
