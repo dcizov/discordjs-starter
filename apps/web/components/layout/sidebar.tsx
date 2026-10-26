@@ -67,7 +67,7 @@ export function Sidebar({
               size={33}
             />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[12px] font-semibold">
+              <span className="block truncate text-xs font-semibold">
                 {data.guild.name}
               </span>
               <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -175,7 +175,7 @@ export function Sidebar({
             <LifeBuoy size={17} className="text-primary" />
             <ArrowUpRight size={13} className="text-muted-foreground" />
           </div>
-          <p className="text-[12px] font-semibold">A little guidance?</p>
+          <p className="text-xs font-semibold">A little guidance?</p>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
             Good things start with a little help.
           </p>

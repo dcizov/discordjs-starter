@@ -50,6 +50,7 @@ import {
   Field,
   Input,
   SearchInput,
+  SectionHeader,
   Select,
   Spinner,
 } from "./ui/primitives";
@@ -184,15 +185,15 @@ export function EconomyPage() {
         <TabPanel id="economy" tab="overview">
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <Card>
-              <div className="flex items-center justify-between border-b px-5 py-4">
-                <h2 className="text-xs font-semibold">
-                  A constellation of contributors
-                </h2>
-                <Badge tone="amber">
-                  <Trophy size={10} />
-                  Leaderboard
-                </Badge>
-              </div>
+              <SectionHeader
+                title="A constellation of contributors"
+                aside={
+                  <Badge tone="amber">
+                    <Trophy size={10} />
+                    Leaderboard
+                  </Badge>
+                }
+              />
               <DataTable
                 rows={data.accounts.map((a, i) => ({
                   ...a,
@@ -302,7 +303,7 @@ export function EconomyPage() {
               </Card>
               <OwnHistory />
               <Card className="p-5">
-                <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
                   <ShieldCheck size={14} className="text-emerald-500" />
                   Fair by design.
                 </div>

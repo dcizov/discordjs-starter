@@ -209,7 +209,7 @@ export function OverviewToolkit() {
               className="mt-3.5 w-full text-left"
               onClick={() => navigate(m.key)}
             >
-              <h3 className="flex items-center justify-between text-[12px] font-semibold">
+              <h3 className="flex items-center justify-between text-xs font-semibold">
                 {m.name}
                 <ArrowUpRight
                   size={13}

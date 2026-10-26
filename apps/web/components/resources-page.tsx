@@ -567,7 +567,7 @@ export function ResourcesPage({
                       </span>
                     </p>
                     <div className="mt-2 border-l-[3px] border-violet-300 pl-3">
-                      <p className="text-[12px] font-semibold">{r.name}</p>
+                      <p className="text-xs font-semibold">{r.name}</p>
                       <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
                         {r.data.description}
                       </p>
@@ -664,7 +664,7 @@ export function ResourcesPage({
                       <Icon size={23} strokeWidth={1.5} />
                     </span>
                     <div>
-                      <h2 className="text-[13px] font-semibold">{r.name}</h2>
+                      <h2 className="text-xs font-semibold">{r.name}</h2>
                       <p className="mt-1 text-[10px] text-muted-foreground">
                         {r.data.adapter === "steam"
                           ? "Official Steam app news"

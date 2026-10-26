@@ -48,7 +48,7 @@ export function ActivityChart({ range }: { range: string }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-2 pt-4">
         <div>
-          <h2 className="text-[12px] font-semibold">Community activity</h2>
+          <h2 className="text-xs font-semibold">Community activity</h2>
           <p className="mt-1 text-[10px] text-muted-foreground">
             Daily activity rewards · {snapshot.timeZone} · {window.start} –{" "}
             {window.end}

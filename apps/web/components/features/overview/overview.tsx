@@ -236,7 +236,7 @@ export function Overview() {
         <UpcomingDeliveries />
         <Card>
           <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
-            <h2 className="text-[12px] font-semibold">Around the community</h2>
+            <h2 className="text-xs font-semibold">Around the community</h2>
             <button
               onClick={() => navigate("audit")}
               className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-primary"
@@ -325,7 +325,7 @@ function UpcomingDeliveries() {
   return (
     <Card>
       <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
-        <h2 className="text-[12px] font-semibold">Coming up next</h2>
+        <h2 className="text-xs font-semibold">Coming up next</h2>
         <span className="flex items-center gap-1 text-[9px] text-muted-foreground">
           <Clock3 size={11} />
           Scheduled deliveries

@@ -20,7 +20,7 @@ export function ConnectionStatus() {
     <>
       <Card className="flex flex-col">
         <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
-          <h2 className="text-[12px] font-semibold">Bot status</h2>
+          <h2 className="text-xs font-semibold">Bot status</h2>
           <Badge tone={online ? "green" : "amber"}>
             <span
               className={cn(
@@ -42,7 +42,7 @@ export function ConnectionStatus() {
             />
           </div>
           <div>
-            <p className="text-[12px] font-semibold">
+            <p className="text-xs font-semibold">
               {online
                 ? "Orbit is in good spirits."
                 : "No current gateway connection."}

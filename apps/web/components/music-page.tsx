@@ -40,6 +40,7 @@ import {
   EmptyState,
   Field,
   Input,
+  SectionHeader,
   Select,
   Spinner,
 } from "./ui/primitives";
@@ -129,33 +130,33 @@ export function MusicPage() {
       </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px]">
         <Card className="overflow-hidden">
-          <div className="flex items-center justify-between border-b px-5 py-4">
-            <span className="flex items-center gap-2 text-xs font-semibold">
-              <AudioLines size={15} className="text-primary" />
-              The listening room
-            </span>
-            <Badge
-              tone={
-                progress.status === "playing"
-                  ? "green"
-                  : progress.status === "stale"
-                    ? "amber"
-                    : "neutral"
-              }
-            >
-              <span
-                className={cn(
-                  "size-1 rounded-full",
+          <SectionHeader
+            icon={AudioLines}
+            title="The listening room"
+            aside={
+              <Badge
+                tone={
                   progress.status === "playing"
-                    ? "bg-emerald-500"
+                    ? "green"
                     : progress.status === "stale"
-                      ? "bg-amber-500"
-                      : "bg-slate-400"
-                )}
-              />
-              {playingLabel}
-            </Badge>
-          </div>
+                      ? "amber"
+                      : "neutral"
+                }
+              >
+                <span
+                  className={cn(
+                    "size-1 rounded-full",
+                    progress.status === "playing"
+                      ? "bg-emerald-500"
+                      : progress.status === "stale"
+                        ? "bg-amber-500"
+                        : "bg-slate-400"
+                  )}
+                />
+                {playingLabel}
+              </Badge>
+            }
+          />
           <div className="relative flex min-h-[285px] flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-[#f2edf9] to-card px-6 py-8 dark:from-violet-500/10 dark:to-card">
             <div className="absolute -top-14 size-64 rounded-full border border-violet-200/30" />
             <div className="absolute -top-28 size-96 rounded-full border border-violet-200/20" />
@@ -430,21 +431,22 @@ export function MusicPage() {
         </div>
       </div>
       <Card className="mt-5">
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <h2 className="flex items-center gap-2 text-xs font-semibold">
-            <ListMusic size={15} className="text-primary" />A little further
-            down the queue <Badge>{m.tracks.length} tracks</Badge>
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => action("shuffle")}
-            disabled={!!busy || m.tracks.length < 2}
-          >
-            <Shuffle size={12} />
-            Shuffle
-          </Button>
-        </div>
+        <SectionHeader
+          icon={ListMusic}
+          title="A little further down the queue"
+          badge={<Badge>{m.tracks.length} tracks</Badge>}
+          aside={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => action("shuffle")}
+              disabled={!!busy || m.tracks.length < 2}
+            >
+              <Shuffle size={12} />
+              Shuffle
+            </Button>
+          }
+        />
         {m.tracks.length ? (
           <div className="divide-y">
             {m.tracks.map((t, i) => (

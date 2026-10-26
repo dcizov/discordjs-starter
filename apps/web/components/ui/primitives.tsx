@@ -232,3 +232,47 @@ export function Checkbox({
     />
   );
 }
+
+/**
+ * Header row for a card whose body is a list or table.
+ *
+ * Three cards had the same band — icon, title, optional count, optional action —
+ * with slightly different heading sizes and one using a `<span>` where the others
+ * used `<h2>`. Sharing it keeps the heading level and the count placement the
+ * same everywhere; `aside` is for the one trailing control a card may own.
+ */
+export function SectionHeader({
+  icon: Icon,
+  title,
+  badge,
+  aside,
+  className,
+}: {
+  icon?: React.ElementType;
+  title: React.ReactNode;
+  /** Count or short state shown next to the title, inside the heading. */
+  badge?: React.ReactNode;
+  /** Trailing control (button, status badge) for this section. */
+  aside?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 border-b px-5 py-4",
+        className
+      )}
+    >
+      <h2 className="flex min-w-0 items-center gap-2 text-xs font-semibold">
+        {Icon ? (
+          <Icon size={15} className="shrink-0 text-primary" aria-hidden />
+        ) : null}
+        <span className="truncate">{title}</span>
+        {badge}
+      </h2>
+      {aside ? (
+        <div className="flex shrink-0 items-center gap-2">{aside}</div>
+      ) : null}
+    </div>
+  );
+}
