@@ -4,6 +4,11 @@ import {
   loadDoc,
   type RenderedDoc,
 } from "@/lib/docs-content";
+import {
+  configuredSourceRef,
+  DEFAULT_SOURCE_REF,
+  sourceFileLink,
+} from "@orbit/core/source-links";
 import { ArrowRight, ListTree } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -65,6 +70,8 @@ function DocFooter({
   previous: { slug: string; title: string } | null;
   next: { slug: string; title: string } | null;
 }) {
+  // Resolved once per rendered page from build-time configuration.
+  const ref = configuredSourceRef();
   return (
     <>
       {doc.toc.length > 2 && (
@@ -109,13 +116,24 @@ function DocFooter({
       <p className="mt-6 text-[10px] text-muted-foreground">
         Generated from <code>{doc.entry.file}</code> in the Orbit repository.{" "}
         <a
-          href={`https://github.com/dcizov/discordjs-starter/blob/main/${doc.entry.file}`}
+          // Built from build-time configuration only, never from the request.
+          href={sourceFileLink(doc.entry.file, { ref })}
           target="_blank"
           rel="noreferrer noopener"
           className="underline underline-offset-2"
         >
           View the source of this page
-        </a>
+        </a>{" "}
+        {ref === DEFAULT_SOURCE_REF ? (
+          <span>
+            (links to the <code>{DEFAULT_SOURCE_REF}</code> branch, because this
+            build did not set <code>ORBIT_SOURCE_REF</code>)
+          </span>
+        ) : (
+          <span>
+            (at <code>{ref.slice(0, 12)}</code>)
+          </span>
+        )}
         <span className="sr-only"> on GitHub (opens in a new tab)</span>.
       </p>
     </>

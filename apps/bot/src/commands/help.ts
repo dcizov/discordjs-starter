@@ -1,4 +1,5 @@
 import { getCommandCatalog } from "@orbit/core/command-catalog";
+import { sourceFileLink } from "@orbit/core/source-links";
 import type { CommandModule } from "@orbit/core/command-catalog-types";
 import type { CommandContext } from "./context";
 import { helpCommandCard, helpOverviewCard } from "../interactions/replies";
@@ -35,7 +36,8 @@ export function helpDocsUrl(
     !/localhost|127\.0\.0\.1/.test(base)
   )
     return `${base}/docs/${doc.slug}`;
-  return `https://github.com/dcizov/discordjs-starter/blob/main/docs/${doc.file}`;
+  // Same helper as the docs site: one repository URL, one configured ref.
+  return sourceFileLink(`docs/${doc.file}`);
 }
 
 /**

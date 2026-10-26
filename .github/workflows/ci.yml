@@ -72,7 +72,9 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music config --quiet
           docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live config --quiet
-      - run: docker build --target runtime -t orbit:ci .
+      # Pass the commit id so the docs source links in the built image are pinned
+      # to this commit (and the build arg itself is covered by CI).
+      - run: docker build --target runtime --build-arg ORBIT_SOURCE_REF=${{ github.sha }} -t orbit:ci .
       - run: docker build --target dev -t orbit:ci-dev .
       - name: Smoke-test unprivileged development image without network access
         run: |
