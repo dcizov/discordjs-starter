@@ -1145,3 +1145,34 @@ FlexSearch/Pagefind/Algolia (a second index or a hosted service), Shiki/Prism
 [the documentation platform page](DOCUMENTATION.md#interface-decisions-documentation-site).
 
 ### Verification (this pass)
+
+| Check                                                 | Result                                                                                                                                                                                         |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`                                      | **887 tests in 70 files pass** (baseline 882 in 70; +5 documentation tests)                                                                                                                    |
+| `npm run typecheck`                                   | pass (`next typegen` + both `tsc --noEmit` runs)                                                                                                                                               |
+| `npm run lint`                                        | pass                                                                                                                                                                                           |
+| `npm run format:check`                                | pass                                                                                                                                                                                           |
+| `npm run build:web`                                   | pass; 25 documentation pages prerendered, `darkreader-lock` verified inside `<head>` of the emitted HTML, `color-scheme: light`/`dark` present in the emitted CSS                              |
+| `npm run build:services`                              | pass                                                                                                                                                                                           |
+| Served HTML (`next start`, demo)                      | `/docs` 200 with 24 grouped cards, `/docs/workflows` 200 with 1 table, 4 code frames, warning/prerequisite/note callouts and `aria-current="page"`, `/docs/not-a-page` 404                     |
+| CI on `5ab9cf0` (first attempt)                       | `containers` success, `verify` **failed**: two docs overflow assertions reported 19 px                                                                                                         |
+| CI on `895cc9e` (fix: header label hidden below `sm`) | runs **40319779402** / **40319785550**: `verify` and `containers` **success**; browser suite **68 passed / 5 skipped / 1 flaky**; screenshot step passed 5 cases (4 dashboard + documentation) |
+
+**Not verified here**: no browser exists in this sandbox (`playwright install
+chromium` fails on the network, no system Chromium and no apt path), so the new
+Playwright cases were executed by CI, not locally. The uploaded
+`dashboard-screenshots` artifact **could not be downloaded here** (the Actions
+artifact host is outside the sandbox's network allowlist), so the documentation
+pages have **not** been visually reviewed as pixels — only as served HTML and
+assertions. What still needs a human eye: sidebar spacing, the mobile sheet, code
+frame contrast and the dark theme.
+
+**Observed flake, unrelated to this pass**: `tests/e2e/music-actions.spec.ts:150`
+(the pass-6 provider-selection case) timed out waiting for its second request in
+both runs and passed on retry. It is a timing race in that test, not a music
+regression; it was left unchanged rather than weakened.
+
+**Still deferred, unchanged**: the connected **member list**, SponsorBlock guild
+UI, LavaSearch/lyrics surfaces, unrelated `<Switch>` labels (8 of 13 still lack
+an `aria-label`), and any plugin upgrade. Dark Reader itself cannot be exercised
+here, so the extension case stays documented rather than "tested".
