@@ -858,3 +858,166 @@ so no visual approval is claimed for this pass.
 - News provider URL matrix beyond the documented forms, and a plugin capability
   matrix refresh, remain documentation work already described in
   `docs/MUSIC-PLUGINS.md`.
+
+## Pass 6 (2026-10-26): branch review — six findings fixed
+
+Reviewed baseline **fee051a** on `arena/99c6cf65-discordjs-starter`. Each finding
+was reproduced against the current code before anything was changed; three of the
+six were behavioural (they had passing tests that asserted the wrong outcome), so
+the new tests target the behaviour, not the shape of the code.
+
+| Commit    | Finding                                                                     |
+| --------- | --------------------------------------------------------------------------- |
+| `4a6041b` | 1 + 2 — `/search` returned one candidate; no explicit provider selection    |
+| `e6a1975` | 4 — empty-channel disconnect could never happen; queue activity disabled it |
+| `8fb6ed2` | 5 — docs/`/help` links were pinned to `blob/main`                           |
+| `ef4f072` | 6 — `provider-login` wording asserted a cause the evidence cannot support   |
+| `af45894` | docs for all of the above                                                   |
+
+### 1. `/search` returned exactly one candidate
+
+**Root cause**: `resolveMusicQuery()` mapped a `SEARCH` load into
+`result.data.slice(0, 1)`, and `MusicService.search()` then sliced that single
+result to at most five. The menu could only ever show one option; the
+`min_values: 1 / max_values: 5` select was decorative.
+
+**Fix**: the resolver takes a bounded `limit` (`MAX_SEARCH_CANDIDATES = 5`) and
+`/search` asks for five while `/play` asks for one — the backend answers with the
+number actually wanted instead of a list being thrown away. Quick play also
+slices a _search_ result to one at the service boundary, so "first result" does
+not depend on the resolver alone. Direct URLs and playlists ignore the search
+limit entirely: a pasted playlist keeps all its tracks.
+
+Search stays read-only (no voice join, no queue write) and every candidate still
+passes the source-policy checks (`sourceName` must match the selected provider,
+foreign/explicit-flagged items are refused). Session ownership, two-minute
+expiry, single-use claim, and the re-authorization in `playSelection()` are
+unchanged, and a new test proves a menu created before a DJ role was configured
+is re-checked (and rejected) at selection time.
+
+### 2. Explicit provider selection (SoundCloud, YouTube, YouTube Music, Bandcamp)
+
+**Root cause**: there was no provider parameter anywhere. `prepareMusicQuery()`
+always prefixed the text with `MUSIC_SEARCH_PREFIX` (default `scsearch`), so a
+listener could only get SoundCloud text search, and the dashboard could not even
+say which catalogue it was searching.
+
+**Fix**: `packages/core/src/music-sources.ts` is the single provider table —
+id, approved Lavalink prefix, required source manager, label, and the switch that
+enables the adapter in _this_ deployment. `/play` and `/search` gained an optional
+`source` option built from that table; the dashboard play form gained the same
+select with an explicit "Server default" entry (the server's configured source,
+not a dashboard guess). Omission means the configured default, never a change of
+the global default.
+
+- Only approved ids are accepted; raw Lavalink prefixes/source names are refused
+  with the list of real choices (API 400, bot error, doctor `--source`).
+- Capability is checked against the node's `/v4/info` `sourceManagers`. A missing
+  adapter produces an actionable message naming the switch that enables it, and
+  **no other provider is substituted** — there is no multi-provider aggregation.
+- YouTube and YouTube Music are distinct choices (`ytsearch` / `ytmsearch`) even
+  though both use `plugins.youtube`, and the `/search` header names the provider
+  that answered.
+- A `source` + URL combination is defined, not silently ignored: the URL still
+  routes by validated hostname, and a `source` for a different provider is refused
+  with the reason. The matching provider (or omitting it) keeps the URL a URL.
+
+### 3. Music doctor provider validation
+
+**Root cause**: `runMusicDoctor()` carried its own `scsearch → soundcloud`,
+`bcsearch → bandcamp` ternary and warned "MUSIC_SEARCH_PREFIX must be scsearch or
+bcsearch", so a perfectly valid `ytsearch`/`ytmsearch` configuration was reported
+as broken and YouTube was invisible to the doctor.
+
+**Fix**: the doctor reads the shared table. The report lists every provider with
+its prefix, required manager, availability on this node and whether it is the
+configured default; an unknown `MUSIC_SEARCH_PREFIX` is reported with the four
+valid values and is not switched; a reachable backend with no source manager at
+all says exactly that. `--source` selects the provider for the optional lookup.
+Lookup success stays explicitly separate from playback ("does not prove
+playback"), as before.
+
+### 4. Empty-channel disconnect
+
+**Root cause**: `leaveWhenIdle()` returned early whenever `state.current ||
+state.tracks.length`, so an `alone` timer could never leave during playback — and
+`enqueue()`, `next()` and every control action called `idle.cancel()` regardless
+of reason, so queue activity in an abandoned channel disabled cleanup.
+
+**Fix**: the reason decides the re-check, inside the per-guild lock.
+
+| Situation                              | Behaviour                                                                      |
+| -------------------------------------- | ------------------------------------------------------------------------------ |
+| Queue finished / track failed          | Leave only if nothing is playing and nothing is queued (unchanged)             |
+| No human left, audio still playing     | Leave after the 15 s grace — playback does not block the empty-channel policy  |
+| A human returns                        | Pending `alone` leave cancelled                                                |
+| Only bots left in the channel          | Counted as empty                                                               |
+| Track queued or started while `alone`  | Timer **kept**; the queue does not keep the bot in an empty channel            |
+| New playback before a queue-idle fires | Queue-idle timer cancelled (unchanged)                                         |
+| Newest reason replaces an older one    | One timer per guild, replacement only; stale handles still ignored             |
+| `/stop`, shutdown, guild removal       | Leave/cancel immediately; guild removal also forgets that guild's search menus |
+
+Queue-retention consequence, documented in `docs/MUSIC.md`: leaving voice resets
+the persisted session, so an `alone` departure drops the queued tracks with it.
+That is the existing single-session policy — no new retention rule was invented.
+
+### 5. Documentation source links
+
+**Root cause**: `apps/web/app/docs/[slug]/page.tsx` and `apps/bot/src/commands/help.ts`
+each hard-coded `https://github.com/dcizov/discordjs-starter/blob/main/<file>`, so
+a deployment linked to `main` rather than to what was running.
+
+**Fix**: `packages/core/src/source-links.ts` builds both links. Ref priority:
+`ORBIT_SOURCE_REF` (commit id preferred, branch/tag accepted, slashes preserved,
+`refs/heads/` stripped) → `main`. Unset builds still work and the docs footer says
+the link points at `main` because the build did not set the variable. Ref and file
+path are validated; nothing is read from a request. Plumbed as a Docker build arg,
+a Compose build arg, `.env.example` documentation and CI
+(`--build-arg ORBIT_SOURCE_REF=$GITHUB_SHA`).
+
+Verification: `tests/source-links.test.ts` covers fallback/commit/slash-branch/
+`refs/heads/`/unsafe refs/path rejection; a full `build:web` with
+`ORBIT_SOURCE_REF=$(git rev-parse HEAD)` emitted
+`.../blob/fee051a…/docs/MUSIC.md` into the prerendered pages; and that URL was
+fetched from GitHub, which renders `docs/MUSIC.md` at that commit (GitHub shows
+its "file does not exist on default branch" banner because the commit is on a
+work branch — the file content itself renders, and no request input is involved).
+
+### 6. Provider-auth wording
+
+**Root cause**: the `provider-login` next-step text asserted "The provider only
+serves this item to a signed-in session", a universal cause the exception cannot
+establish.
+
+**Fix**: the text now reports the observed evidence (a signed-in/verified session
+was requested, or this backend's client was rejected), says explicitly that this is
+neither a Discord voice-permission problem nor a Lavalink connectivity problem,
+and states that playback of the item stays unavailable here. The category id stays
+machine-readable and unchanged; ordinary users get the ≤300-character summary
+while the full exception remains in the operator-only audit detail; nothing
+reuses cookies/tokens/accounts or auto-enables OAuth/`poToken`.
+
+### Verification (this pass)
+
+| Check                    | Result                                                                  |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `npx vitest run`         | **882 tests in 70 files pass** (baseline was 836 in 69)                 |
+| `npm run typecheck`      | pass                                                                    |
+| `npm run lint`           | pass                                                                    |
+| `npm run format:check`   | pass                                                                    |
+| `npm run build:web`      | pass, also with `ORBIT_SOURCE_REF` set (verified in the emitted pages)  |
+| `npm run build:services` | pass                                                                    |
+| Intermediate commits     | `4a6041b` re-checked in a clean worktree: typecheck + music suites pass |
+| CI (this pass)           | see the CI row added in the final handover message                      |
+
+**Not verified here**: live Discord login, a real Lavalink node, audible playback,
+provider behaviour against SoundCloud/YouTube/Bandcamp, and any dashboard pixels
+or screenshots — no browser can be installed in this sandbox
+(`playwright install chromium` fails on the network) and CI artifacts are not
+downloadable here. The Playwright case added for the provider select was run by CI,
+not locally; a green screenshot step is still not visual review.
+
+**Still deferred, unchanged**: the connected **member list** (no implementation
+exists; needs a bot-side roster sync plus a paginated server-side read — a cache
+must not be presented as the full list), SponsorBlock guild UI, LavaSearch/lyrics
+surfaces, unrelated `<Switch>` labels, and any plugin upgrade.
