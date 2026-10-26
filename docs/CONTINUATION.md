@@ -1301,6 +1301,12 @@ The new accessibility suite found real defects rather than test noise:
   dimming was the whole defect; `/40` and `/50` survive only on `aria-hidden`
   decoration and disabled text.
 
+Four test-side assumptions were wrong for the same reason — they described
+native selects, or looked for a portalled popup inside a dialog, or assumed
+Radix tracks `aria-activedescendant`, or assumed the trigger keeps focus during
+type-ahead. The helpers and specs were corrected; no assertion was relaxed, no
+retry added and no primitive changed to satisfy a test.
+
 ### The `music-actions` flake had a cause, not just a probability
 
 `the play form sends the chosen provider and the server default otherwise`
@@ -1330,8 +1336,54 @@ Two changes, no test accommodation:
 - **Test**: it waits for the app's own signal (`toHaveValue("")`) before typing
   the next request. That is an assertion about the product, not a delay.
 
-Four test-side assumptions were wrong for the same reason — they described
-native selects, or looked for a portalled popup inside a dialog, or assumed
-Radix tracks `aria-activedescendant`, or assumed the trigger keeps focus during
-type-ahead. The helpers and specs were corrected; no assertion was relaxed, no
-retry added and no primitive changed to satisfy a test.
+### What the next two runs found
+
+- **A rate limit left the trigger early.** Covered above (`AuthProblem`).
+- **Scrollable code blocks had no focus stop** (`scrollable-region-focusable`,
+  `/docs/workflows`). A fenced block scrolls sideways, so a keyboard user could
+  not reach the end of a long command. Every `<pre>` the renderer frames now
+  carries `tabindex="0"` and a focus-visible ring; the table frame already
+  worked this way. `docs-content.test.ts` asserts it.
+- **Inline code inside a link was 4.4:1.** `--primary` at 60 % lightness is
+  4.4:1 on the `--muted` surface — under AA for 11 px text by a tenth. It is
+  58 % now: 4.85:1 on muted, 5.37:1 on white, and white-on-primary buttons
+  improve to 5.37:1. The hue is unchanged, so the brand still reads the same.
+- **The news-source test described a surface that does not exist.** News sources
+  render as cards with a per-card "Actions for …" menu; only the moderation
+  rules tab is a table. The spec asserted `row`, so no locator could ever
+  match. It now asserts the card heading and uses the same per-card menu the
+  rest of that spec already used.
+
+### Verification (pass 8)
+
+| Check                          | Result                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `npx vitest run`               | **897 tests in 71 files pass** (unchanged count; three assertions added, none removed)                 |
+| `npm run typecheck`            | pass (`next typegen` + both `tsc --noEmit` runs)                                                       |
+| `npm run lint`                 | pass, no warnings                                                                                      |
+| `npm run format:check`         | pass                                                                                                   |
+| `npm run build:web`            | pass (14.7 s), 25 documentation pages prerendered                                                      |
+| `npm run build:services`       | pass                                                                                                   |
+| CI on `c338d10` (`verify`)     | **success — 75 passed, 5 skipped, 0 failed, 0 flaky, 1.9 min**                                         |
+| CI on `c338d10` (`containers`) | success                                                                                                |
+| Earlier runs                   | `34332e8` 7 failed, `56e9d73` 3 failed, `82acef2` 3 failed, `6569cd0` 1 failed — each one step forward |
+
+The axe suite now passes in **both** themes across `/login`, overview, channels,
+audit, settings, music, `/docs` and `/docs/workflows`, including the keyboard
+behaviour of the migrated select and combobox.
+
+**Not verified here:** no browser exists in this sandbox (no Playwright browser
+download is reachable, and `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` is unset), so
+the browser suites and the axe scans were executed by CI only. The screenshot
+artifact is still not downloadable from here, so **no pixels were reviewed** in
+this pass: a green screenshot step is not a visual review. Dark Reader itself is
+still untestable here, so the extension half of the hydration story remains a
+documented diagnosis rather than an experiment.
+
+### Still deferred after pass 8
+
+The real server-member list, the SponsorBlock guild UI, LavaSearch/lyrics,
+`<label for>` associations on the remaining switches (they have `aria-label`,
+which names them but does not associate the visible text), and the
+mobile-overflow slug list. No PR was opened; everything stays on
+`arena/99c6cf65-discordjs-starter`.
