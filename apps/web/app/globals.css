@@ -12,6 +12,13 @@
     --border: 233 18% 92%;
     --primary: 258 64% 60%;
     --primary-foreground: 0 0% 100%;
+    /*
+      Tells the browser which scheme the surrounding tokens already implement, so
+      native widgets (scrollbars, form controls, the canvas behind overscroll)
+      follow the theme instead of staying light in dark mode. `next-themes` sets
+      the `dark` class on <html>, which is where the second declaration applies.
+    */
+    color-scheme: light;
   }
   .dark {
     --background: 235 22% 9%;
@@ -22,6 +29,7 @@
     --border: 235 16% 21%;
     --primary: 258 78% 70%;
     --primary-foreground: 252 35% 13%;
+    color-scheme: dark;
   }
   * {
     border-color: hsl(var(--border));
@@ -154,6 +162,12 @@
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
+/* Comfortable measure for prose; code blocks and tables keep the full width. */
+.docs-prose p,
+.docs-prose li,
+.docs-prose blockquote {
+  max-width: 72ch;
+}
 .docs-prose > h1 {
   font-size: 1.6rem;
   font-weight: 600;
@@ -236,24 +250,146 @@
   margin: 0.9rem 0;
   padding: 0.1rem 0 0.1rem 1rem;
 }
-.docs-prose table {
-  display: block;
-  width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
+/*
+  A table scrolls inside its own frame, never the page. The frame is focusable so
+  the overflow is reachable from the keyboard, which a `display: block` table
+  alone is not.
+*/
+.docs-table {
   margin: 1rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--card));
+}
+.docs-table:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+.docs-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
   font-size: 0.8rem;
+}
+.docs-table table {
+  display: table;
+  overflow: visible;
 }
 .docs-prose th,
 .docs-prose td {
-  border: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
   padding: 0.45rem 0.6rem;
   text-align: left;
   vertical-align: top;
 }
+.docs-prose tr:last-child td {
+  border-bottom: 0;
+}
 .docs-prose th {
   background: hsl(var(--muted));
   font-weight: 600;
+  white-space: nowrap;
+}
+/* Headings are links, not scripts: the anchor works with JavaScript disabled. */
+.docs-prose .docs-anchor {
+  margin-left: 0.4rem;
+  color: hsl(var(--muted-foreground));
+  text-decoration: none;
+  font-weight: 400;
+  opacity: 0;
+  transition: opacity 0.12s ease-out;
+}
+.docs-prose h2:hover > .docs-anchor,
+.docs-prose h3:hover > .docs-anchor,
+.docs-prose h4:hover > .docs-anchor,
+.docs-prose .docs-anchor:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .docs-prose .docs-anchor {
+    opacity: 0.6;
+  }
+}
+/*
+  Fenced code keeps its language and a copy control. The control stays hidden
+  until the enhancer has wired it, so a JavaScript-less reader never sees a
+  button that cannot do anything.
+*/
+.docs-code {
+  margin: 0.9rem 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+  background: hsl(var(--muted));
+}
+.docs-code figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.2rem 0.45rem 0.2rem 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+}
+.docs-code-lang {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.docs-copy {
+  display: none;
+  align-items: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  padding: 0.1rem 0.5rem;
+  font-size: 10px;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--card));
+}
+.docs-copy:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+.docs-copy:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 2px;
+}
+.docs-copy[data-copied="true"] {
+  color: hsl(160 84% 32%);
+  border-color: hsl(160 84% 32% / 0.4);
+}
+.dark .docs-copy[data-copied="true"] {
+  color: hsl(160 70% 65%);
+  border-color: hsl(160 70% 65% / 0.4);
+}
+[data-docs-copy-ready="true"] .docs-copy {
+  display: inline-flex;
+}
+.docs-prose .docs-code pre {
+  margin: 0;
+  border-radius: 0;
+  overflow-x: auto;
+  background: hsl(var(--muted));
+}
+/* The tone is read from the quote's own lead-in; unknown quotes stay neutral. */
+.docs-prose blockquote[data-tone="warning"] {
+  border-left-color: hsl(38 92% 50%);
+}
+.docs-prose blockquote[data-tone="requirement"] {
+  border-left-color: hsl(var(--primary));
+}
+.docs-prose blockquote[data-tone="note"] {
+  border-left-color: hsl(199 89% 48%);
+}
+.docs-prose blockquote {
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 0 6px 6px 0;
+  padding: 0.6rem 0 0.6rem 1rem;
 }
 .docs-prose hr {
   border: 0;

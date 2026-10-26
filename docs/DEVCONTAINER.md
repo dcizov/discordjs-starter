@@ -1,5 +1,7 @@
 # Dev Container: editor + running dashboard
 
+This is the editor workflow; [Development workflows](WORKFLOWS.md) compares it with the host-Node workflow and full-stack Docker, and this page owns the Dev Container steps.
+
 This adapts the separate-editor-container approach from the [working starter branch](https://github.com/dcizov/discordjs-starter/tree/arena/752cdf1a-discordjs-starter) to this monorepo. It reuses **this branch's** Compose services and Node 22 dev image; it does not bring back the old bot-only commands, PostgreSQL 18 image, or legacy database volume.
 
 ## What starts

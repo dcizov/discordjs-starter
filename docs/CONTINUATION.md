@@ -1021,3 +1021,127 @@ not locally; a green screenshot step is still not visual review.
 exists; needs a bot-side roster sync plus a paginated server-side read — a cache
 must not be presented as the full list), SponsorBlock guild UI, LavaSearch/lyrics
 surfaces, unrelated `<Switch>` labels, and any plugin upgrade.
+
+## Pass 7 (2026-10-26): hydration diagnosis and documentation site
+
+Two threads, kept separate: (1) reported React hydration warnings on `/login` and
+the dashboard, (2) turning `/docs` into a documentation site rather than a
+rendered Markdown dump.
+
+### Hydration: diagnosed, not guessed
+
+The reported diffs contained `--darkreader-inline-*` / `data-darkreader-inline-*`
+on Lucide icons, identity images and the activity chart's `<stop>`/`fill`. Those
+names do not exist in this repository: a grep over `apps/`, `packages/` and
+`tests/` returns no `darkreader` string, and no application code writes one. They
+are written by the **Dark Reader** extension into the live DOM, after the server
+HTML has been produced, so they cannot be part of a server/client mismatch.
+
+Evidence gathered before touching any rendering path:
+
+- The only `suppressHydrationWarning` in the codebase is the `<html>` element,
+  where `next-themes` sets the theme class before hydration. It stays that narrow.
+- Client components render time from serialized server values:
+  `presentation.referenceAt` feeds every `relativeTime(...)` call, the activity
+  chart publishes `data-activity-reference`/`-labels`/`-values` computed on the
+  server, and no component calls `Date.now()` during render. The one countdown
+  (`AuthProblem`) starts from a serialized `retryAfterSeconds` prop, so its first
+  client render equals the server render.
+- `style="color:transparent"` on images is React's own hydration-inserted style
+  for `next/image` and plain `<img>`; it appears in a clean browser too.
+- Lucide, `next/image` and the chart markup are deterministic; the new e2e case
+  compares the server HTML of the login mark with the hydrated DOM byte for byte.
+
+**No app-owned hydration bug was found, so no rendering behaviour was changed to
+hide one.** There is still no blanket or widened `suppressHydrationWarning`, no
+console interception, no DOM script or `MutationObserver` stripping extension
+attributes, no SSR opt-out and no Lucide/`next/image` rewrite.
+
+### What did change
+
+- `color-scheme: light` / `dark` is declared next to the existing `:root`/`.dark`
+  tokens, so native widgets (scrollbars, form controls, overscroll canvas) follow
+  the active theme.
+- `<meta name="darkreader-lock">` is rendered once in `app/layout.tsx` and hoisted
+  into `<head>` by React 19 (verified in the built HTML: exactly one occurrence,
+  inside `<head>`). This is Dark Reader's own documented opt-out for a site that
+  already has a theme.
+- The limits are documented rather than glossed over: the meta is a request, not a
+  guarantee. A user who disables "respect site settings", or an extension build
+  that restyles after the page settles, still gets Dark Reader, and nothing in the
+  app changes anyone's extension preference. The dashboard's own light/dark/system
+  toggle remains the supported way to change appearance.
+- Troubleshooting text for console noise was added to
+  [dashboard UX](DASHBOARD-UX.md#hydration-warnings-in-the-browser-console).
+
+### Verification for hydration
+
+- New `tests/e2e/hydration.spec.ts` runs in a fresh browser context with no
+  extensions: `/login` (server HTML vs hydrated icon markup), the dashboard
+  overview (icons, both identity images, activity chart), light/dark/system
+  (`color-scheme` computed value plus theme class), and the documentation pages.
+  Every console message and page error is collected unfiltered; only hydration
+  errors fail the test.
+- A real Dark Reader run is **not** available: CI launches plain Chromium without
+  an unpacked extension and this sandbox cannot install a browser at all. The
+  extension case is documented and reproduced by evidence, not by a synthetic
+  DOM mutation dressed up as an extension test.
+
+### Documentation site (`/docs`)
+
+- **Navigation**: grouped, collapsible (`<details>`) sidebar with
+  `aria-current="page"` and a visible active rail; on phones the same navigation
+  opens in the existing Radix dialog, anchored as a sheet, which closes on
+  selection and returns focus to its trigger. No second menu implementation.
+- **Page shell**: breadcrumb, title, one-sentence intro, audience/file metadata,
+  "On this page" (single `<nav>`, right rail on wide screens, compact list above
+  the body on phones), "More in {group}" chips, previous/next cards and the
+  source link pinned to `ORBIT_SOURCE_REF`.
+- **Index**: grouped cards with a clearly labelled **filter** — title, summary,
+  group and audience of the pages on the page, never the guide bodies. It states
+  its scope, shows `Showing N of M pages`, has a real empty state and a
+  live-region count. No hosted search service, no client-side index of page text.
+- **Code**: server-rendered `<figure>` frames with a language label, horizontal
+  scroll, and a copy button that is hidden until its handler is attached, so a
+  reader without JavaScript never sees a dead control. No highlighting library,
+  no line numbers, no animation.
+- **Anchors**: every heading keeps a stable id, carries a visible-on-hover/focus
+  `#` link, and clicking it copies the absolute deep link. Middle-click, "copy
+  link address" and JavaScript-off all still work, because the anchor is a real
+  link.
+- **Tables**: wrapped in a focusable, scrollable frame (`role="region"`,
+  `tabindex="0"`) instead of pushing the whole page sideways; prose is capped at a
+  comfortable measure while code and tables keep the full width.
+- **Workflows**: new [development workflows](WORKFLOWS.md) router compares the
+  host-Node workflow, full-stack Docker and the Dev Container with the same
+  labels the README uses, then links to the guide that owns each set of steps.
+  Commands are in the page and each workflow has a stable anchor; tabs were
+  rejected because hiding a command behind a tab breaks deep links and printing.
+- **Cross-links**: README, `DEVELOPMENT.md`, `DEVCONTAINER.md` and `DEPLOYMENT.md`
+  now point at the router page; module guides keep their existing links, which the
+  renderer rewrites to `/docs/<slug>#anchor`.
+
+### Sanitization and trust model (unchanged in principle)
+
+The content source is still repository-owned Markdown, rendered at build time by
+`marked` and sanitized by `sanitize-html`. The renderer now emits two structural
+elements of its own — the code frame and the table frame — plus one interactive
+element: the code-block copy `<button>`. The sanitizer allows that button **only**
+when it carries `data-docs-copy`; a `<button>` written in a Markdown file is
+dropped (`exclusiveFilter`), and scripts, iframes, images, event handlers and
+non-`https`/`mailto` URLs remain blocked. The migration cost is zero for content
+authors: no MDX, no directives, no executable Markdown.
+
+### Dependencies
+
+**None added.** The mobile sheet reuses `ui/dialog.tsx`, the trigger and links
+reuse `ui/button.tsx` variants, the filter is a labelled native input, the
+collapsible groups are native `<details>`, and copy reuses `lib/clipboard.ts` plus
+the existing Sonner toaster. Evaluated and rejected: `@radix-ui/react-collapsible`
+(the platform already collapses), `cmdk` (a second surface for the same filter),
+FlexSearch/Pagefind/Algolia (a second index or a hosted service), Shiki/Prism
+(weight, a second theme system, no benefit for shell snippets), and tabs
+(deeplink and printing costs). The decision is recorded in
+[the documentation platform page](DOCUMENTATION.md#interface-decisions-documentation-site).
+
+### Verification (this pass)

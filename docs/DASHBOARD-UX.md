@@ -136,3 +136,69 @@ re-filter) that bitmap every frame, and the same element also carried
 measurement in DevTools on a low-powered device was not possible here (no
 browser available in the sandbox). The user-facing preview should be checked on
 the deployment hardware.
+
+## Hydration warnings in the browser console
+
+React hydration warnings mean the server HTML and the first client render
+disagreed. They are worth fixing, but only once the cause is known — a warning
+does not by itself prove that a component, an icon library or the activity chart
+is nondeterministic.
+
+**What was reported.** Console diffs on `/login` (the Lucide `Orbit` mark), on
+dashboard routes (sidebar icons, identity images, the activity chart's `<stop>`
+elements and `fill` attributes) that contained `--darkreader-inline-*` and
+`data-darkreader-inline-*` properties, plus `style="color:transparent"` on
+images. Next 16.4.3, Webpack build.
+
+**What the evidence shows.**
+
+- No application file emits a `darkreader` attribute, custom property or
+  stylesheet rule. The names above are written by the **Dark Reader** browser
+  extension, which rewrites the live DOM after the page has loaded. They cannot
+  appear in server HTML because the extension is not running on the server.
+- `style="color:transparent"` on an `<img>` is React's own hydration-inserted
+  style for images (the same attribute is in a clean browser); it is not an
+  extension artefact and not a mismatch by itself.
+- The dashboard deliberately renders time-sensitive data from serialized server
+  values: relative times are computed from `presentation.referenceAt`, and the
+  activity chart exposes its labels/values/reference as `data-activity-*`
+  attributes computed on the server. No component reads `Date.now()` while
+  rendering. `tests/e2e/activity-hydration.spec.ts` checks that equality across
+  three client timezones.
+- The only `suppressHydrationWarning` in the codebase is on `<html>`, where
+  `next-themes` sets the theme class before React hydrates. It stays exactly
+  that narrow.
+
+So the reported diffs are **extension mutation**, not an app-owned mismatch. No
+rendering behaviour was changed to hide them: there is no blanket
+`suppressHydrationWarning`, no console filtering, no DOM script or
+`MutationObserver` that strips extension attributes, no SSR opt-out and no
+rewrite of Lucide or `next/image`.
+
+**What the app does about it.**
+
+- `<meta name="darkreader-lock">` is rendered once in the root layout (and
+  hoisted into `<head>`). This is Dark Reader's documented opt-out for sites
+  that already provide their own dark theme. It is a request, not a guarantee:
+  a user whose extension is configured to ignore site preferences, or an
+  extension version that re-applies styling after the page has settled, can
+  still restyle Orbit. It never changes anyone's extension setting.
+- `color-scheme: light` / `dark` is declared for the two themes, so native
+  widgets (scrollbars, form controls, overscroll canvas) follow the active
+  theme instead of staying light.
+- Orbit ships its own theme toggle in the dashboard header, including the
+  system setting; nothing depends on an extension to look right.
+
+**What to do if you still see extension noise.** Disable Dark Reader for the
+Orbit origin (or set it to respect site themes) and reload; then use the
+dashboard's own light/dark toggle. If a warning remains with the extension
+disabled, it is worth a bug report — include the route, the theme, and the
+message.
+
+**Verification.** `tests/e2e/hydration.spec.ts` loads `/login`, the dashboard
+overview, identity images and the activity chart in a fresh browser context
+(Playwright does not load extensions), captures every console message and page
+error without filtering, and fails on hydration errors in light, dark and system
+themes. A real Dark Reader run is **not** part of CI: it would need a persistent
+Chromium profile with an unpacked extension, which this project does not set up.
+Do not read a green test as "tested with Dark Reader".

@@ -139,6 +139,8 @@ Configuration is read on every bot action/message; feed schedules are reconciled
 
 ## Docker Compose
 
+Orbit supports three development workflows: the **host-Node workflow** above, the **full-stack Docker** stack below, and the **Dev Container**. [Development workflows](docs/WORKFLOWS.md) compares them side by side and links to the guide that owns each set of steps; this section keeps the Compose commands themselves in one place.
+
 ### Full-stack development with hot reload
 
 **Host prerequisites: Docker Engine/Desktop with Compose v2.24+ only; no host Node/npm.** All `npm` commands in this Docker workflow run inside containers. See [the comparison with `main`](docs/DEVELOPMENT.md#docker-development-compared-with-main) for the architecture, hot reload and database differences.

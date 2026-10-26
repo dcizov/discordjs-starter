@@ -42,6 +42,19 @@ async function open(page: Page, url: string) {
   });
 }
 
+/**
+ * Documentation pages have no dashboard hydration marker; they are static. Wait
+ * for the network instead, and apply the same motion suppression.
+ */
+async function openDocs(page: Page, url: string) {
+  await page.goto(url);
+  await page.waitForLoadState("networkidle");
+  await page.addStyleTag({
+    content:
+      "*,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important}",
+  });
+}
+
 async function capture(page: Page, name: string) {
   await page.screenshot({
     path: resolve(outputDir, `${name}.png`),
@@ -101,6 +114,23 @@ test.describe("visual evidence", () => {
       await page.waitForLoadState("networkidle");
       await capture(page, "desktop-audit-no-match");
     }
+  });
+
+  test("documentation index and guide, light and dark", async ({ page }) => {
+    await openDocs(page, "/docs");
+    await capture(page, "desktop-docs-index");
+    await openDocs(page, "/docs/workflows");
+    await capture(page, "desktop-docs-workflows");
+    await page.evaluate(() => window.localStorage.setItem("theme", "dark"));
+    await openDocs(page, "/docs/workflows");
+    await capture(page, "desktop-docs-workflows-dark");
+    await page.evaluate(() => window.localStorage.setItem("theme", "light"));
+    await page.setViewportSize(mobile);
+    await openDocs(page, "/docs/workflows");
+    await capture(page, "mobile-docs-guide");
+    await page.getByRole("button", { name: "Browse documentation" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await capture(page, "mobile-docs-navigation");
   });
 
   test("mobile navigation and overview", async ({ page }) => {

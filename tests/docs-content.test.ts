@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DOC_INDEX,
+  docNeighbors,
   docsNavigation,
   docsRoot,
   loadDoc,
@@ -82,6 +83,80 @@ describe("in-app documentation is generated from the repository", () => {
     expect(slugifyHeading("What Orbit never does (by design)")).toBe(
       "what-orbit-never-does-by-design"
     );
+  });
+
+  it("separates the page title from the rendered body exactly once", () => {
+    const doc = loadDoc("workflows");
+    expect(doc).not.toBeNull();
+    // The page component renders the title (with breadcrumb and intro), so the
+    // body must not repeat the heading.
+    expect(doc!.html.match(/<h1\b/g)).toHaveLength(1);
+    expect(doc!.body).not.toContain("<h1");
+    expect(doc!.body).toContain(`id="${doc!.toc[0].id}"`);
+    expect(doc!.titleId).toBe(slugifyHeading(doc!.title));
+    expect(doc!.html).toContain(`id="${doc!.titleId}"`);
+  });
+
+  it("frames fenced code with a language and a copy control only it may add", () => {
+    const rendered = renderDoc(
+      { ...DOC_INDEX[0], file: "inline" },
+      "# T\n\n```sh\nnpm ci\n```\n\n```\nplain\n```"
+    );
+    expect(rendered.body).toContain(
+      '<figure class="docs-code" data-language="sh">'
+    );
+    expect(rendered.body).toContain('<span class="docs-code-lang">sh</span>');
+    expect(rendered.body).toContain('class="language-sh">npm ci</code>');
+    expect(rendered.body).toContain("data-docs-copy");
+    // Without a language the frame still renders, labelled "code".
+    expect(rendered.body).toContain('<span class="docs-code-lang">code</span>');
+    // A button written in the Markdown is not a documentation control.
+    const hostile = renderDoc(
+      { ...DOC_INDEX[0], file: "inline" },
+      '# T\n\n<button onclick="alert(1)">Delete everything</button>'
+    );
+    expect(hostile.body).not.toContain("<button");
+  });
+
+  it("only labels a quote as a callout when its own text says so", () => {
+    const rendered = renderDoc(
+      { ...DOC_INDEX[0], file: "inline" },
+      "# T\n\n> **Warning:** never run two bots on one token.\n\n> **Prerequisite:** Docker Compose v2.24+.\n\n> **Note:** docs are generated.\n\n> A plain quotation."
+    );
+    expect(rendered.body).toContain('data-tone="warning"');
+    expect(rendered.body).toContain('data-tone="requirement"');
+    expect(rendered.body).toContain('data-tone="note"');
+    expect(rendered.body).toContain('data-tone="quote"');
+  });
+
+  it("gives a wide table its own focusable scroll frame", () => {
+    const rendered = renderDoc(
+      { ...DOC_INDEX[0], file: "inline" },
+      "# T\n\n| a | b |\n| - | - |\n| 1 | 2 |"
+    );
+    expect(rendered.body).toContain(
+      '<div class="docs-table" role="region" aria-label="Table, scrollable" tabindex="0">'
+    );
+    expect(rendered.body).toContain("</table></div>");
+  });
+
+  it("walks the curated order for previous/next links and stops at the ends", () => {
+    const first = docNeighbors(DOC_INDEX[0].slug);
+    expect(first.previous).toBeNull();
+    expect(first.next?.slug).toBe(DOC_INDEX[1].slug);
+    const last = docNeighbors(DOC_INDEX[DOC_INDEX.length - 1].slug);
+    expect(last.next).toBeNull();
+    expect(last.previous?.slug).toBe(DOC_INDEX[DOC_INDEX.length - 2].slug);
+    expect(docNeighbors("not-a-doc")).toEqual({ previous: null, next: null });
+    // The three-workflow router is reachable from the navigation.
+    expect(
+      docsNavigation()
+        .flatMap((section) => section.entries)
+        .some(
+          (entry) =>
+            entry.slug === "workflows" && entry.file === "docs/WORKFLOWS.md"
+        )
+    ).toBe(true);
   });
 
   it("refuses a path outside the documentation root", () => {

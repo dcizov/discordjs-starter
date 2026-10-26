@@ -1,5 +1,7 @@
 # Full-stack development in Docker
 
+This is one of the three supported workflows — the other two are the host-Node workflow in the README and the Dev Container. [Development workflows](WORKFLOWS.md) compares them; this page owns the Docker commands.
+
 This runs the **dashboard, Discord bot, background worker, PostgreSQL, Redis, and Lavalink** together. The web app uses Next development mode; the bot and worker use `tsx watch`. Source changes are bind-mounted, so ordinary code edits do not need an image rebuild. Use a dedicated Discord application/test server: **development mode is not demo mode**, and real messages/moderation/audio actions are possible.
 
 The base `docker-compose.yml` still uses production builds. `docker-compose.dev.yml` is an explicit override; do not use it for public production deployment.

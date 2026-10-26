@@ -1,48 +1,31 @@
+import { DocsMobileNav } from "@/components/docs/docs-mobile-nav";
+import { DocsNav, type DocsNavSection } from "@/components/docs/docs-nav";
 import { docsNavigation } from "@/lib/docs-content";
-import { ArrowLeft, BookOpen } from "lucide-react";
+import { SOURCE_REPOSITORY } from "@orbit/core/source-links";
+import { ArrowLeft, BookOpen, Github } from "lucide-react";
 import Link from "next/link";
 
 /**
  * Documentation shell.
  *
- * Server-rendered, no client JavaScript required: the navigation is a plain
- * list on wide screens and a `<details>` disclosure on small ones, so keyboard
- * and screen-reader users get the same content without a menu script. Every
- * page is a stable `/docs/<slug>` URL that can be linked from the dashboard,
- * a GitHub issue or a support reply.
+ * The layout is server-rendered; only the navigation is a client component, and
+ * only because it marks the current page. Every page is a stable `/docs/<slug>`
+ * URL that can be linked from the dashboard, a GitHub issue or a support reply,
+ * and the guides are the repository's own Markdown rendered at build time.
  */
 export default function DocsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const sections = docsNavigation();
-  const nav = (
-    <nav aria-label="Documentation" className="space-y-6">
-      {sections.map((section) => (
-        <div key={section.group}>
-          <h2 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {section.group}
-          </h2>
-          <ul className="space-y-1">
-            {section.entries.map((entry) => (
-              <li key={entry.slug}>
-                <Link
-                  href={`/docs/${entry.slug}`}
-                  className="block rounded-md px-2 py-1.5 text-[12px] leading-snug text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                >
-                  {entry.title}
-                  <span className="mt-0.5 block text-[10px] text-muted-foreground/80">
-                    {entry.audience === "developer" ? "Developer" : "User"}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </nav>
-  );
+  const sections: DocsNavSection[] = docsNavigation().map((section) => ({
+    group: section.group,
+    entries: section.entries.map((entry) => ({
+      slug: entry.slug,
+      title: entry.title,
+      audience: entry.audience,
+    })),
+  }));
   return (
     <div className="min-h-screen bg-background">
       <a
@@ -51,11 +34,11 @@ export default function DocsLayout({
       >
         Skip to content
       </a>
-      <header className="border-b">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-4 sm:px-6">
+      <header className="sticky top-0 z-30 border-b bg-background/85 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
           <Link
             href="/"
-            className="flex items-center gap-2 text-sm font-semibold"
+            className="flex items-center gap-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <ArrowLeft size={15} aria-hidden="true" />
             Orbit
@@ -65,22 +48,31 @@ export default function DocsLayout({
           </span>
           <Link
             href="/docs"
-            className="flex items-center gap-1.5 text-sm font-medium"
+            className="flex items-center gap-1.5 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <BookOpen size={15} aria-hidden="true" />
             Documentation
           </Link>
+          <div className="ml-auto flex items-center gap-3">
+            <a
+              href={SOURCE_REPOSITORY}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 lg:flex"
+            >
+              <Github size={13} aria-hidden="true" />
+              Source
+              <span className="sr-only"> repository (opens in a new tab)</span>
+            </a>
+            <div className="lg:hidden">
+              <DocsMobileNav sections={sections} />
+            </div>
+          </div>
         </div>
       </header>
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-6 sm:px-6 lg:grid-cols-[230px_minmax(0,1fr)]">
-        <div className="lg:sticky lg:top-6 lg:self-start">
-          <details className="rounded-lg border p-3 lg:hidden">
-            <summary className="cursor-pointer text-xs font-semibold">
-              Browse documentation
-            </summary>
-            <div className="mt-4">{nav}</div>
-          </details>
-          <div className="hidden lg:block">{nav}</div>
+      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[230px_minmax(0,1fr)]">
+        <div className="hidden lg:sticky lg:top-[4.25rem] lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:pr-2">
+          <DocsNav sections={sections} />
         </div>
         <main id="docs-content" className="min-w-0">
           {children}

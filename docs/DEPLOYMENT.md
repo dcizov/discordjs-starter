@@ -8,7 +8,7 @@
 - [ ] `ORBIT_SOURCE_REF` (optional) is the commit id you deployed, so the docs
       pages' "view the source" link points at the code that is actually running.
       Pass it at build time (`docker build --build-arg ORBIT_SOURCE_REF=$(git rev
-      parse HEAD)`, or `ORBIT_SOURCE_REF=…` before `npm run build`); unset links
+    parse HEAD)`, or `ORBIT_SOURCE_REF=…` before `npm run build`); unset links
       to `main`. It is a build-time value, never read from a request.
 - [ ] `APP_URL` is the actual HTTPS origin (no trailing slash), proxy forwards trusted headers, secure cookies are enabled, and `APP_SECRET` is at least 32 random characters.
 - [ ] Database/Redis/Lavalink credentials are strong and held in a secret manager or protected environment files. No `NEXT_PUBLIC_*` secret variables exist.
@@ -54,7 +54,7 @@ docker compose --profile live run --rm --build migrate
 docker compose --profile live up -d --build
 ```
 
-For hot-reloading Docker development, use the [development override/startup commands](DEVELOPMENT.md#2-start-every-service) instead. Host-run Node services remain a separate optional workflow.
+For hot-reloading Docker development, use the [development override/startup commands](DEVELOPMENT.md#2-start-every-service) instead. Host-run Node services remain a separate optional workflow; [Development workflows](WORKFLOWS.md) compares all three.
 
 Do **not** delete the old volume or run `docker compose down -v` as a troubleshooting shortcut. The new Orbit database starts empty. If you need data from the original installation, keep its volume, back it up using a compatible PostgreSQL version, and plan an explicit import into Orbit's new schema. If an earlier Orbit installation already stored data in `pgdata`, back it up before moving that data to the new volume; the volume switch does not migrate it automatically.
 

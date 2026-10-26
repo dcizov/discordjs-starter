@@ -11,8 +11,9 @@ history.
 - `docs/*.md` — setup, permissions, module guides, architecture, security,
   deployment, and the current status report (`CONTINUATION.md`).
 - `/docs` in the dashboard — the same Markdown, rendered inside the product at
-  stable `/docs/<slug>` URLs, with grouped navigation, a per-page table of
-  contents and previous/next links.
+  stable `/docs/<slug>` URLs, with a grouped sidebar (and a dialog sheet on
+  phones), an index filter, a per-page "On this page" list, per-section anchors,
+  language-labelled code frames with copy buttons, and previous/next links.
 
 There is **one content source of truth**: the Markdown files. The in-app pages
 are generated from them at build time; there is no second copy of a permissions
@@ -66,12 +67,52 @@ elsewhere" would be unverified.
    folder and a request never touches the disk. A content change ships with the
    next build — normal for static documentation, and documented here so nobody
    expects a runtime edit to appear.
-4. **Search: not justified yet.** With roughly two dozen pages, grouped
-   navigation plus the browser's own find is faster than a search index, and a
-   client-side search would add JavaScript and a second index to keep correct.
-   Revisit if the page count grows or versioned API references are added.
+4. **Search: a page filter, not full-text search.** The index has one filter
+   field. It matches **title, summary, group and audience** of the pages the
+   index already renders, and it says so in its own help text. It never claims
+   to search inside a guide, because the page bodies are not loaded into that
+   component and a fake "result" would be worse than no search. A real search
+   index (FlexSearch, Pagefind, Algolia, Orama…) would either ship a second copy
+   of every page to the browser or add a hosted service with its own privacy and
+   availability surface — not justified for a few dozen pages. Revisit if the
+   page count grows or versioned API references are added.
 5. **Versioning: not applicable.** The docs describe the deployed code in the
    same commit; there is no released matrix of versions to pin.
+
+## Interface decisions (documentation site)
+
+The documentation site reuses the dashboard's own primitives. It introduces **no
+second design system and no new dependency**.
+
+| Need                    | What Orbit uses                                                                                                | Why not a new dependency                                                                                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Grouped navigation      | `<details>` + `<a>` in a small client component that reads `usePathname` for the active page                   | Native disclosures are keyboard operable and announced without JavaScript. `@radix-ui/react-collapsible` would add a dependency for behaviour the platform already has.                                                    |
+| Mobile navigation       | The existing Radix `ui/dialog.tsx`, anchored to the left edge as a sheet                                       | Focus trap, Escape, focus restore and `aria-modal` already shipped for the dashboard dialogs.                                                                                                                              |
+| Filter field            | A labelled `<input type="search">` inside a card                                                               | A command palette (`cmdk`) would present the same filter as a second, keyboard-only surface for no additional data.                                                                                                        |
+| Code blocks and anchors | Server-rendered `<figure>`/`<figcaption>` frames plus a small enhancer that adds copy handlers after hydration | Highlighting libraries (Shiki, Prism) are heavy for shell/config snippets and need a theme per colour scheme; line numbers and animation add noise.                                                                        |
+| Tabs                    | Rejected for setup instructions                                                                                | Tabs hide commands and split deep links. The three workflows are a comparison table plus one section each, so every command is visible, printable and linkable (`/docs/workflows#full-stack-development-with-hot-reload`). |
+
+Rendering stays build-time: `renderDoc` emits anchored headings, code frames,
+tone-aware quotes and a scrollable table wrapper, then sanitizes the result.
+The sanitizer allows exactly one generated interactive tag — the code-block
+copy `<button>`, which is dropped unless `renderDoc` produced it — so Markdown
+still cannot introduce a control, script, iframe or inline handler. Copy
+buttons are hidden until their handler is attached, so a reader without
+JavaScript never sees a dead control.
+
+### Reading behaviour and states
+
+- Desktop: grouped sidebar, active page marked with `aria-current="page"` and a
+  visible rail. Phones: the same navigation in a dialog sheet.
+- A page has a title, a one-sentence intro derived from its first paragraph, a
+  "On this page" list, "More in {group}" chips and previous/next cards.
+- Long tables scroll inside a focusable frame; long commands scroll inside
+  their code frame; body prose is capped at a comfortable measure.
+- There is no loading or error state because every page is prerendered and a
+  missing slug is a 404; the index filter has a visible empty state and a
+  live-region result count instead of a spinner over static content.
+- Light and dark both come from the existing design tokens; `color-scheme` is
+  declared for the two themes so native widgets follow them.
 
 ## Visibility: who can read the docs
 
@@ -108,27 +149,34 @@ role check.
    entry — implementation diaries must not pose as user help.
 3. Keep the first `#` heading as the page title; give sections `##`/`###`
    headings. Heading ids are generated from the text, so anchor links stay
-   stable as long as the heading text does.
-4. Link other docs by file name (`PERMISSIONS.md`, `docs/MUSIC.md#source-policy`);
+   stable as long as the heading text does. The page renders that title itself
+   (with breadcrumb and intro), so do not repeat it in the body.
+4. Label a fenced code block (`sh`, `dotenv`, `text`, …): the label is shown in
+   the frame header. Write `> **Warning:** …`, `> **Prerequisite:** …` or
+   `> **Note:** …` for a callout — the tone is read from that lead-in, and an
+   unrecognised quote stays a plain quote rather than being mislabelled.
+5. Link other docs by file name (`PERMISSIONS.md`, `docs/MUSIC.md#source-policy`);
    the renderer rewrites those to `/docs/<slug>#anchor`. Absolute `https://`
    links are kept and marked `rel="noopener noreferrer"`.
-5. Run `npm test` — `tests/docs-content.test.ts` checks that every listed file
+6. Run `npm test` — `tests/docs-content.test.ts` checks that every listed file
    exists, that slugs are unique, that headings get unique ids, that raw HTML is
    sanitized and that links are rewritten. Run `npm run build:web` to confirm
    every page still prerenders.
-6. Keep product help and implementation history apart: `CONTINUATION.md`,
+7. Keep product help and implementation history apart: `CONTINUATION.md`,
    `IMPLEMENTATION-REVIEW.md` and similar belong to the `Project` group, not to
    the user guides.
 
 ## Accessibility and mobile behaviour
 
 - Semantic structure (`article`, `nav aria-label`, `main`, sequential
-  headings), a visible-on-focus skip link, and a `<details>` disclosure for
-  navigation on small screens instead of a JavaScript menu.
-- Tables are horizontally scrollable containers, code blocks wrap, long URLs
-  break, and tap targets are full-width list rows.
-- No colour-only state, no automatic motion, and no content that requires
-  JavaScript. The whole documentation surface is server-rendered.
+  headings), a visible-on-focus skip link, and a focus-trapping dialog sheet for
+  navigation on small screens. The desktop sidebar stays server-rendered.
+- Tables and code scroll inside their own focusable frames, long URLs break, and
+  tap targets are full-width rows.
+- No colour-only state (the active page also carries `aria-current="page"`), no
+  automatic motion, and no content that requires JavaScript. The whole
+  documentation surface is server-rendered; copy buttons are the only
+  enhancement, and they appear only after they work.
 - Contextual links: every module's setup banner links to that module's guide,
   and the dashboard help dialog links to the setup, permission, dashboard,
   music, news and deals pages.
