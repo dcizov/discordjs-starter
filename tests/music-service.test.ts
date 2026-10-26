@@ -475,3 +475,102 @@ describe("a deleted DJ role", () => {
     expect(state.paused).toBe(true);
   });
 });
+
+describe("idle voice disconnect", () => {
+  type Internals = {
+    wire(player: Player): void;
+    idle: {
+      reason(id: string): string | undefined;
+      schedule(id: string, reason: string, seconds: number): void;
+      cancel(id: string): void;
+    };
+    leaveWhenIdle(id: string, reason: string): Promise<void>;
+  };
+  function wired(queueSize = 0) {
+    const music = service(),
+      id = "120000000000000002";
+    const player = Object.assign(new EventEmitter(), {
+      guildId: id,
+    }) as unknown as Player;
+    music.backend!.players.set(id, player);
+    const internals = music as unknown as Internals;
+    internals.wire(player);
+    const state = music.state(id);
+    state.current = {
+      id: "track-1",
+      title: "A public track",
+      author: "Artist",
+      duration: 200_000,
+      uri: "",
+      requestedBy: "Listener",
+      source: "youtube",
+    };
+    for (let n = 0; n < queueSize; n++)
+      state.tracks.push({
+        id: `track-${n + 2}`,
+        title: `Queued ${n + 1}`,
+        author: "Artist",
+        duration: 180_000,
+        uri: "",
+        requestedBy: "Listener",
+      });
+    const leave = vi
+      .spyOn(music.backend!, "leaveVoiceChannel")
+      .mockResolvedValue(undefined);
+    return { music, id, player, internals, leave, state };
+  }
+  it("waits after the last track instead of dropping out of voice", async () => {
+    const { music, id, player, internals, leave, state } = wired();
+    (player as unknown as EventEmitter).emit("end", { reason: "finished" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(leave).not.toHaveBeenCalled();
+    expect(internals.idle.reason(id)).toBe("queue-finished");
+    expect(state.current).toBeNull();
+    expect(db.putMusicState).toHaveBeenCalled();
+    internals.idle.cancel(id);
+    await music.shutdown();
+  });
+  it("uses the same wait for a track that failed to load", async () => {
+    const { music, id, player, internals, leave } = wired();
+    (player as unknown as EventEmitter).emit("end", { reason: "loadFailed" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(leave).not.toHaveBeenCalled();
+    expect(internals.idle.reason(id)).toBe("track-failed");
+    internals.idle.cancel(id);
+    await music.shutdown();
+  });
+  it("re-checks the queue before the timer disconnects", async () => {
+    const { music, id, internals, leave, state } = wired();
+    internals.idle.schedule(id, "queue-finished", 60);
+    state.tracks.push({
+      id: "track-late",
+      title: "Queued while idle",
+      author: "Artist",
+      duration: 100_000,
+      uri: "",
+      requestedBy: "Listener",
+      encoded: "encoded-track",
+    });
+    await internals.leaveWhenIdle(id, "queue-finished");
+    expect(leave).not.toHaveBeenCalled();
+    internals.idle.cancel(id);
+    await music.shutdown();
+  });
+  it("leaves once the queue is really empty, and clears the snapshot", async () => {
+    const { music, id, internals, leave, state } = wired();
+    state.current = null;
+    await internals.leaveWhenIdle(id, "queue-finished");
+    expect(leave).toHaveBeenCalledWith(id);
+    expect(music.state(id).current).toBeNull();
+    expect(db.putMusicState).toHaveBeenCalled();
+    await music.shutdown();
+  });
+  it("clears every pending timer on shutdown", async () => {
+    const { music, id, internals } = wired();
+    internals.idle.schedule(id, "queue-finished", 60);
+    await music.shutdown();
+    expect(internals.idle.reason(id)).toBeUndefined();
+  });
+});

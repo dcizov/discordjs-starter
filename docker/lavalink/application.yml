@@ -38,8 +38,15 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: false
     allowDirectPlaylistIds: false
-    # No age-restriction-capable embedded/TV clients, login or bypass tokens.
-    clients: [MUSIC, ANDROID_VR, WEB]
+    # Clients are tried in order. MUSIC serves ytmsearch and metadata, ANDROID_VR
+    # and WEB stream audio, WEBEMBEDDED is the fourth documented playback client
+    # (upstream's own example list). None of them needs credentials, and none of
+    # them can bypass a provider restriction: an item that YouTube only serves to
+    # a signed-in session still fails here, and stays failed.
+    clients: [MUSIC, ANDROID_VR, WEB, WEBEMBEDDED]
+    # Opt-in only, never shipped credentials. See docs/MUSIC-PLUGINS.md for the
+    # documented OAuth (burner account) and poToken options, their terms and the
+    # risk they carry. Default off: no account token, no bypass, no fake login.
     oauth:
       enabled: false
   lavasrc:

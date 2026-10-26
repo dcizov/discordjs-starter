@@ -411,6 +411,30 @@ describe("persistent feed deduplication and tenant isolation", () => {
       ).total
     ).toBe(0);
   });
+  it("keeps a one-line summary and the full diagnostic apart", async () => {
+    const summary =
+      "YouTube playback failed (provider-login): this video requires login";
+    const details =
+      "Client [ANDROID_VR] failed: This video requires login.\nClient [WEB] failed: No supported audio streams available.";
+    await audit(g1, actor, "failed", "music playback", summary, { details });
+    const page = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "failed",
+    });
+    expect(page.rows[0]).toMatchObject({ detail: summary, details });
+    // Old rows predate the column and still serialize (null, not undefined).
+    await audit(g1, actor, "failed", "music", "A legacy summary");
+    const legacy = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "legacy",
+      filter: "failed",
+    });
+    expect(legacy.rows[0]).toMatchObject({ detail: "A legacy summary" });
+    expect(legacy.rows[0].details ?? null).toBeNull();
+  });
   it("writes configuration and its audit record together", async () => {
     const r = await saveResource(
       g1,

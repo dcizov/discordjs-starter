@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoadType, type LavalinkResponse, type Track } from "shoukaku";
 import {
   musicSourceFailure,
+  musicSourceFailureReport,
   prepareMusicQuery,
   resolveMusicQuery,
   type MusicNodeInfo,
@@ -388,5 +389,128 @@ describe("music source resolution", () => {
     expect(message).toContain("track playback failed");
     expect(message).toContain("after track lookup");
     expect(message).not.toContain("not a Discord voice-connection");
+  });
+});
+
+describe("provider URL forms", () => {
+  const hosts = {
+    ...settings,
+    allowedHosts: ["soundcloud.com", "bandcamp.com", "youtube.com", "youtu.be"],
+  };
+  it.each([
+    // Ordinary provider variations an administrator will paste.
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ?t=42",
+    "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+    "https://www.youtube.com/live/dQw4w9WgXcQ",
+    "https://www.youtube.com/playlist?list=PL1234567890",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890&start_radio=1",
+  ])("accepts the YouTube form %s", async (url) => {
+    expect(await prepareMusicQuery(url, hosts, publicDns)).toMatchObject({
+      source: "youtube",
+      kind: "url",
+    });
+  });
+  it.each([
+    "https://soundcloud.com/artist/track",
+    "https://soundcloud.com/artist/sets/an-album",
+    "https://on.soundcloud.com/short-link",
+    "https://m.soundcloud.com/artist/track",
+  ])("accepts the SoundCloud form %s", async (url) => {
+    expect(await prepareMusicQuery(url, hosts, publicDns)).toMatchObject({
+      source: "soundcloud",
+      kind: "url",
+    });
+  });
+  it.each([
+    // A lookalike host must not inherit the allowlist.
+    ["https://youtube.com.evil.example/watch?v=x", "not enabled"],
+    ["https://notyoutube.com/watch?v=x", "not enabled"],
+    // Unencrypted URLs are refused before DNS resolution.
+    ["http://www.youtube.com/watch?v=x", "public HTTPS"],
+    // Credentials in the URL are refused.
+    ["https://user:pass@youtube.com/watch?v=x", "public HTTPS"],
+    // SoundCloud's shortener for other domains is not an approved source.
+    ["https://soundcloud.app.goo.gl/x", "not enabled"],
+  ])("refuses %s", async (url, message) => {
+    await expect(prepareMusicQuery(url, hosts, publicDns)).rejects.toThrow(
+      message
+    );
+  });
+});
+
+describe("bare provider identifiers", () => {
+  it.each(["dQw4w9WgXcQ", "PL1234567890abcdef", "OLAK5uy_mixed-case01"])(
+    "asks for the full link instead of searching for %s",
+    async (identifier) => {
+      await expect(prepareMusicQuery(identifier, settings)).rejects.toThrow(
+        "bare YouTube identifier"
+      );
+    }
+  );
+  it("still treats ordinary short text as a search", async () => {
+    expect(await prepareMusicQuery("daft punk", settings)).toMatchObject({
+      kind: "search",
+    });
+  });
+});
+
+describe("playback failure reports", () => {
+  const reported = {
+    message: "All clients failed to load the item.",
+    severity: "fault" as const,
+    cause:
+      "Client [ANDROID_VR] failed: This video requires login.\nClient [WEB] failed: No supported audio streams available.",
+  };
+  it("classifies the reported YouTube restriction and keeps a short summary", () => {
+    const report = musicSourceFailureReport(reported, {
+      stage: "playback",
+      source: "youtube",
+      info,
+    });
+    expect(report.category).toBe("provider-login");
+    expect(report.summary.length).toBeLessThanOrEqual(300);
+    expect(report.summary).toContain("YouTube playback failed");
+    expect(report.summary).toContain("provider-login");
+    expect(report.summary).not.toContain("\n");
+    // The full diagnostic keeps the client detail for the event dialog.
+    expect(report.details).toContain("ANDROID_VR");
+    expect(report.details).toContain("No supported audio streams available");
+  });
+  it.each([
+    ["DRM protected stream", "drm"],
+    ["No playable stream found", "no-streams"],
+    ["HTTP 429 Too Many Requests", "rate-limit"],
+    ["HTTP 403 Forbidden", "auth"],
+    ["java.net.SocketTimeoutException: timeout", "network"],
+    ["some unexpected bridge failure", "unknown"],
+  ])("categorizes %s as %s", (cause, category) => {
+    expect(
+      musicSourceFailureReport({ cause }, { stage: "playback", source: null })
+        .category
+    ).toBe(category);
+  });
+  it("never puts credentials into the summary or details", () => {
+    vi.stubEnv("LAVALINK_PASSWORD", "private-lavalink-password");
+    const report = musicSourceFailureReport(
+      {
+        message: "private-lavalink-password",
+        cause:
+          "HTTP 403 https://api.example/track?client_id=private-id&Signature=private-signature",
+      },
+      { stage: "playback", source: "soundcloud", info }
+    );
+    for (const secret of [
+      "private-lavalink-password",
+      "private-id",
+      "private-signature",
+    ]) {
+      expect(report.summary).not.toContain(secret);
+      expect(report.details).not.toContain(secret);
+    }
   });
 });

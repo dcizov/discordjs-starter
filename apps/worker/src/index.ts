@@ -3,6 +3,7 @@ import type { Resource } from "@orbit/core";
 import { fingerprint, safeText } from "@orbit/core";
 import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { pollDeals, pollSource } from "@orbit/core/feeds";
+import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import { assertDeliverableDeal } from "@orbit/core/deal-policy";
 import { dealEmbed, dealLinkRow } from "@orbit/core/deal-presentation";
@@ -41,6 +42,39 @@ async function main() {
   const rest = new REST({ version: "10", timeout: 15000, retries: 3 }).setToken(
     required("DISCORD_TOKEN")
   );
+  /**
+   * Recorded identity for worker-generated audit rows.
+   *
+   * These rows used to be written as `actorId: "orbit-worker"` with no avatar, so
+   * the dashboard showed a generic mark instead of the bot's real picture. One
+   * `GET /users/@me` per process (cached, including a failed lookup) gives the
+   * same id/avatar the bot would record, without a request per delivery.
+   */
+  let botIdentity: { id: string; name: string; avatar: string | null } | null =
+    null;
+  let botIdentityLookup: Promise<void> | null = null;
+  async function auditActor() {
+    if (!botIdentity && !botIdentityLookup) {
+      botIdentityLookup = (async () => {
+        try {
+          const me = (await rest.get(Routes.user())) as {
+            id: string;
+            avatar: string | null;
+          };
+          botIdentity = { id: me.id, name: "Orbit", avatar: me.avatar ?? null };
+        } catch (error) {
+          // Fall back to the stable synthetic actor rather than inventing a face.
+          logger.warn(
+            { error: errorDiagnostic(error) },
+            "Could not read the bot identity for audit records"
+          );
+          botIdentity = { id: "orbit-worker", name: "Orbit", avatar: null };
+        }
+      })();
+    }
+    if (botIdentityLookup) await botIdentityLookup;
+    return botIdentity!;
+  }
   async function updateSourceHealth(
     source: Resource,
     healthy: boolean,
@@ -236,10 +270,12 @@ async function main() {
           .update(schema.deliveries)
           .set({ status: "delivered", error: null, deliveredAt: new Date() })
           .where(eq(schema.deliveries.id, row.id));
+        const actor = await auditActor();
         await tx.insert(schema.auditLogs).values({
           guildId: row.guildId,
-          actorId: "orbit-worker",
-          actorName: "Orbit",
+          actorId: actor.id,
+          actorName: actor.name,
+          actorAvatar: actor.avatar,
           action: "delivered",
           target: source.name,
           detail: `Delivered ${safeText(row.title, 100)} to #${channel.name}`,

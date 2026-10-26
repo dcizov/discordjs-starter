@@ -1,6 +1,7 @@
 import { assertMusicQueueAdmission } from "@orbit/core/music-policy";
 import type { MusicState, Track } from "@orbit/core";
 import { safeText } from "@orbit/core";
+import { safeImageUrl } from "@orbit/core/feed-content";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import {
@@ -12,6 +13,7 @@ import {
 } from "@orbit/db";
 import {
   ChannelType,
+  Events,
   PermissionFlagsBits,
   type Client,
   type Guild,
@@ -20,13 +22,18 @@ import {
 import { randomUUID } from "node:crypto";
 import { type Track as LavalinkTrack, type Player } from "shoukaku";
 import { MusicBackend } from "./backend";
+import {
+  DEFAULT_IDLE_SECONDS,
+  EMPTY_CHANNEL_GRACE_SECONDS,
+  IdleDisconnector,
+} from "./idle";
 import { MusicNodeMetadata } from "./node";
 import { joinMusicVoice, MusicDiscordConnector } from "./voice";
 import { MusicPluginRest, sponsorBlockCategories } from "./plugins";
 import { MusicSearchSessions } from "./search-session";
 import {
   musicNodeDescription,
-  musicSourceFailure,
+  musicSourceFailureReport,
   resolveMusicQuery,
 } from "./source";
 const MAX_SEARCH_RESULTS = 5;
@@ -48,6 +55,8 @@ export type ResolvedTrack = {
   duration: number;
   uri: string;
   source: string;
+  /** Validated public artwork URL from the provider, when it supplied one. */
+  artwork?: string | null;
 };
 
 export class MusicService {
@@ -59,8 +68,48 @@ export class MusicService {
   private lastSave = new Map<string, number>();
   private metadata = new MusicNodeMetadata();
   private voiceConnector: MusicDiscordConnector;
+  /**
+   * Owns every "leave voice later" timer. Nothing else in this class calls
+   * `setTimeout`, so a shutdown or an explicit stop cannot leave one behind.
+   */
+  private idle = new IdleDisconnector((guildId, reason) => {
+    void this.leaveWhenIdle(guildId, reason).catch((error) =>
+      logger.warn(
+        { guildId, reason, error: errorDiagnostic(error) },
+        "Idle voice cleanup failed"
+      )
+    );
+  });
+  private readonly onVoiceState: (
+    oldState: { channelId: string | null; guild: Guild },
+    newState: { channelId: string | null; guild: Guild }
+  ) => void;
   constructor(private client: Client) {
     this.voiceConnector = new MusicDiscordConnector(client);
+    // "Everybody left the channel" is the one teardown a listener expects, but
+    // it still gets a grace period so a re-joining listener keeps the player.
+    this.onVoiceState = (oldState, newState) => {
+      const guildId = newState.guild.id;
+      const player = this.backend?.players.get(guildId);
+      if (!player) return;
+      const channel = newState.guild.members.me?.voice.channel;
+      // Only react to changes in the channel Orbit is actually sitting in.
+      if (
+        !channel ||
+        (oldState.channelId !== channel.id && newState.channelId !== channel.id)
+      )
+        return;
+      const humans = channel.members.filter((member) => !member.user.bot).size;
+      if (humans === 0) {
+        // Playing to an empty channel is not playback anybody asked for. The
+        // short grace covers a reconnecting listener; a queue that is still
+        // running keeps its longer idle timer otherwise.
+        this.idle.schedule(guildId, "alone", EMPTY_CHANNEL_GRACE_SECONDS);
+      } else if (this.idle.reason(guildId) === "alone") {
+        this.idle.cancel(guildId);
+      }
+    };
+    client.on(Events.VoiceStateUpdate, this.onVoiceState);
     this.backend =
       process.env.LAVALINK_URL && process.env.LAVALINK_PASSWORD
         ? new MusicBackend(
@@ -91,6 +140,7 @@ export class MusicService {
           if (player.node.name !== name) continue;
           void this.locked(id, async () => {
             if (this.backend?.players.get(id) !== player) return;
+            this.idle.cancel(id);
             await this.backend.leaveVoiceChannel(id);
             this.sessions.set(id, emptyMusic());
             await this.persist(id);
@@ -165,6 +215,27 @@ export class MusicService {
     if (!this.sessions.has(id)) this.sessions.set(id, emptyMusic());
     return this.sessions.get(id)!;
   }
+  /**
+   * Display-only limits for `/queue`. These come from the stored guild config;
+   * when the row cannot be read the schema defaults are shown rather than a
+   * number invented per call. Admission decisions still use the stored config.
+   */
+  async limits(id: string) {
+    try {
+      const stored = await getGuild(id);
+      return {
+        maxQueue: stored?.config.music.maxQueue ?? 100,
+        idleDisconnectSeconds:
+          stored?.config.music.idleDisconnectSeconds ?? DEFAULT_IDLE_SECONDS,
+      };
+    } catch (error) {
+      logger.warn(
+        { guildId: id, error: errorDiagnostic(error) },
+        "Could not read the music limits; showing the defaults"
+      );
+      return { maxQueue: 100, idleDisconnectSeconds: DEFAULT_IDLE_SECONDS };
+    }
+  }
   private async persist(id: string) {
     const state = this.state(id);
     state.updatedAt = new Date().toISOString();
@@ -180,7 +251,11 @@ export class MusicService {
           if (state.repeat === "track") state.tracks.unshift(state.current);
           else if (state.repeat === "queue") state.tracks.push(state.current);
         }
-        await this.next(player.guildId, player);
+        await this.next(
+          player.guildId,
+          player,
+          event.reason === "loadFailed" ? "track-failed" : "queue-finished"
+        );
       }).catch((e) =>
         logger.error(
           { error: e.message, guildId: player.guildId },
@@ -201,21 +276,31 @@ export class MusicService {
     });
     player.on("exception", (event) => {
       if (this.backend?.players.get(player.guildId) !== player) return;
-      const detail = musicSourceFailure(event.exception, {
+      // The failing track is still `state.current` here; Lavalink sends the
+      // exception before the matching end event, so the source is known.
+      const failing = this.state(player.guildId).current;
+      const detail = musicSourceFailureReport(event.exception, {
         stage: "playback",
-        source: null,
+        source: failing?.source ?? null,
         info: player.node.info,
       });
       logger.warn(
-        { guildId: player.guildId, error: detail },
+        { guildId: player.guildId, error: detail.details },
         "Audio source playback failed"
       );
       void audit(
         player.guildId,
-        { id: this.client.user?.id ?? "system:music", name: "Orbit" },
+        {
+          id: this.client.user?.id ?? "system:music",
+          name: "Orbit",
+          // Bot rows used to be avatar-less, which the dashboard rendered as a
+          // generic glyph next to real member pictures.
+          avatar: this.client.user?.avatar ?? null,
+        },
         "failed",
         "music playback",
-        detail
+        detail.summary,
+        { details: detail.details }
       ).catch((error) =>
         logger.warn(
           { error: errorDiagnostic(error) },
@@ -225,6 +310,7 @@ export class MusicService {
     });
     player.on("closed", () => {
       if (this.backend?.players.get(player.guildId) !== player) return;
+      this.idle.cancel(player.guildId);
       void this.locked(player.guildId, async () => {
         if (this.backend?.players.get(player.guildId) !== player) return;
         this.sessions.set(player.guildId, emptyMusic());
@@ -234,18 +320,88 @@ export class MusicService {
       );
     });
   }
-  private async next(id: string, player: Player) {
+  /**
+   * Start the next queued track, or hand the guild to the idle policy.
+   *
+   * Nothing here leaves voice directly: `stop` and `disconnect` are explicit
+   * actions that bypass this method, and every other empty-queue path waits
+   * first so a listener can queue another track without a reconnect.
+   */
+  private async next(
+    id: string,
+    player: Player,
+    reason: "queue-finished" | "track-failed" = "queue-finished"
+  ) {
     const state = this.state(id);
     state.current = state.tracks.shift() ?? null;
     state.position = 0;
     state.paused = false;
-    if (state.current?.encoded)
-      await player.playTrack({ track: { encoded: state.current.encoded } });
-    else {
+    if (state.current?.encoded) {
+      try {
+        await player.playTrack({ track: { encoded: state.current.encoded } });
+        // A track is starting; any pending leave from the previous one is void.
+        this.idle.cancel(id);
+      } catch (error) {
+        // A rejected play request must not strand the queue on a track that
+        // never started: drop it, keep the rest, and report through the caller.
+        state.current = null;
+        await this.persist(id);
+        throw error;
+      }
+    } else {
       state.current = null;
-      await this.backend?.leaveVoiceChannel(id);
+      await this.waitBeforeLeaving(id, reason);
     }
     await this.persist(id);
+  }
+
+  /** Schedule (or perform) the idle voice cleanup for one guild. */
+  private async waitBeforeLeaving(
+    id: string,
+    reason: "queue-finished" | "track-failed"
+  ) {
+    const seconds = await this.idleSeconds(id);
+    // 0 is an explicit "leave as soon as the queue ends" choice.
+    this.idle.schedule(id, reason, seconds);
+  }
+
+  private async idleSeconds(id: string) {
+    try {
+      const stored = await getGuild(id);
+      return stored?.config.music.idleDisconnectSeconds ?? DEFAULT_IDLE_SECONDS;
+    } catch (error) {
+      logger.warn(
+        { guildId: id, error: errorDiagnostic(error) },
+        "Could not read the idle timeout; using the default"
+      );
+      return DEFAULT_IDLE_SECONDS;
+    }
+  }
+
+  /**
+   * Timer callback: leave only if the guild is still idle.
+   *
+   * Runs inside the per-guild lock and re-reads the live state, so a track queued
+   * between scheduling and firing keeps the player.
+   */
+  private async leaveWhenIdle(guildId: string, reason: string) {
+    if (!this.backend) return;
+    await this.locked(guildId, async () => {
+      const player = this.backend!.players.get(guildId);
+      if (!player) return;
+      const state = this.state(guildId);
+      if (state.current || state.tracks.length) {
+        logger.info(
+          { guildId, reason },
+          "Idle disconnect cancelled: a track is queued or playing"
+        );
+        return;
+      }
+      await this.backend!.leaveVoiceChannel(guildId);
+      this.sessions.set(guildId, emptyMusic());
+      await this.persist(guildId);
+      logger.info({ guildId, reason }, "Left voice after the queue went idle");
+    });
   }
   /** Metadata a listener may see and that a later selection may rely on. */
   private describe(t: LavalinkTrack): ResolvedTrack {
@@ -256,6 +412,9 @@ export class MusicService {
       duration: Number.isFinite(t.info.length) ? Math.max(0, t.info.length) : 0,
       uri: safeText(t.info.uri ?? "", 2000),
       source: safeText(t.info.sourceName ?? "", 40),
+      // Provider artwork only: validated https image URL from the source
+      // manager, never a stream/endpoint URL. Absent stays absent.
+      artwork: safeImageUrl(String(t.info.artworkUrl ?? "")) || null,
     };
   }
 
@@ -385,6 +544,8 @@ export class MusicService {
           "Nothing is playing right now. Add a track with /play."
         );
       const state = this.state(guild.id);
+      // Any control means a listener is present and engaged.
+      this.idle.cancel(guild.id);
       switch (input.action) {
         case "pause":
           await player.setPaused(true);
@@ -398,6 +559,7 @@ export class MusicService {
           await player.stopTrack();
           break;
         case "stop":
+          // Explicit stop is the one path that leaves immediately.
           this.sessions.set(guild.id, emptyMusic());
           await this.backend!.leaveVoiceChannel(guild.id);
           break;
@@ -516,6 +678,7 @@ export class MusicService {
             : 0,
         uri: safeText(String(track.uri ?? ""), 2000),
         source: safeText(String(track.source ?? ""), 40),
+        artwork: safeImageUrl(String(track.artwork ?? "")) || null,
       } satisfies ResolvedTrack;
     });
     const unique = [
@@ -552,6 +715,9 @@ export class MusicService {
   ) {
     const { guild, stored, voice, me } = authority;
     const state = this.state(guild.id);
+    // Queuing cancels a pending idle leave before the player lookup, so a
+    // playlist added to an idle guild never races the cleanup.
+    this.idle.cancel(guild.id);
     let player = this.backend!.players.get(guild.id);
     assertMusicQueueAdmission(
       state,
@@ -623,6 +789,8 @@ export class MusicService {
         duration: t.duration,
         uri: t.uri,
         encoded: t.encoded,
+        source: t.source,
+        artwork: t.artwork ?? null,
         requestedBy: safeText(member.displayName, 80),
         requestedById: member.id,
       }))
@@ -649,6 +817,8 @@ export class MusicService {
     );
   }
   async shutdown() {
+    this.idle.clear();
+    this.client.off(Events.VoiceStateUpdate, this.onVoiceState);
     if (!this.backend) {
       this.voiceConnector.dispose();
       return;

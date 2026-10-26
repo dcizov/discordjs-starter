@@ -66,7 +66,10 @@ export const auditLogs = pgTable(
     actorAvatar: text("actor_avatar"),
     action: text("action").notNull(),
     target: text("target").notNull(),
+    /** Bounded one-line summary; the table cell renders this. */
     detail: text("detail").notNull(),
+    /** Optional full diagnostic, revealed in the event dialog. */
+    details: text("details"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

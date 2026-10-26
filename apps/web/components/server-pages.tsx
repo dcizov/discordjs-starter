@@ -14,7 +14,6 @@ import {
   Layers,
   Lock,
   Music2,
-  Orbit,
   Radio,
   RotateCcw,
   Rss,
@@ -29,7 +28,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "./copy-button";
-import { IdentityImage } from "./identity/image";
+import { ActorAvatar } from "./identity/actor-avatar";
 import { DataTable } from "./data-table";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
@@ -388,19 +387,11 @@ export function AuditPage() {
               sortKey: "actorName",
               render: (r) => (
                 <span className="flex items-center gap-2.5">
-                  {r.actorName === "Orbit" ? (
-                    <span className="flex size-[28px] items-center justify-center rounded-full bg-violet-50 text-violet-400 dark:bg-violet-500/10">
-                      <Orbit size={14} />
-                    </span>
-                  ) : (
-                    <IdentityImage
-                      id={r.actorId}
-                      name={r.actorName}
-                      src={r.actorAvatarUrl}
-                      kind="user"
-                      size={28}
-                    />
-                  )}
+                  <ActorAvatar
+                    id={r.actorId}
+                    name={r.actorName}
+                    src={r.actorAvatarUrl}
+                  />
                   <span className="font-medium">{r.actorName}</span>
                 </span>
               ),
@@ -491,7 +482,7 @@ export function AuditPage() {
             <div className="mb-5 flex flex-wrap gap-2 border-b pb-4">
               <CopyButton
                 key={detail.id}
-                text={detail.detail}
+                text={detail.details ?? detail.detail}
                 label={
                   detail.action === "failed" ? "Copy error" : "Copy details"
                 }
@@ -509,7 +500,11 @@ export function AuditPage() {
               ["Actor", `${detail?.actorName} (${detail?.actorId})`],
               ["Action", detail?.action],
               ["Target", detail?.target],
-              ["Details", detail?.detail],
+              ["Summary", detail?.detail],
+              // Older rows have no separate diagnostic; the summary stands in.
+              ...(detail?.details
+                ? ([["Diagnostic details", detail.details]] as const)
+                : []),
               [
                 "Timestamp",
                 detail?.createdAt
@@ -524,7 +519,8 @@ export function AuditPage() {
                 <dd
                   className={cn(
                     "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed",
-                    k === "Details" && "font-mono text-[11px]"
+                    (k === "Diagnostic details" || k === "Summary") &&
+                      "font-mono text-[11px]"
                   )}
                 >
                   {v}

@@ -91,16 +91,7 @@ export function assertModeratable(
     );
 }
 /** Accept only absolute http(s) links without embedded credentials. */
-export function safeLink(value: string) {
-  try {
-    const u = new URL(value);
-    if (!["https:", "http:"].includes(u.protocol) || u.username || u.password)
-      return "";
-    return u.toString().slice(0, 2000);
-  } catch {
-    return "";
-  }
-}
+export { safePublicLink as safeLink } from "./public-url";
 export function safeText(text: string, max = 1900) {
   // sanitize-html escapes ampersands in its text output; decode afterwards so
   // "Patch & notes" is not delivered as "Patch &amp; notes".

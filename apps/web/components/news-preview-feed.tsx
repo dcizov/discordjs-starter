@@ -1,51 +1,14 @@
 "use client";
-import { useState } from "react";
-import { CalendarDays, ImageOff } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import type { NewsCard } from "@orbit/core/news-presentation";
 import { Badge } from "./ui/primitives";
-import { cn } from "@/lib/utils";
+import { CoverArt } from "./artwork";
 import {
   attributionTone,
   feedMetaLine,
   newsFeedModel,
   postedLabel,
 } from "@/lib/news-feed";
-
-/**
- * Provider artwork with a reserved, fixed-ratio frame.
- *
- * The frame is always rendered when a card has an image, so a third-party image
- * that never loads cannot reflow the feed. A failed load shows a neutral
- * placeholder instead of a broken-image glyph.
- */
-function CoverArt({ url, className }: { url: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed)
-    return (
-      <div
-        className={cn(
-          "flex items-center justify-center bg-muted text-muted-foreground",
-          className
-        )}
-        title="This image did not load."
-      >
-        <ImageOff aria-hidden className="size-5" />
-        <span className="sr-only">Image unavailable</span>
-      </div>
-    );
-  return (
-    // Plain img on purpose: next/image would proxy third-party URLs through
-    // this server, which turns a news feed into an SSRF surface.
-    <img
-      src={url}
-      alt=""
-      loading="lazy"
-      referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
-      className={cn("object-cover", className)}
-    />
-  );
-}
 
 /**
  * One update, laid out like an event card: artwork, the attribution badge and

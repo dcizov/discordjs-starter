@@ -61,6 +61,8 @@ export type GuildConfig = {
     defaultVolume: number;
     maxQueue: number;
     maxPerMember: number;
+    /** Seconds to stay in voice after the queue empties; 0 leaves at once. */
+    idleDisconnectSeconds: number;
   };
   moderation: {
     exemptRoleIds: string[];
@@ -92,7 +94,10 @@ export type AuditEntry = {
   actorAvatarUrl?: string | null;
   action: string;
   target: string;
+  /** One-line summary shown in the history table. */
   detail: string;
+  /** Full diagnostic (multi-line) revealed on demand; older rows have none. */
+  details?: string | null;
   createdAt: string;
 };
 export type LedgerEntry = {
@@ -133,10 +138,15 @@ export type Track = {
   title: string;
   author: string;
   duration: number;
+  /** Public track page (provider URL), never an internal stream endpoint. */
   uri: string;
   encoded?: string;
   requestedBy: string;
   requestedById?: string;
+  /** Provider source name, e.g. "youtube"; used for failures, never for fetching. */
+  source?: string;
+  /** Validated public artwork URL supplied by the provider, if any. */
+  artwork?: string | null;
 };
 export type MusicState = {
   tracks: Track[];

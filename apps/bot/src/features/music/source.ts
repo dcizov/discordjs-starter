@@ -91,6 +91,94 @@ function sourceFailureHint(cause: string, source: string | null) {
     ? "Check the Lavalink root exception. If it says 'Did not detect any supported formats', use the pinned Soundy AAC/fMP4 backend in docs/MUSIC.md. Pulling Lavalink 4.2.2 alone does not add that support."
     : "Check Lavalink logs immediately after this failure and the installed source adapter; also try an authorized public track URL to separate search from URL loading.";
 }
+/** Machine-readable bucket for an audio failure, shown in the audit summary. */
+export type MusicFailureCategory =
+  | "provider-login"
+  | "no-streams"
+  | "drm"
+  | "rate-limit"
+  | "auth"
+  | "network"
+  | "format"
+  | "unknown";
+
+/**
+ * Classify a Lavalink track failure.
+ *
+ * The reported production failure ("ANDROID_VR: This video requires login" +
+ * "WEB: No supported audio streams available") is a provider restriction, not a
+ * voice or permission problem, so it needs its own bucket instead of the generic
+ * "something went wrong" text.
+ */
+export function musicFailureCategory(
+  exception: Partial<Exception>
+): MusicFailureCategory {
+  const text = `${exception.message ?? ""} ${exception.cause ?? ""}`;
+  if (
+    /requires? (?:a )?login|sign in to confirm|not a bot|confirm you.re not a bot|age.?restrict/i.test(
+      text
+    )
+  )
+    return "provider-login";
+  if (/\bdrm\b|encrypted|protected content/i.test(text)) return "drm";
+  if (
+    /no supported audio streams|no playable stream|no transcodings|did not detect any supported formats/i.test(
+      text
+    )
+  )
+    return "no-streams";
+  if (/\b429\b|rate.?limit|too many requests/i.test(text)) return "rate-limit";
+  if (/\b40[13]\b|unauthori[sz]ed|forbidden|access denied/i.test(text))
+    return "auth";
+  if (
+    /timed?\s*out|timeout|unknownhost|connectexception|sslhandshake|dns|certificate/i.test(
+      text
+    )
+  )
+    return "network";
+  return "unknown";
+}
+
+const CATEGORY_NEXT: Record<MusicFailureCategory, string> = {
+  "provider-login":
+    "The provider only serves this item to a signed-in session. Choose another public item; an operator can explicitly enable the documented provider sign-in (see docs/MUSIC.md) — Orbit never fakes a login or reuses somebody’s cookies.",
+  "no-streams":
+    "The provider returned no audio stream for this item. Try another public track or URL; private, region-locked and removed items stay unsupported.",
+  drm: "Protected/encrypted items are not supported. Choose an authorized public, unencrypted item.",
+  "rate-limit":
+    "The provider is rate limiting this backend. Wait before retrying; do not bypass provider limits.",
+  auth: "The provider refused the request. Check the backend credentials/configuration and provider availability.",
+  network:
+    "Check the Lavalink container’s DNS, outbound HTTPS access, TLS certificates and provider reachability.",
+  format:
+    "The adapter did not find a usable audio format. Check the pinned backend build for this source.",
+  unknown:
+    "Check the Lavalink log for the full Java exception and the installed source adapter.",
+};
+
+/**
+ * Concise audit/table summary plus the full diagnostic.
+ *
+ * The dashboard table cell shows `summary`; the event dialog and copy button show
+ * `details`. Splitting them keeps a stack trace out of the table without throwing
+ * the diagnostics away.
+ */
+export function musicSourceFailureReport(
+  exception: Partial<Exception>,
+  context: {
+    stage: "lookup" | "playback";
+    source: string | null;
+    info?: MusicNodeInfo | null;
+  }
+) {
+  const category = musicFailureCategory(exception);
+  const details = musicSourceFailure(exception, context);
+  const summary = diagnosticText(
+    `${providerLabel(context.source)} ${context.stage === "playback" ? "playback" : "lookup"} failed (${category}). ${CATEGORY_NEXT[category]}`
+  );
+  return { summary: summary.slice(0, 300), details, category };
+}
+
 export function musicSourceFailure(
   exception: Partial<Exception>,
   context: {
@@ -169,6 +257,12 @@ export async function prepareMusicQuery(
   if (/^[a-z]+search:/i.test(value))
     throw new Error(
       "Use plain search text for the configured provider or an approved source URL, not another provider’s search identifier."
+    );
+  // A bare YouTube id is not a URL: it cannot be host-checked, so it must not be
+  // silently sent to the search adapter (where it becomes a meaningless query).
+  if (/^[\w-]{11}$/.test(value) || /^(?:PL|UU|OL|RD)[\w-]{10,}$/.test(value))
+    throw new Error(
+      "That looks like a bare YouTube identifier. Paste the full link (https://www.youtube.com/watch?v=… , https://youtu.be/… or https://www.youtube.com/playlist?list=…) so Orbit can check the host and the public address first."
     );
   return {
     identifier: `${settings.searchPrefix}:${value}`,

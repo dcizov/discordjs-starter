@@ -29,6 +29,13 @@
       "when": 1792959202158,
       "tag": "0003_audit_actor_avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792978885122,
+      "tag": "0004_spooky_swordsman",
+      "breakpoints": true
     }
   ]
 }

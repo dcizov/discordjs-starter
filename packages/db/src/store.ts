@@ -137,15 +137,24 @@ export async function audit(
   actor: Actor,
   action: string,
   target: string,
-  detail: string
+  detail: string,
+  /**
+   * Full diagnostic for the "expanded details" view (stack traces, backend
+   * versions). `detail` is the one-line summary the history table shows, so a
+   * failure record no longer puts a whole Java exception into a table cell.
+   */
+  options: { details?: string } = {}
 ) {
-  const entry = newAudit(
-    guildId,
-    actor,
-    action,
-    safeText(target, 80),
-    diagnosticText(detail)
-  );
+  const entry: AuditEntry = {
+    ...newAudit(
+      guildId,
+      actor,
+      action,
+      safeText(target, 80),
+      diagnosticText(detail)
+    ),
+    details: options.details ? diagnosticText(options.details) : null,
+  };
   if (isDemo())
     await demoTransaction((d) => {
       d.audit.unshift(entry);

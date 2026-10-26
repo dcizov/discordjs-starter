@@ -12,7 +12,6 @@ import {
   Command,
   Hash,
   HeartPulse,
-  Orbit,
   Rss,
   Tags,
   TrendingUp,
@@ -33,7 +32,7 @@ import {
 import { Badge, Card } from "../../ui/primitives";
 
 import { useWorkspace } from "../../workspace";
-import { IdentityImage } from "../../identity/image";
+import { ActorAvatar } from "../../identity/actor-avatar";
 import { OverviewToolkit } from "./toolkit";
 import { ConnectionStatus } from "./connection-status";
 import { OverviewPreferences } from "./preferences";
@@ -248,19 +247,11 @@ export function Overview() {
           <div className="divide-y divide-border/50 px-5">
             {data.audit.slice(0, 4).map((a) => (
               <div className="flex items-center gap-3 py-3.5" key={a.id}>
-                {a.actorName === "Orbit" ? (
-                  <span className="flex size-[28px] shrink-0 items-center justify-center rounded-full bg-violet-50 text-violet-500 dark:bg-violet-500/10">
-                    <Orbit size={14} />
-                  </span>
-                ) : (
-                  <IdentityImage
-                    id={a.actorId}
-                    name={a.actorName}
-                    src={a.actorAvatarUrl}
-                    kind="user"
-                    size={28}
-                  />
-                )}
+                <ActorAvatar
+                  id={a.actorId}
+                  name={a.actorName}
+                  src={a.actorAvatarUrl}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[11px]">
                     <strong className="font-medium">{a.actorName}</strong>{" "}

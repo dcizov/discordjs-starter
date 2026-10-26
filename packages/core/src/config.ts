@@ -66,12 +66,19 @@ export const configSchema = z
         defaultVolume: z.number().int().min(0).max(100),
         maxQueue: z.number().int().min(1).max(200),
         maxPerMember: z.number().int().min(0).max(50).default(0),
+        /**
+         * Seconds to stay in voice after the queue empties (0 = leave at once).
+         * Covers a finished queue and a failed track alike, so one provider
+         * failure does not look like the bot dropping out of the channel.
+         */
+        idleDisconnectSeconds: z.number().int().min(0).max(1800).default(60),
       })
       .default({
         djRoleId: "",
         defaultVolume: 65,
         maxQueue: 100,
         maxPerMember: 0,
+        idleDisconnectSeconds: 60,
       }),
     moderation: z
       .object({

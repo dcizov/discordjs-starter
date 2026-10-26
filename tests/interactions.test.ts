@@ -84,6 +84,7 @@ function interaction(commandName: string) {
 }
 const music = {
   action: vi.fn(),
+  limits: vi.fn(async () => ({ maxQueue: 100, idleDisconnectSeconds: 60 })),
   state: vi.fn(() => ({
     tracks: [],
     current: null,

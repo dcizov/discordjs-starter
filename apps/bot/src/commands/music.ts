@@ -12,7 +12,15 @@ export async function musicCommand(
   switch (i.commandName) {
     case "queue": {
       const state = music.state(guild.id);
-      await reply(queueCard(state));
+      // The voice channel and queue limit come from real guild/config state; a
+      // bot that is not connected says so instead of inventing a channel.
+      const limits = await music.limits(guild.id);
+      await reply(
+        queueCard(state, {
+          voiceChannel: guild.members.me?.voice?.channel?.name ?? null,
+          queueLimit: limits.maxQueue,
+        })
+      );
       break;
     }
     /**

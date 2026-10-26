@@ -26,6 +26,9 @@ import { VolumeControl } from "./features/music/volume-control";
 import { SeekControl } from "./features/music/seek-control";
 import { usePlaybackNow } from "./features/music/playback-clock";
 import { playbackProgress } from "@orbit/core/music-progress";
+import { safeImageUrl } from "@orbit/core/feed-content";
+import { safePublicLink } from "@orbit/core/public-url";
+import { CoverArt } from "./artwork";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -45,6 +48,13 @@ import {
   Spinner,
 } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
+const SOURCE_NAMES: Record<string, string> = {
+  youtube: "YouTube",
+  soundcloud: "SoundCloud",
+  bandcamp: "Bandcamp",
+  twitch: "Twitch",
+  vimeo: "Vimeo",
+};
 export function MusicPage() {
   const { data, api, refresh, saveConfig } = useWorkspace();
   const [query, setQuery] = useState("");
@@ -66,6 +76,14 @@ export function MusicPage() {
   const progress = playbackProgress(m, playback.now ?? NaN, {
     clockOffsetMs: playback.offset,
   });
+  // Provider data only: a missing or unsafe artwork URL renders the vinyl
+  // illustration, and a missing public page renders plain text. Neither is a
+  // fallback to a signed/stream URL.
+  const artwork = m.current?.artwork ? safeImageUrl(m.current.artwork) : "";
+  const sourceUrl = m.current?.uri ? safePublicLink(m.current.uri) : "";
+  const sourceLabel = m.current?.source
+    ? (SOURCE_NAMES[m.current.source] ?? "source")
+    : "source";
   const playingLabel =
     progress.status === "stale"
       ? "State unconfirmed"
@@ -160,7 +178,14 @@ export function MusicPage() {
           <div className="relative flex min-h-[285px] flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-[#f2edf9] to-card px-6 py-8 dark:from-violet-500/10 dark:to-card">
             <div className="absolute -top-14 size-64 rounded-full border border-violet-200/30" />
             <div className="absolute -top-28 size-96 rounded-full border border-violet-200/20" />
-            <div className="relative flex size-36 items-center justify-center rounded-full bg-gradient-to-br from-[#ba9bdd] via-[#9d7ac6] to-[#7c5ea4] shadow-xl shadow-violet-200/30">
+            <div className="relative flex size-36 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#ba9bdd] via-[#9d7ac6] to-[#7c5ea4] shadow-xl shadow-violet-200/30">
+              {artwork && (
+                <CoverArt
+                  url={artwork}
+                  failureLabel="Track artwork unavailable"
+                  className="absolute inset-0 size-full"
+                />
+              )}
               <div className="absolute inset-3 rounded-full border border-white/10" />
               <div className="absolute inset-5 rounded-full border border-white/10" />
               <div className="absolute inset-7 rounded-full border border-white/10" />
@@ -169,15 +194,40 @@ export function MusicPage() {
                 <span className="size-2 rounded-full bg-[#9675b3]" />
               </div>
             </div>
-            <h2 className="relative mt-6 text-lg font-semibold">
-              {m.current?.title ?? "A little quiet, for now."}
+            <h2 className="relative mt-6 text-center text-lg font-semibold">
+              {m.current && sourceUrl ? (
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                  {m.current.title}
+                  <span className="sr-only"> (opens on {sourceLabel})</span>
+                </a>
+              ) : (
+                (m.current?.title ?? "A little quiet, for now.")
+              )}
             </h2>
             <p className="relative mt-1.5 text-[12px] text-muted-foreground">
               {m.current?.author ?? "Add a track and set the mood."}
             </p>
             {m.current && (
-              <span className="relative mt-3 text-[10px] text-muted-foreground">
-                Requested by {m.current.requestedBy}
+              <span className="relative mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                <span>Requested by {m.current.requestedBy}</span>
+                {sourceUrl && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <a
+                      href={sourceUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="underline-offset-2 hover:underline"
+                    >
+                      Open on {sourceLabel}
+                    </a>
+                  </>
+                )}
               </span>
             )}
           </div>
@@ -454,13 +504,35 @@ export function MusicPage() {
                 <span className="w-4 text-center text-[11px] text-muted-foreground">
                   {i + 1}
                 </span>
-                <div className="flex size-9 items-center justify-center rounded-lg bg-violet-50 text-violet-300 dark:bg-violet-500/10">
-                  <Music2 size={15} />
+                <div className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-violet-50 text-violet-300 dark:bg-violet-500/10">
+                  {t.artwork && safeImageUrl(t.artwork) ? (
+                    <CoverArt
+                      url={safeImageUrl(t.artwork)}
+                      failureLabel="Track artwork unavailable"
+                      className="size-full"
+                    />
+                  ) : (
+                    <Music2 size={15} />
+                  )}
                 </div>
-                <div className="flex-1">
-                  <p className="text-[12px] font-medium">{t.title}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-medium">
+                    {t.uri && safePublicLink(t.uri) ? (
+                      <a
+                        href={safePublicLink(t.uri)}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="hover:underline"
+                      >
+                        {t.title}
+                      </a>
+                    ) : (
+                      t.title
+                    )}
+                  </p>
                   <p className="mt-1 text-[10px] text-muted-foreground">
                     {t.author}
+                    {t.source ? ` · ${SOURCE_NAMES[t.source] ?? t.source}` : ""}
                   </p>
                 </div>
                 <span className="hidden text-[10px] text-muted-foreground sm:block">
@@ -574,6 +646,29 @@ export function MusicPage() {
                 onChange={(e) =>
                   setConfig({ ...config, maxPerMember: Number(e.target.value) })
                 }
+              />
+            </Field>
+            <Field
+              label="Stay in voice after the queue ends (seconds)"
+              hint="0 disconnects as soon as the last track ends. A track that fails to load uses the same wait, so one provider error does not look like Orbit dropping out. An empty voice channel is left after 15 seconds regardless. Stop and disconnect always leave immediately."
+            >
+              <Input
+                type="number"
+                min={0}
+                max={1800}
+                step={5}
+                value={config.idleDisconnectSeconds ?? 60}
+                onChange={(e) => {
+                  // Clamp here as well as in the schema so the form cannot submit
+                  // a value that the server would reject for a different reason.
+                  const next = Number(e.target.value);
+                  setConfig({
+                    ...config,
+                    idleDisconnectSeconds: Number.isFinite(next)
+                      ? Math.min(1800, Math.max(0, Math.round(next)))
+                      : 60,
+                  });
+                }}
               />
             </Field>
             <p className="rounded-lg bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
