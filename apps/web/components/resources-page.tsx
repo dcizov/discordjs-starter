@@ -67,6 +67,7 @@ import { Switch } from "./ui/switch";
 import { useWorkspace } from "./workspace";
 import { sourceSetupIssue } from "@orbit/core/module-setup";
 import { dealQuality } from "@orbit/core/deal-policy";
+import { discordMessageUrl } from "@/lib/discord-links";
 const settings = {
   roles: {
     title: "Self roles",
@@ -1161,11 +1162,31 @@ function DeliveryTable({ query, filter }: { query: string; filter: string }) {
         {
           key: "title",
           label: "Update",
-          render: (r) => (
-            <span className="block max-w-xs truncate font-medium">
-              {r.title}
-            </span>
-          ),
+          render: (r) => {
+            // Only a confirmed message id becomes a jump link; a delivery that
+            // was never confirmed shows its title without one.
+            const href =
+              r.status === "delivered"
+                ? discordMessageUrl(data.guild.id, r.channelId, r.messageId)
+                : null;
+            return (
+              <span className="block max-w-xs">
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="block truncate font-medium underline-offset-2 hover:underline"
+                    title={`Open “${r.title}” in Discord`}
+                  >
+                    {r.title}
+                  </a>
+                ) : (
+                  <span className="block truncate font-medium">{r.title}</span>
+                )}
+              </span>
+            );
+          },
         },
         {
           key: "source",

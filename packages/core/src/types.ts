@@ -131,6 +131,8 @@ export type Delivery = {
   error: string | null;
   createdAt: string;
   deliveredAt: string | null;
+  /** Discord message id, when the send was confirmed. Never invented. */
+  messageId?: string | null;
   payload?: Record<string, any>;
 };
 export type Track = {

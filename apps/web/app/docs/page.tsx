@@ -1,6 +1,6 @@
 import { DOC_INDEX, docsNavigation } from "@/lib/docs-content";
 import type { Metadata } from "next";
-import Link from "next/link";
+import { DocsSearch } from "@/components/docs-search";
 
 export const dynamic = "force-static";
 
@@ -26,28 +26,16 @@ export default function DocsIndex() {
         are not secret: they describe code that is already in the repository and
         contain no credentials.
       </p>
-      {docsNavigation().map((section) => (
-        <section key={section.group}>
-          <h2 id={section.group.toLowerCase().replace(/[^a-z]+/g, "-")}>
-            {section.group}
-          </h2>
-          <ul>
-            {section.entries.map((entry) => (
-              <li key={entry.slug}>
-                <Link href={`/docs/${entry.slug}`}>{entry.title}</Link>
-                {entry.slug === "start-here" ? (
-                  <>
-                    {" — "}
-                    {entry.summary}
-                  </>
-                ) : (
-                  <> — {entry.summary}</>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      <DocsSearch
+        sections={docsNavigation().map((section) => ({
+          group: section.group,
+          entries: section.entries.map((entry) => ({
+            slug: entry.slug,
+            title: entry.title,
+            summary: entry.summary,
+          })),
+        }))}
+      />
       <p className="text-[11px] text-muted-foreground">
         {DOC_INDEX.length} pages. Content updates ship with a build; there is no
         runtime file access and no external documentation service.

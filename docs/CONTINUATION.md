@@ -743,3 +743,117 @@ consistency across cards, the remaining long copy in `permission-setup.tsx`
 (deliberately kept: those lines are requirements, not prose) / `install-prompt.tsx`
 / `login`, and comment coverage for bootstrap, music lifecycle and dashboard
 shared infra.
+
+## Pass 5 — music regressions first (in progress)
+
+Start commit **b39a630**. Work below is on `arena/99c6cf65-discordjs-starter`; the
+music slice landed in **2d8f3a0** and the `/help`, presence, delivery-link and docs
+work follows it.
+
+### The reported playback failure: confirmed cause vs. ruled out
+
+Reported audit row: action `failed`, target `music playback`, actor `Orbit` with
+`actorAvatar: null`, backend Lavalink 4.2.2 / Lavaplayer 2.2.6 / Soundy 1.1.0 /
+youtube-source 1.18.2, message:
+
+```text
+All clients failed to load the item.
+Client [ANDROID_VR] failed: This video requires login.
+Client [WEB] failed: No supported audio streams available.
+```
+
+**Confirmed** (vendor source read this week, not inferred):
+
+- Both lines come from two clients of the _same_ source manager, so this is not a
+  plugin overlap and not a second YouTube loader.
+- youtube-source 1.18.2 is the newest release (published 2026-07-27); an outdated
+  JAR is not the cause.
+- `DEFAULT_CLIENTS` in `YoutubeAudioSourceManager` is exactly
+  `MUSIC, ANDROID_VR, WEB, WEBEMBEDDED` — the list Orbit ships. None of those four
+  is OAuth-only (`TV` is the only client whose playback needs sign-in, and it is
+  not enabled).
+- `allowDirectVideoIds` / `allowDirectPlaylistIds` only gate _bare identifiers_;
+  full `watch?v=`, `youtu.be`, `shorts`, `live` and `playlist?list=` URLs route
+  regardless. The URL was accepted and resolved, so this is a post-lookup provider
+  restriction, not URL validation.
+- Consequence: the item requires an authenticated YouTube session. The documented
+  escapes are OAuth (burner account, real termination risk) or a `poToken`
+  (WEB/WEBEMBEDDED only), both optional, both "not a silver bullet". Orbit keeps
+  them off, logs the category as `provider-login`, and says so instead of pretending
+  another recording played.
+
+**Not claimed**: that other YouTube items play. No live Lavalink/Discord run was
+available here.
+
+### Disconnect behaviour (was the visible regression)
+
+| Situation                                 | Behaviour                                                            |
+| ----------------------------------------- | -------------------------------------------------------------------- |
+| Queue finished                            | Wait `music.idleDisconnectSeconds` (default 60, `0` = leave at once) |
+| Track failed to load                      | Same wait, same timer, reason `track-failed`                         |
+| Voice channel has no humans               | 15 s grace, cancelled when a human returns                           |
+| New track queued during the wait          | Timer cancelled; same session continues                              |
+| `/stop`, `/disconnect`, node/gateway loss | Leave immediately, cancel the timer                                  |
+
+One `unref`'ed timer per guild, replaced rather than stacked, re-checked inside the
+per-guild lock before leaving. Covered by `tests/music-idle.test.ts` (fake timers)
+and five service-level cases in `tests/music-service.test.ts` (queue end, load
+failure, stale-timer re-check, real empty state, shutdown cleanup).
+
+### Other changes in this pass
+
+- Failure categories (`provider-login`, `no-streams`, `drm`, `rate-limit`, `auth`,
+  `network`, `format`, `unknown`), a ≤300-character table summary, and the full
+  diagnostic in a new `audit_logs.details` column (migration 0004). Bot audit rows
+  now carry the bot's real avatar; the worker fetches `/users/@me` once instead of
+  writing avatar-less rows.
+- `/queue` and the dashboard now show the provider's public page (query strings
+  stripped except YouTube's `v`/`list`), validated artwork, requester, voice channel,
+  server-reported position and a bounded queue. No stream or signed URL reaches
+  Discord or the browser.
+- A bare YouTube id is answered with "paste the full link" instead of being sent to
+  the search adapter as meaningless text.
+- `/help` is generated from `getCommandCatalog()` (same builders the registration
+  script uploads): grouped by module, 🔒 for permission-restricted commands,
+  paused-module markers, per-command usage/arguments/permissions/setup notes, docs
+  links that fall back to the public repository when `APP_URL` is local.
+- Optional presence (`BOT_ACTIVITY`, `BOT_ACTIVITY_TYPE`, `BOT_STATUS`), set once
+  after readiness, no rotation and no invented counts; empty `BOT_ACTIVITY` disables
+  it. Covered by `tests/presence.test.ts`.
+- Delivery rows link to the Discord message only when guild, channel and message id
+  were all confirmed (`deliveries.message_id`, migration 0005); otherwise the title
+  stays plain text.
+- The documentation index can be filtered by title/summary/group with an explicit
+  note that it is not a full-text search; the list stays in the server-rendered HTML.
+
+### Verification (fresh, this branch)
+
+| Check                      | Result                                                                                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| `npx vitest run`           | **836 tests in 69 files pass** (was 818 before this pass)                                       |
+| `npm run typecheck`        | pass                                                                                            |
+| `npm run lint`             | pass                                                                                            |
+| `npm run format:check`     | pass                                                                                            |
+| `npm run build:web`        | pass (`/docs` prerendered with the filter)                                                      |
+| `npm run build:services`   | pass                                                                                            |
+| CI `verify` / `containers` | see the run ids recorded below; the browser suite is the only live check of the new docs filter |
+
+**Not verified here**: live Discord login, real Lavalink audio, audible playback,
+and the screenshot pixels. The `dashboard-screenshots` artifact is produced by CI,
+but this sandbox cannot download it (GitHub artifact downloads redirect to
+`*.blob.core.windows.net`, outside the allowlist) and no Chromium can be installed,
+so no visual approval is claimed for this pass.
+
+### Deferred in pass 5
+
+- **Connected member list**: no implementation exists today, and building it means a
+  bot-side roster sync (schema + migration + job), a server-side paginated read and a
+  dashboard view. A cache cannot be presented as the full list, so this stays a
+  scoped piece of work rather than a UI-only stub. `GuildMembers` is already
+  requested; `Presence` is deliberately still not.
+- SponsorBlock guild configuration UI, LavaSearch/lyrics surfaces, and any plugin
+  upgrade: the installed set is current, and third-party processing stays off by
+  default.
+- News provider URL matrix beyond the documented forms, and a plugin capability
+  matrix refresh, remain documentation work already described in
+  `docs/MUSIC-PLUGINS.md`.

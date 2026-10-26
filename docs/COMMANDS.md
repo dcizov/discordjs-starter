@@ -9,6 +9,25 @@ Open **Commands** in the dashboard's server navigation (`/dashboard/SERVER_ID/co
 - Expandable argument types, constraints, choices, autocomplete, default member permissions, and execution-check notes.
 - Loading, retryable failure, no-match, and mobile layouts.
 
+## `/help` in Discord
+
+`/help` is generated from the catalog above, not from a second list kept in the bot
+code:
+
+- `/help` (ephemeral) groups the registered root commands by module, marks the
+  permission-restricted ones with 🔒 and marks a module this server has paused.
+- `/help command:<name>` shows that invocation's real usage line, argument types,
+  constraints and choices, the registration permission mask plus any runtime
+  permission check, the module state for this server, and the documented setup
+  limits. Subcommand paths work too (`/help command:deals search`).
+- Autocomplete offers only paths that exist in the catalog.
+- Documentation links point at the operator's own `/docs` pages when `APP_URL` is a
+  public HTTPS origin, and at the public repository otherwise — a localhost link is
+  never sent to Discord.
+- Adding a command to `commandDefinitions` (and its module classification) makes it
+  appear in registration, the dashboard reference, and `/help` at once. Adding it to
+  only one of them is what the tests catch.
+
 ## Source of truth and authorization
 
 `packages/core/src/commands.ts` contains the actual Discord.js builders. The bot's existing `apps/bot/src/commands.ts` re-exports those builders, so `commands:register` and the server-side catalog use the same definitions. The catalog flattens subcommands and serializes arguments, bounds, choices, and permission masks from each builder's `toJSON()` result. Additional execution notes describe behavior not expressible as registration metadata, such as DJ/voice checks and the Manage Server restriction on `/deals watch`, `/deals feed`, `/deals pause` and `/news test`.
@@ -37,7 +56,7 @@ Default permission flags describe registration defaults, not effective authoriza
 
 ## Audit error copying
 
-An audit detail dialog offers **Copy error** for a failed event (otherwise **Copy details**). It passes `AuditEntry.detail` verbatim to the clipboard, without truncation, reformatting, metadata prefixes, or visual line wrapping. **Copy full event** separately copies the stored event as formatted JSON. The complete recorded detail remains selectable if both clipboard mechanisms fail; the UI reports failure rather than showing a copied state.
+An audit detail dialog offers **Copy error** for a failed event (otherwise **Copy details**). It copies `AuditEntry.details` when the record has one (the full backend diagnostic, e.g. Lavalink's per-client failure lines) and otherwise `AuditEntry.detail`. The table cell keeps showing the short summary, so a Java stack trace no longer lands in a 40-character column. Copying is verbatim: no truncation, reformatting, metadata prefixes, or visual line wrapping. **Copy full event** separately copies the stored event as formatted JSON. The complete recorded detail remains selectable if both clipboard mechanisms fail; the UI reports failure rather than showing a copied state.
 
 New diagnostic audit details retain whitespace and are sanitized server-side before storage: known credentials, authorization fields, and URL query values are redacted, terminal controls are removed, and an explicit marker identifies details exceeding the 8,192-character bound. Copying does not undo that privacy protection or reconstruct older records that were already shortened. Backend logs may still be required to obtain a full Java exception chain.
 
@@ -46,6 +65,15 @@ New diagnostic audit details retain whitespace and are sanitized server-side bef
 Command replies use a shared embed formatter (`apps/bot/src/interactions/replies.ts`). Daily rewards and balances have currency fields; the leaderboard shows the top ten wallets; the queue shows current/upcoming tracks and music state; deals use rich artwork/rating/price cards and source/offer links; other commands use titled result cards. The new deals setup, preview and pause commands are detailed in [Game deals](DEALS.md). Technical failures appear in red embeds with fenced, sanitized multiline code blocks. Long diagnostics are shortened **before** closing the fence, and aggregate/per-field Discord limits are enforced. Give the bot **Embed Links** in command channels.
 
 Embeds do not change visibility or permissions: replies remain ephemeral, mentions are disabled, and user-controlled labels are escaped. Existing guild/module, moderation, economy, DJ, and voice checks still run. Published role panels and scheduled channel deliveries keep their separate public-message behavior. Play confirmations mean the request was accepted, not that audio was heard. Audit storage/copying and the music doctor's JSON are not reformatted or shortened to fit an embed.
+
+## Delivery history links
+
+A delivered row links to the Discord message only when all three snowflakes are
+recorded: guild, channel and the message id Discord returned from the send. The id
+is written in the same transaction as the `delivered` status, so "delivered" and "we
+know where it landed" cannot disagree. A row from before this column, a retry that
+never confirmed, or a simulation has no id and therefore no link — the title stays
+plain text instead of pointing at a guessed message.
 
 ## New opt-in community commands
 

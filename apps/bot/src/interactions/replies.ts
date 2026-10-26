@@ -1,4 +1,10 @@
 import type { Account, GuildConfig, MusicState, Track } from "@orbit/core";
+import {
+  commandModuleLabels,
+  type CommandCatalog,
+  type CommandModule,
+  type CommandReference,
+} from "@orbit/core/command-catalog-types";
 import { safeText } from "@orbit/core";
 import { safePublicLink } from "@orbit/core/public-url";
 import { diagnosticText } from "@orbit/core/diagnostics";
@@ -337,5 +343,134 @@ export function musicActionCard(action: string, state: MusicState): ReplyCard {
       action === "play"
         ? "Orbit · Request accepted by the backend; this does not verify audible playback."
         : `Orbit · /${action}`,
+  };
+}
+
+const HELP_ORDER: CommandModule[] = [
+  "general",
+  "roles",
+  "music",
+  "economy",
+  "deals",
+  "news",
+  "moderation",
+  "polls",
+  "announcements",
+];
+
+/**
+ * `/help` overview.
+ *
+ * Built from `getCommandCatalog()`, which is derived from the same builders the
+ * registration script uploads — there is no second command list to drift. The
+ * body stays short: root commands per module, with a marker for commands Discord
+ * or the runtime restricts, and a marker for a module this server has paused.
+ */
+export function helpOverviewCard(
+  catalog: CommandCatalog,
+  docsUrl: string
+): ReplyCard {
+  // A command with subcommands only exists as its leaf paths, so the overview
+  // groups by root and folds each root's references back together. Restricted is
+  // true when *any* invocation of that root is restricted.
+  const roots = new Map<
+    string,
+    { module: CommandModule; enabled: boolean; restricted: boolean }
+  >();
+  for (const command of catalog.commands) {
+    const entry = roots.get(command.root) ?? {
+      module: command.module,
+      enabled: command.moduleEnabled,
+      restricted: false,
+    };
+    entry.restricted =
+      entry.restricted ||
+      command.defaultPermissions.bitfield !== null ||
+      command.runtimePermissions.length > 0;
+    entry.enabled = entry.enabled || command.moduleEnabled;
+    roots.set(command.root, entry);
+  }
+  const fields = HELP_ORDER.map((module) => ({
+    module,
+    commands: [...roots.entries()].filter(
+      ([, entry]) => entry.module === module
+    ),
+  }))
+    .filter((group) => group.commands.length)
+    .map((group) => ({
+      name: `${commandModuleLabels[group.module]}${group.commands.every(([, entry]) => !entry.enabled) ? " (paused)" : ""}`,
+      value: group.commands
+        .map(
+          ([root, entry]) =>
+            `\`/${root}\`${entry.restricted ? " 🔒" : ""}${entry.enabled ? "" : " · paused"}`
+        )
+        .join(" · "),
+    }));
+  return {
+    title: "Orbit commands",
+    description: `${roots.size} commands, read from the catalog the bot registers. 🔒 = permission-restricted, paused = this server has the module off.`,
+    fields,
+    url: docsUrl,
+    footer:
+      "Orbit · /help command:<name> for options, permissions and setup · Modules are configured in the dashboard",
+  };
+}
+
+/** `/help command:<name>` — one command, from its real definition and runtime rules. */
+export function helpCommandCard(
+  command: CommandReference,
+  docsUrl: string
+): ReplyCard {
+  const fields: ReplyField[] = [
+    { name: "Usage", value: `\`${command.usage}\`` },
+  ];
+  if (command.arguments.length)
+    fields.push({
+      name: "Options",
+      value: command.arguments
+        .map((argument) => {
+          const constraints = [
+            argument.required ? "required" : "optional",
+            argument.choices.length
+              ? `one of ${argument.choices.map((choice) => choice.name).join(", ")}`
+              : "",
+            argument.minValue !== null || argument.maxValue !== null
+              ? `${argument.minValue ?? "…"}–${argument.maxValue ?? "…"}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `\`${argument.name}\` (${constraints}) — ${replyLabel(argument.description, 90)}`;
+        })
+        .join("\n"),
+    });
+  const permissions = [
+    ...command.defaultPermissions.names,
+    ...command.runtimePermissions,
+  ];
+  fields.push({
+    name: "Who can use it",
+    value: permissions.length
+      ? `Discord restricts this command to **${permissions
+          .map((name) => name.replace(/([a-z])([A-Z])/g, "$1 $2"))
+          .join(", ")}**; Orbit re-checks the permission when it runs.`
+      : "Any member who can see the channel can run it; Orbit still applies the module and channel rules when it runs.",
+  });
+  if (!command.moduleEnabled)
+    fields.push({
+      name: "On this server",
+      value: `${commandModuleLabels[command.module]} is paused, so this command will refuse to act until it is enabled in the dashboard.`,
+    });
+  if (command.notes.length)
+    fields.push({
+      name: "Setup and limits",
+      value: command.notes.map((note) => replyLabel(note, 700)).join("\n"),
+    });
+  return {
+    title: `/${command.path}`,
+    description: replyLabel(command.description, 300),
+    fields,
+    url: docsUrl,
+    footer: "Orbit · /help for the full list",
   };
 }

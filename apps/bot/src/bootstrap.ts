@@ -17,6 +17,7 @@ import { MusicService } from "./features/music/service";
 import { attachGatewayEvents } from "./events/gateway";
 import { createActionConsumer } from "./infrastructure/action-consumer";
 import { startMaintenance } from "./infrastructure/maintenance";
+import { presenceFromEnv } from "./features/presence";
 
 export async function startBot() {
   if (isDemo()) {
@@ -63,6 +64,21 @@ export async function startBot() {
       throw new Error(
         "DISCORD_CLIENT_ID does not match the logged-in bot. Use the application ID belonging to DISCORD_TOKEN, then register commands in that application."
       );
+    // Presence is set once, after the gateway is ready. No interval, no counts.
+    const { presence, note } = presenceFromEnv();
+    if (presence) {
+      // `setPresence` returns the presence object, not a promise, and a gateway
+      // that closes mid-set throws synchronously.
+      try {
+        client.user!.setPresence(presence);
+        logger.info({ presence: note }, "Bot presence applied");
+      } catch (error) {
+        logger.warn(
+          { error: errorDiagnostic(error) },
+          "Could not set the bot presence"
+        );
+      }
+    } else logger.info({ presence: note }, "Bot presence skipped");
     stopMaintenance = await startMaintenance(client, music, abort.signal);
     if (abort.signal.aborted) return;
     worker = createActionConsumer(client, music, rest);

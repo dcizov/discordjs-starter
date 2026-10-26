@@ -46,6 +46,15 @@ export const commandDefinitions = [
       .setMaxValue(10000)
   ),
   command("ping", "Check Orbit’s gateway connection"),
+  command(
+    "help",
+    "List Orbit’s commands, or explain one in detail"
+  ).addStringOption((o) =>
+    o
+      .setName("command")
+      .setDescription("A command name, e.g. play")
+      .setAutocomplete(true)
+  ),
   command("roles", "Find your community’s self-role panels"),
   command("role-panel", "Publish or refresh a role panel")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)

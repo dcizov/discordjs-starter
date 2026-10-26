@@ -60,3 +60,22 @@ test("documentation stays usable on a narrow screen", async ({ page }) => {
   );
   expect(overflow).toBeLessThanOrEqual(1);
 });
+
+test("the index can be filtered down to a page", async ({ page }) => {
+  await page.goto("/docs");
+  const search = page.getByLabel("Find a page");
+  const article = page.locator("article.docs-prose");
+  const music = article.getByRole("link", { name: "Music and voice" });
+  await expect(music).toBeVisible();
+  await search.fill("music");
+  await expect(music).toBeVisible();
+  await expect(
+    article.getByRole("link", { name: "Deployment", exact: true })
+  ).toHaveCount(0);
+  await search.fill("zzzz-no-such-page");
+  await expect(article.getByText(/No page matches/)).toBeVisible();
+  await search.fill("");
+  await expect(
+    article.getByRole("link", { name: "Deployment", exact: true })
+  ).toBeVisible();
+});

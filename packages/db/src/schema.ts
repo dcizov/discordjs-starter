@@ -170,6 +170,11 @@ export const deliveries = pgTable(
       .notNull()
       .defaultNow(),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    /**
+     * Discord's message id, recorded only after the send returned one. Null means
+     * "not confirmed", so the dashboard shows no jump link instead of guessing one.
+     */
+    messageId: text("message_id"),
   },
   (t) => [
     uniqueIndex("delivery_deduplication").on(

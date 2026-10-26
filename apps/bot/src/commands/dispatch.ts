@@ -7,6 +7,7 @@ import { moderationCommand } from "./moderation";
 import { rolesCommand } from "./roles";
 import { musicCommand } from "./music";
 import { newsCommand } from "./news";
+import { helpCommand } from "./help";
 import { handleDeals } from "../features/deals/commands";
 
 /** Fixed command set: direct imports/routing, no discovery or registration side effects. */
@@ -54,6 +55,8 @@ export async function dispatchCommand(
       return handleDeals(context.i, context.member);
     case "news":
       return newsCommand(context);
+    case "help":
+      return helpCommand(context);
     case "ping":
       return context.reply(
         `Orbit is here. Gateway: ${client.ws.ping}ms. Configuration is live.`

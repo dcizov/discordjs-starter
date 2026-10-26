@@ -84,6 +84,21 @@ This is a Discord OAuth guild-list lookup, not a Lavalink error. Check web stdou
 
 No operation is authorized with expired cached guild permissions when verification fails. The permission cache and cooldowns are process-local; multiple web replicas have independent caches, so large deployments should coordinate upstream quotas across replicas rather than lengthening authorization-cache lifetimes. Bot actions continue to independently validate current member permissions.
 
+## Optional bot presence
+
+The bot sets one activity once, after the gateway is ready:
+
+| Variable            | Default    | Accepted values                                          |
+| ------------------- | ---------- | -------------------------------------------------------- |
+| `BOT_ACTIVITY`      | `/help`    | Any text (trimmed to 128 chars); empty disables presence |
+| `BOT_ACTIVITY_TYPE` | `watching` | `playing`, `watching`, `listening`, `competing`          |
+| `BOT_STATUS`        | `online`   | `online`, `idle`, `dnd`, `invisible`                     |
+
+It is deliberately not a rotating status and it never invents member or server
+counts, because those drift between shards and the dashboard. Unknown values fall
+back to watching/online and the startup log says so. Demo mode never logs in, so it
+never sets a presence.
+
 ## Health and observability
 
 - `GET /api/healthz` is a lightweight web liveness endpoint; it intentionally does not claim database or bot readiness.

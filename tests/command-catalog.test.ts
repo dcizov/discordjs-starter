@@ -18,12 +18,12 @@ describe("implemented command catalog", () => {
     const result = catalog();
     expect(result.source).toBe("registration-definitions");
     expect(result.registrationVerified).toBe(false);
-    expect(result.rootCount).toBe(31);
-    expect(result.invocationCount).toBe(46);
+    expect(result.rootCount).toBe(32);
+    expect(result.invocationCount).toBe(47);
     expect(new Set(result.commands.map((c) => c.root))).toEqual(
       new Set(commandDefinitions.map((c) => c.name))
     );
-    expect(new Set(result.commands.map((c) => c.id)).size).toBe(46);
+    expect(new Set(result.commands.map((c) => c.id)).size).toBe(47);
     expect(result.commands.every((c) => c.serverOnly)).toBe(true);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
   });

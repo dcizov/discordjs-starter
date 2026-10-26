@@ -14,7 +14,7 @@ import type {
 import type { GuildConfig } from "./types";
 
 const moduleRoots: Record<CommandModule, readonly string[]> = {
-  general: ["ping"],
+  general: ["ping", "help"],
   roles: ["roles", "role-panel"],
   moderation: ["warn", "timeout", "kick", "ban", "purge", "cases"],
   economy: [

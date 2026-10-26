@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { commandDefinitions } from "@orbit/core/commands";
+import { defaultConfig } from "@orbit/core";
 import type { Client } from "discord.js";
 import type { MusicService } from "../apps/bot/src/features/music/service";
 import type { CommandContext } from "../apps/bot/src/commands/context";
@@ -33,7 +34,11 @@ beforeEach(() => vi.clearAllMocks());
 function request(name: string) {
   const reply = vi.fn(async () => undefined);
   return {
-    context: { i: { commandName: name }, reply } as unknown as CommandContext,
+    context: {
+      i: { commandName: name, options: { getString: () => null } },
+      config: structuredClone(defaultConfig),
+      reply,
+    } as unknown as CommandContext,
     reply,
   };
 }
@@ -51,6 +56,9 @@ describe("fixed command set registration and dispatch", () => {
         expect(reply).toHaveBeenCalledWith(
           expect.stringContaining("Gateway: 42ms")
         );
+      else if (name === "help")
+        // /help answers from the catalog and needs no handler module.
+        expect(reply).toHaveBeenCalledOnce();
       else {
         expect(reply).not.toHaveBeenCalled();
         expect(

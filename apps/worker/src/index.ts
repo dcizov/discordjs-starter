@@ -240,35 +240,44 @@ async function main() {
                 sourceName: payload.sourceName ?? source.name,
               }
             );
-        await rest.post(Routes.channelMessages(row.channelId), {
-          body: {
-            content: roleId ? `<@&${roleId}>` : "",
-            embeds: [embed],
-            ...(deal
-              ? {
-                  components: (() => {
-                    const row = dealLinkRow(deal);
-                    return row ? [row] : [];
-                  })(),
-                }
-              : {}),
-            allowed_mentions: {
-              parse: [],
-              roles: roleId ? [roleId] : [],
-              users: [],
-              replied_user: false,
+        const message = (await rest.post(
+          Routes.channelMessages(row.channelId),
+          {
+            body: {
+              content: roleId ? `<@&${roleId}>` : "",
+              embeds: [embed],
+              ...(deal
+                ? {
+                    components: (() => {
+                      const row = dealLinkRow(deal);
+                      return row ? [row] : [];
+                    })(),
+                  }
+                : {}),
+              allowed_mentions: {
+                parse: [],
+                roles: roleId ? [roleId] : [],
+                users: [],
+                replied_user: false,
+              },
+              nonce: fingerprint(
+                row.guildId,
+                row.sourceId,
+                `${row.externalId}:${row.channelId}`
+              ).slice(0, 24),
+              enforce_nonce: true,
             },
-            nonce: fingerprint(
-              row.guildId,
-              row.sourceId,
-              `${row.externalId}:${row.channelId}`
-            ).slice(0, 24),
-            enforce_nonce: true,
-          },
-        });
+          }
+        )) as { id?: string } | undefined;
         await tx
           .update(schema.deliveries)
-          .set({ status: "delivered", error: null, deliveredAt: new Date() })
+          .set({
+            status: "delivered",
+            error: null,
+            deliveredAt: new Date(),
+            // Only a confirmed id becomes a link in the dashboard.
+            messageId: message?.id ?? null,
+          })
           .where(eq(schema.deliveries.id, row.id));
         const actor = await auditActor();
         await tx.insert(schema.auditLogs).values({
