@@ -39,6 +39,34 @@ export async function chooseOption(
   await expect(listbox).toBeHidden();
 }
 
+/**
+ * Choose a value in a table's faceted filter (`table-facet.tsx`).
+ *
+ * The trigger is a button whose accessible name is the descriptive label, plus
+ * the chosen value once a filter is applied. The popup is a cmdk list, so its
+ * items are `option`s named by their visible text — which includes the count
+ * when the caller knows one, hence the prefix match.
+ */
+export async function chooseFacet(
+  page: Page | Locator,
+  name: string,
+  option: string
+) {
+  const trigger = page.getByRole("button", { name: new RegExp(`^${name}`) });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const view = root(page);
+  const listbox = view.getByRole("listbox");
+  await expect(listbox).toBeVisible();
+  const item = listbox.getByRole("option", {
+    name: new RegExp(`^${option}\b`),
+  });
+  await expect(item).toHaveCount(1);
+  await item.click();
+  await expect(listbox).toBeHidden();
+  await expect(trigger).toContainText(option);
+}
+
 /** Same, for a searchable combobox: type to narrow, then pick. */
 export async function chooseComboboxOption(
   page: Page | Locator,

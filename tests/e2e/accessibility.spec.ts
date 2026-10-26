@@ -160,7 +160,7 @@ test("table headers expose sort state and the columns menu is keyboard operable"
   await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
     timeout: 20000,
   });
-  const table = page.getByRole("region", { name: "Records" }).locator("table");
+  const table = page.getByRole("region", { name: "Channels" }).locator("table");
   await expect(table).toBeVisible();
   const channelHeader = table.getByRole("columnheader", { name: /Channel/ });
   await expect(channelHeader).not.toHaveAttribute("aria-sort", /.+/);

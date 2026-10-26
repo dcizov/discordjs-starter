@@ -1,4 +1,4 @@
-import { chooseComboboxOption, chooseOption } from "./support/ui";
+import { chooseComboboxOption, chooseFacet, chooseOption } from "./support/ui";
 import { test, expect } from "@playwright/test";
 const root = "/dashboard/120000000000000001";
 test("read-only permission setup evaluates the selected channel, preserves protection and makes no grant requests", async ({
@@ -66,7 +66,9 @@ test("module setup filters are useful and publisher starters remain explicitly s
     .last()
     .click();
   await expect(page.locator('[data-module-setup="news"]')).toBeVisible();
-  await chooseOption(page, "Filter by status", "Needs setup");
+  // The news source list is a table now: its status control is the faceted
+  // filter in the table toolbar, not a page-level select.
+  await chooseFacet(page, "Filter by status", "Needs setup");
   await expect(
     page.getByRole("heading", { name: "Mojang", exact: true })
   ).toBeVisible();
