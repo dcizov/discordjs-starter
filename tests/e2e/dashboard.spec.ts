@@ -176,12 +176,12 @@ test("news sources can be tested, routed, and safely simulated", async ({
     page.getByText("Test delivery simulated — nothing sent to Discord.")
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Delivery history", exact: true })
+    .getByRole("tab", { name: "Delivery history", exact: true })
     .click();
   await expect(
     page.getByText("Test message from E2E · Community dispatch").first()
   ).toBeVisible();
-  await page.getByRole("button", { name: "Sources", exact: true }).click();
+  await page.getByRole("tab", { name: "Sources", exact: true }).click();
   await page
     .getByRole("button", { name: "Actions for E2E · Community dispatch" })
     .click();
@@ -222,7 +222,7 @@ test("economy daily rewards and transfers update persistent balances", async ({
   const final = after.accounts.find((a: any) => a.userId === after.user.id);
   expect(final.balance).toBe(me.balance + (me.lastDaily ? 0 : 250) - 30);
   await page
-    .getByRole("button", { name: "Transaction history", exact: true })
+    .getByRole("tab", { name: "Transaction history", exact: true })
     .click();
   await page
     .getByPlaceholder("Search transactions…")

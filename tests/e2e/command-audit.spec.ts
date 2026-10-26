@@ -37,10 +37,9 @@ test("commands are discoverable, derived from registration, searchable, and filt
     page.getByText("Showing 46 of 46 command invocations", { exact: false })
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "This does not verify which commands are currently registered in Discord.",
-      { exact: false }
-    )
+    page.getByText("it does not check what Discord currently has", {
+      exact: false,
+    })
   ).toBeVisible();
   const search = page.getByPlaceholder(
     "Search commands, arguments, or permissions…"

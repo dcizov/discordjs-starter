@@ -13,7 +13,7 @@ test("read-only permission setup evaluates the selected channel, preserves prote
   });
   await page.goto(`${root}/channels`);
   await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
-  await page.getByRole("button", { name: /^permissions$/i }).click();
+  await page.getByRole("tab", { name: /^permissions$/i }).click();
   const setup = page.getByTestId("permission-setup");
   await expect(setup.getByText("Sample data", { exact: true })).toBeVisible();
   await expect(setup.getByText(/no live Discord audit/)).toBeVisible();
