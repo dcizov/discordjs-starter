@@ -43,7 +43,7 @@ export function HistoryTable<T extends { id: string }>({
         : kind === "deliveries"
           ? data.deliveries[0]?.id
           : data.resources.find((r) => r.kind === "case")?.id;
-  useEffect(() => setPage(1), [query, filter, kind, sort]);
+  useEffect(() => setPage(1), [query, filter, kind]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -111,12 +111,16 @@ export function HistoryTable<T extends { id: string }>({
       sort={{
         field: sort.field,
         dir: sort.dir,
-        onChange: (field) =>
+        // Reset the page with the ordering change, in one render, so a listener
+        // on page 4 does not fetch "page 4 of the new sort" first.
+        onChange: (field) => {
+          setPage(1);
           setSort((current) =>
             current.field === field
               ? { field, dir: current.dir === "asc" ? "desc" : "asc" }
               : { field, dir: "desc" }
-          ),
+          );
+        },
       }}
       emptyTitle={emptyTitle}
       emptyDescription={emptyDescription}
