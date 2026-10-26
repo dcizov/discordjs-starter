@@ -40,6 +40,9 @@ function service(configured = true) {
     user: { id: "120000000000000001" },
     ws: { shards: new Map() },
     isReady: () => false,
+    // Empty by default: an uncached guild means "nobody is listening", which is
+    // what the empty-channel tests below override explicitly.
+    guilds: { cache: new Map() },
   });
   // Never emit clientReady: these state/health tests must make no network calls.
   const music = new MusicService(client as unknown as Client);
@@ -494,8 +497,33 @@ describe("idle voice disconnect", () => {
       schedule(id: string, reason: string, seconds: number): void;
       cancel(id: string): void;
     };
+    cancelQueueIdle(id: string): boolean;
     leaveWhenIdle(id: string, reason: string): Promise<void>;
   };
+  /**
+   * Put listeners (and/or other bots) in the channel Orbit sits in. The service
+   * reads this instead of a member list fetch, so tests can be explicit about who
+   * is "there".
+   */
+  function listeners(
+    music: MusicService,
+    id: string,
+    humans: number,
+    bots = 0
+  ) {
+    const members = new Map<string, { user: { bot: boolean } }>();
+    for (let n = 0; n < humans; n++)
+      members.set(`human-${n}`, { user: { bot: false } });
+    for (let n = 0; n < bots; n++)
+      members.set(`bot-${n}`, { user: { bot: true } });
+    (
+      music as unknown as {
+        client: { guilds: { cache: Map<string, unknown> } };
+      }
+    ).client.guilds.cache.set(id, {
+      members: { me: { voice: { channel: { id: "voice", members } } } },
+    });
+  }
   function wired(queueSize = 0) {
     const music = service(),
       id = "120000000000000002";
@@ -577,6 +605,107 @@ describe("idle voice disconnect", () => {
     expect(db.putMusicState).toHaveBeenCalled();
     await music.shutdown();
   });
+  it("leaves an empty channel even while a track is still playing", async () => {
+    // Audio is still running, but nobody is listening: the empty-channel policy
+    // is not blocked by playback, unlike the queue-idle policy.
+    const { music, id, internals, leave, state } = wired(1);
+    expect(state.current).not.toBeNull();
+    listeners(music, id, 0);
+    await internals.leaveWhenIdle(id, "alone");
+    expect(leave).toHaveBeenCalledWith(id);
+    await music.shutdown();
+  });
+
+  it("keeps playing when a listener is back in the channel", async () => {
+    const { music, id, internals, leave } = wired();
+    listeners(music, id, 1);
+    await internals.leaveWhenIdle(id, "alone");
+    expect(leave).not.toHaveBeenCalled();
+    await music.shutdown();
+  });
+
+  it("counts only humans, so bot-only listeners still trigger the empty-channel leave", async () => {
+    const { music, id, internals, leave } = wired();
+    listeners(music, id, 0, 3);
+    await internals.leaveWhenIdle(id, "alone");
+    expect(leave).toHaveBeenCalledWith(id);
+    await music.shutdown();
+  });
+
+  it("does not cancel an empty-channel timer just because a track started", async () => {
+    const { music, id, internals, state } = wired();
+    const player = music.backend!.players.get(id)!;
+    (player as unknown as { playTrack: () => Promise<void> }).playTrack = vi.fn(
+      async () => {}
+    );
+    state.tracks.push({
+      id: "queued",
+      title: "Queued while the channel emptied",
+      author: "Artist",
+      duration: 60_000,
+      uri: "",
+      requestedBy: "Listener",
+      encoded: "encoded-queued",
+    });
+    listeners(music, id, 0);
+    internals.idle.schedule(id, "alone", 15);
+    // `next()` runs when the current track ends and a queued one starts.
+    await (
+      internals as unknown as { next(id: string, p: Player): Promise<void> }
+    ).next(id, player);
+    expect(state.current?.title).toContain("Queued");
+    // Starting a track cancels a *queue* leave; the empty-channel leave stands.
+    expect(internals.idle.reason(id)).toBe("alone");
+    internals.idle.cancel(id);
+    await music.shutdown();
+  });
+
+  it("drops the empty-channel timer once a human is back, even for queue activity", async () => {
+    const { music, id, internals } = wired();
+    internals.idle.schedule(id, "alone", 15);
+    listeners(music, id, 0);
+    // Queue activity in an empty channel must not disable the cleanup...
+    expect(internals.cancelQueueIdle(id)).toBe(false);
+    expect(internals.idle.reason(id)).toBe("alone");
+    // ...but a returning listener does.
+    listeners(music, id, 1);
+    expect(internals.cancelQueueIdle(id)).toBe(true);
+    expect(internals.idle.reason(id)).toBeUndefined();
+    await music.shutdown();
+  });
+
+  it("cancels a pending queue-idle leave for ordinary queue activity", async () => {
+    const { music, id, internals } = wired();
+    internals.idle.schedule(id, "queue-finished", 60);
+    expect(internals.cancelQueueIdle(id)).toBe(true);
+    expect(internals.idle.reason(id)).toBeUndefined();
+    await music.shutdown();
+  });
+
+  it("lets the newest reason win when an empty channel also finishes its queue", async () => {
+    const { music, id, internals, leave } = wired();
+    listeners(music, id, 0);
+    internals.idle.schedule(id, "alone", 15);
+    internals.idle.schedule(id, "queue-finished", 60);
+    expect(internals.idle.reason(id)).toBe("queue-finished");
+    await internals.leaveWhenIdle(id, "queue-finished");
+    // A track is still playing, so the queue reason cancels even though the
+    // channel is empty; the next empty-channel event schedules its own leave.
+    expect(leave).not.toHaveBeenCalled();
+    await internals.leaveWhenIdle(id, "alone");
+    expect(leave).toHaveBeenCalledWith(id);
+    await music.shutdown();
+  });
+
+  it("drops the pending leave and the player when Orbit leaves the guild", async () => {
+    const { music, id, internals, leave } = wired();
+    internals.idle.schedule(id, "alone", 15);
+    await music.guildRemoved(id);
+    expect(internals.idle.reason(id)).toBeUndefined();
+    expect(leave).toHaveBeenCalledWith(id);
+    await music.shutdown();
+  });
+
   it("clears every pending timer on shutdown", async () => {
     const { music, id, internals } = wired();
     internals.idle.schedule(id, "queue-finished", 60);

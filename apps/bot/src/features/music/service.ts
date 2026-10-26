@@ -26,6 +26,7 @@ import {
   DEFAULT_IDLE_SECONDS,
   EMPTY_CHANNEL_GRACE_SECONDS,
   IdleDisconnector,
+  type IdleReason,
 } from "./idle";
 import type {
   MusicSearchProvider,
@@ -349,8 +350,9 @@ export class MusicService {
     if (state.current?.encoded) {
       try {
         await player.playTrack({ track: { encoded: state.current.encoded } });
-        // A track is starting; any pending leave from the previous one is void.
-        this.idle.cancel(id);
+        // A track is starting; a pending *queue* leave is void, but an
+        // empty-channel leave still applies if nobody is listening.
+        this.cancelQueueIdle(id);
       } catch (error) {
         // A rejected play request must not strand the queue on a track that
         // never started: drop it, keep the rest, and report through the caller.
@@ -363,6 +365,36 @@ export class MusicService {
       await this.waitBeforeLeaving(id, reason);
     }
     await this.persist(id);
+  }
+
+  /** Non-bot listeners currently in Orbit's voice channel, if any. */
+  private humansInChannel(guildId: string) {
+    const channel =
+      this.client.guilds?.cache?.get(guildId)?.members.me?.voice.channel;
+    if (!channel) return 0;
+    // Works for discord.js' Collection and for the plain Maps test fixtures use.
+    return [...channel.members.values()].filter((member) => !member.user.bot)
+      .length;
+  }
+
+  /**
+   * Drop a pending *queue* leave.
+   *
+   * An `alone` timer is different: it exists precisely because the channel has no
+   * listeners, so queue or playback churn must not silently disable it. It is only
+   * cancelled once a human is actually back in the channel (the voice-state
+   * handler does that too); until then the empty-channel policy still applies.
+   */
+  private cancelQueueIdle(guildId: string) {
+    if (this.idle.reason(guildId) === "alone") {
+      if (this.humansInChannel(guildId) > 0) {
+        this.idle.cancel(guildId);
+        return true;
+      }
+      return false;
+    }
+    this.idle.cancel(guildId);
+    return true;
   }
 
   /** Schedule (or perform) the idle voice cleanup for one guild. */
@@ -394,18 +426,41 @@ export class MusicService {
    * Runs inside the per-guild lock and re-reads the live state, so a track queued
    * between scheduling and firing keeps the player.
    */
-  private async leaveWhenIdle(guildId: string, reason: string) {
+  private async leaveWhenIdle(guildId: string, reason: IdleReason) {
     if (!this.backend) return;
     await this.locked(guildId, async () => {
       const player = this.backend!.players.get(guildId);
       if (!player) return;
-      const state = this.state(guildId);
-      if (state.current || state.tracks.length) {
-        logger.info(
-          { guildId, reason },
-          "Idle disconnect cancelled: a track is queued or playing"
-        );
-        return;
+      // The reason decides what "still idle" means. An `alone` departure is the
+      // empty-channel policy: it has to happen even while audio is still playing,
+      // because nobody is listening. A queue departure only happens when nothing
+      // is playing and nothing is queued.
+      if (reason === "alone") {
+        const humans = this.humansInChannel(guildId);
+        if (humans > 0) {
+          logger.info(
+            { guildId, reason, humans },
+            "Idle disconnect cancelled: a listener is back in the channel"
+          );
+          return;
+        }
+      } else {
+        const state = this.state(guildId);
+        if (state.current || state.tracks.length) {
+          logger.info(
+            { guildId, reason },
+            "Idle disconnect cancelled: a track is queued or playing"
+          );
+          return;
+        }
+        // A listener may have returned while a queue timer was pending.
+        const humans = this.humansInChannel(guildId);
+        if (humans === 0) {
+          logger.info(
+            { guildId, reason },
+            "Left voice: the queue is idle and no listener remains"
+          );
+        }
       }
       await this.backend!.leaveVoiceChannel(guildId);
       this.sessions.set(guildId, emptyMusic());
@@ -576,8 +631,9 @@ export class MusicService {
           "Nothing is playing right now. Add a track with /play."
         );
       const state = this.state(guild.id);
-      // Any control means a listener is present and engaged.
-      this.idle.cancel(guild.id);
+      // Any control means a listener is present and engaged for queue purposes;
+      // the empty-channel timer still stands until somebody is in the channel.
+      this.cancelQueueIdle(guild.id);
       switch (input.action) {
         case "pause":
           await player.setPaused(true);
@@ -766,9 +822,11 @@ export class MusicService {
   ) {
     const { guild, stored, voice, me } = authority;
     const state = this.state(guild.id);
-    // Queuing cancels a pending idle leave before the player lookup, so a
-    // playlist added to an idle guild never races the cleanup.
-    this.idle.cancel(guild.id);
+    // Queuing cancels a pending queue leave before the player lookup, so a
+    // playlist added to an idle guild never races the cleanup. It deliberately
+    // does not cancel an empty-channel timer unless a human is back: otherwise a
+    // queue trickling into an abandoned channel would keep the bot there forever.
+    this.cancelQueueIdle(guild.id);
     let player = this.backend!.players.get(guild.id);
     assertMusicQueueAdmission(
       state,
@@ -867,6 +925,26 @@ export class MusicService {
           : "Music disabled: configure LAVALINK_URL and LAVALINK_PASSWORD"
     );
   }
+  /**
+   * Orbit was removed from a guild (or the guild is gone). Drop the pending leave
+   * and the player for that guild: a timer must never fire into a guild the bot
+   * no longer belongs to.
+   */
+  async guildRemoved(guildId: string) {
+    this.idle.cancel(guildId);
+    this.sessions.delete(guildId);
+    this.searches.forgetGuild(guildId);
+    if (!this.backend) return;
+    await this.locked(guildId, async () => {
+      if (!this.backend!.players.has(guildId)) return;
+      await this.backend!.leaveVoiceChannel(guildId);
+      logger.info(
+        { guildId },
+        "Left voice after the bot was removed from a guild"
+      );
+    });
+  }
+
   async shutdown() {
     this.idle.clear();
     this.client.off(Events.VoiceStateUpdate, this.onVoiceState);

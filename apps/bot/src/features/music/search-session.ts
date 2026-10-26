@@ -89,6 +89,12 @@ export class MusicSearchSessions {
     return session;
   }
 
+  /** Drops every session of one guild (bot removed, or guild gone). */
+  forgetGuild(guildId: string) {
+    for (const [id, session] of this.sessions)
+      if (session.guildId === guildId) this.sessions.delete(id);
+  }
+
   private sweep() {
     const now = this.now();
     for (const [id, session] of this.sessions)

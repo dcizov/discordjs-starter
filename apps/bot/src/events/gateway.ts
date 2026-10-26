@@ -67,6 +67,15 @@ export function attachGatewayEvents(
   listen(Events.GuildCreate, sync);
   listen(Events.GuildUpdate, (_before, guild) => sync(guild));
   listen(Events.GuildDelete, (guild) => {
+    // No pending music timer may outlive Orbit's membership of the guild.
+    void music
+      .guildRemoved(guild.id)
+      .catch((error) =>
+        logger.warn(
+          { guildId: guild.id, error: errorDiagnostic(error) },
+          "Music cleanup for a removed guild failed"
+        )
+      );
     void removeGuild(guild.id).catch((error) =>
       logger.warn(
         { error: errorDiagnostic(error) },
