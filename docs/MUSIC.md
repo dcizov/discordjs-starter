@@ -269,6 +269,25 @@ explicitly rather than looking healthy.
 
 Only `GET /v4/info` and, with a query, `GET /v4/loadtracks` are used. There is no gateway login, voice join, database/Redis access, queue mutation, playback, or fallback. The doctor shares the player's source/input policy. JSON goes to stdout and failures return exit status 1; use `npm run --silent music:doctor ...` for clean piping. Encoded tracks and signed source URLs are not printed. A successful lookup proves metadata loading, **not** stream decoding or voice.
 
+### Provider ids, search prefixes and source managers are three vocabularies
+
+Four is not a typo for eight. Orbit has **four** user-facing providers, **four**
+Lavalink search prefixes and **three** source-manager names, and each one is
+accepted somewhere different. Mixing them is how a working search gets
+"corrected" into a broken one.
+
+| Vocabulary                 | Values                                               | Where it is accepted / used                                                                         |
+| -------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Provider **id**            | `soundcloud`, `youtube`, `youtube-music`, `bandcamp` | `/play` and `/search` `source` option, dashboard "Search with", `music:doctor --source`             |
+| Lavalink **search prefix** | `scsearch`, `ytsearch`, `ytmsearch`, `bcsearch`      | `MUSIC_SEARCH_PREFIX` only — the bot adds it, you paste a prefix only when writing a query yourself |
+| **Source manager** name    | `soundcloud`, `youtube`, `bandcamp`                  | Lavalink's `/v4/info` and `application.yml`; YouTube Music has no manager of its own                |
+
+So `--source youtube-music` is valid, `--source ytmsearch` is not;
+`MUSIC_SEARCH_PREFIX=ytmsearch` is valid, `MUSIC_SEARCH_PREFIX=youtube-music` is
+not. Four ids + four prefixes is the eight some notes mention — two lists, not
+one option with eight values. `youtube` and `youtube-music` share one manager:
+enabling it enables both searches.
+
 ## Voice handshake: `not established in 15 seconds`
 
 The newer supplied logs are a **different stage** from the earlier stopped-bot
