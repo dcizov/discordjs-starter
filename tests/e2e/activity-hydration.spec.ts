@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { chooseOption } from "./support/ui";
 const root = "/dashboard/120000000000000001/overview";
 const hydrationError =
   /hydrat|server rendered|minified react error #(418|425)|react\.dev\/errors\/(418|425)/i;
@@ -51,7 +52,7 @@ for (const [zone, clientTime] of [
       await expect(chart.locator("[data-activity-day]")).toHaveCount(7);
       await chart.locator("summary").click();
       await expect(chart.locator("tbody tr")).toHaveCount(7);
-      await page.getByLabel("Chart metric").selectOption("members");
+      await chooseOption(page, "Chart metric", "Rewarded members");
       await expect(
         chart.getByRole("columnheader", {
           name: "Rewarded members",

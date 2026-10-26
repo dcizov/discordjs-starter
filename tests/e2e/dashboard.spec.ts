@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { chooseOption } from "./support/ui";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, url: string) {
@@ -108,9 +109,7 @@ test("moderation rules validate, persist, filter, and delete", async ({
     .click();
   const d = page.getByRole("dialog");
   await d.getByLabel("Name", { exact: true }).fill("E2E · Kind conversations");
-  await d
-    .getByLabel("What should Orbit watch for?")
-    .selectOption("blocked_terms");
+  await chooseOption(d, "What should Orbit watch for?", "Blocked terms");
   await d
     .getByLabel("Blocked terms", { exact: true })
     .fill("blocked phrase\nsecond phrase");
@@ -148,7 +147,7 @@ test("news sources can be tested, routed, and safely simulated", async ({
   await page.getByRole("button", { name: "Add news source" }).click();
   const d = page.getByRole("dialog");
   await d.getByLabel("Name", { exact: true }).fill("E2E · Community dispatch");
-  await d.getByLabel("Source adapter").selectOption("webhook");
+  await chooseOption(d, "Source adapter", "Signed incoming webhook");
   await d.getByLabel("Source tags").fill("Community, Updates");
   await d
     .getByRole("button", { name: "Create news source", exact: true })

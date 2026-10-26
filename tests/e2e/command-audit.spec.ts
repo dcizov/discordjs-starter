@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { chooseOption } from "./support/ui";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, path: string) {
@@ -53,7 +54,7 @@ test("commands are discoverable, derived from registration, searchable, and filt
     timeout.getByText("Moderate Members", { exact: true })
   ).toBeVisible();
   await search.fill("");
-  await page.getByLabel("Filter command module").selectOption("music");
+  await chooseOption(page, "Filter command module", "Music");
   await expect(page.getByRole("article")).toHaveCount(11);
   await expect(
     page.getByRole("article", { name: "/play", exact: true })

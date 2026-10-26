@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { chooseOption } from "./support/ui";
 const base = "/api/guilds/120000000000000001";
 async function openMusic(page: Page) {
   await page.goto("/dashboard/120000000000000001/music");
@@ -167,7 +168,7 @@ test("the play form sends the chosen provider and the server default otherwise",
     "YouTube Music",
     "Bandcamp",
   ]);
-  await provider.selectOption("bandcamp");
+  await chooseOption(page, "Search with", "Bandcamp");
   await page
     .getByRole("button", { name: "Add to the queue", exact: true })
     .click();
@@ -179,7 +180,7 @@ test("the play form sends the chosen provider and the server default otherwise",
   });
   // Back to the default: the option is omitted rather than sent as "".
   await page.getByPlaceholder("Set the mood…").fill("A second request");
-  await provider.selectOption("");
+  await chooseOption(page, "Search with", "Server default");
   await page
     .getByRole("button", { name: "Add to the queue", exact: true })
     .click();

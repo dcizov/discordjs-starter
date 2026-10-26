@@ -851,7 +851,7 @@ export function ResourceEditor({
                 <Switch
                   checked={values.includeSummary}
                   onCheckedChange={(v) => set("includeSummary", v)}
-                  aria-label="Include summary"
+                  aria-label="Include a short summary"
                 />
               </div>
               {values.adapter === "steam" && (
