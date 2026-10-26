@@ -10,7 +10,8 @@
     /* AA margin on body/card/muted surfaces, including fractional sRGB channels. */
     --muted-foreground: 232 9% 45%;
     --border: 233 18% 92%;
-    --primary: 258 64% 60%;
+    /* 58 %, not 60 %: inline links and code sit at 4.4:1 on the muted surface below. */
+    --primary: 258 64% 58%;
     --primary-foreground: 0 0% 100%;
     /*
       Tells the browser which scheme the surrounding tokens already implement, so
@@ -243,6 +244,11 @@
   background: none;
   padding: 0;
   font-size: inherit;
+}
+/* Code frames are focus stops because they scroll; the ring has to say so. */
+.docs-prose pre:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: -2px;
 }
 .docs-prose blockquote {
   border-left: 3px solid hsl(var(--border));

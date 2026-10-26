@@ -153,11 +153,12 @@ test("news sources can be tested, routed, and safely simulated", async ({
     .getByRole("button", { name: "Create news source", exact: true })
     .click();
   await expect(d).not.toBeVisible();
-  // Sources are rows now; the per-row actions live in the row menu.
-  const row = page.getByRole("row").filter({
-    hasText: "E2E · Community dispatch",
-  });
-  await row
+  // News sources are cards, each with its own action menu; the moderation rules
+  // on the other tab are the table. Assert the card arrived before using it.
+  await expect(
+    page.getByRole("heading", { name: "E2E · Community dispatch", exact: true })
+  ).toBeVisible();
+  await page
     .getByRole("button", { name: "Actions for E2E · Community dispatch" })
     .click();
   await page

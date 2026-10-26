@@ -585,7 +585,9 @@ export function enhanceCodeBlocks(html: string) {
       `<span class="docs-code-lang">${label}</span>`,
       '<button type="button" class="docs-copy" data-docs-copy aria-label="Copy this code block">Copy</button>',
       "</figcaption>",
-      `<pre>${inner}</pre>`,
+      // The block scrolls sideways on narrow screens; without a focus stop a
+      // keyboard user could never see the end of a long command.
+      `<pre tabindex="0">${inner}</pre>`,
       "</figure>",
     ].join("");
   });

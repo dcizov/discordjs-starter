@@ -120,6 +120,8 @@ describe("in-app documentation is generated from the repository", () => {
       '<figure class="docs-code" data-language="sh">'
     );
     expect(rendered.body).toContain('<span class="docs-code-lang">sh</span>');
+    // The block scrolls sideways, so it has to be reachable by keyboard.
+    expect(rendered.body).toContain('<pre tabindex="0">');
     expect(rendered.body).toContain('class="language-sh">npm ci</code>');
     expect(rendered.body).toContain("data-docs-copy");
     // Without a language the frame still renders, labelled "code".
