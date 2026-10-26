@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { setTheme } from "./support/ui";
 const root = "/dashboard/120000000000000001/overview";
 const guildButton = (page: Page, name = "The Cozy Corner") =>
   page.getByRole("button", {
@@ -353,8 +354,7 @@ test("navigation and identity controls pass scoped contrast/label checks in both
 }) => {
   await visit(page);
   for (const theme of ["light", "dark"]) {
-    if (theme === "dark")
-      await page.getByRole("button", { name: "Toggle color theme" }).click();
+    if (theme === "dark") await setTheme(page, "dark");
     await expect(page.locator("html")).toHaveClass(
       new RegExp(`\\b${theme}\\b`)
     );

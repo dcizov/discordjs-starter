@@ -15,7 +15,7 @@ test("header search and notifications keep independent state and navigate from t
   await search
     .getByPlaceholder("Search pages and configuration…")
     .fill("self roles");
-  await search.getByRole("button", { name: "Self roles", exact: true }).click();
+  await search.getByRole("option", { name: /Self roles/ }).click();
   await expect(page).toHaveURL(`${root}/roles`);
   await expect(search).not.toBeVisible();
   await page

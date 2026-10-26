@@ -12,9 +12,17 @@ import {
   Sun,
 } from "lucide-react";
 import { cn, relativeTime } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { CommandMenu } from "./command-menu";
 import { AccountMenu } from "../identity/account-menu";
 import { Button } from "../ui/button";
-import { Input } from "../ui/primitives";
 import { useWorkspace } from "../workspace";
 import { navigation } from "./navigation";
 import {
@@ -36,7 +44,6 @@ export function DashboardHeader({
   const { data, navigate } = useWorkspace();
   const { theme, setTheme } = useTheme();
   const [search, setSearch] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
   const [notifications, setNotifications] = useState(false);
   const current = navigation.find((n) => n.id === section) ?? navigation[0];
   const servicesHealthy =
@@ -89,25 +96,41 @@ export function DashboardHeader({
                 ? "Some services need attention"
                 : "Status not reported"}
           </span>
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             aria-label="Search dashboard"
             onClick={() => setSearch(true)}
-            className="hidden items-center gap-6 rounded-md border px-2.5 py-1.5 text-muted-foreground md:flex"
+            className="hidden gap-6 px-2.5 text-muted-foreground md:flex"
           >
-            <Search size={13} />
+            <Search size={13} aria-hidden />
             <span className="flex items-center gap-0.5 text-[10px]">
-              <Command size={10} />K
+              <Command size={10} aria-hidden />K
             </span>
-          </button>
-          <Button
-            size="icon"
-            variant="ghost"
-            aria-label="Toggle color theme"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            <Sun className="dark:hidden" size={16} />
-            <Moon className="hidden dark:block" size={16} />
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="ghost" aria-label="Color theme">
+                <Sun className="dark:hidden" size={16} aria-hidden />
+                <Moon className="hidden dark:block" size={16} aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={theme ?? "system"}
+                onValueChange={(next) => setTheme(next)}
+              >
+                <DropdownMenuRadioItem value="light">
+                  Light
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="system">
+                  System
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             size="icon"
             variant="ghost"
@@ -124,60 +147,11 @@ export function DashboardHeader({
           <AccountMenu onModeInfo={onModeInfo} />
         </div>
       </header>
-      <Dialog open={search} onOpenChange={setSearch}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Find your way around</DialogTitle>
-            <DialogDescription>
-              Your community, one shortcut away.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-3 text-muted-foreground"
-              size={16}
-            />
-            <Input
-              autoFocus
-              placeholder="Search pages and configuration…"
-              className="pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="mt-3 space-y-1">
-            {navigation
-              .filter((n) =>
-                n.label.toLowerCase().includes(searchTerm.toLowerCase())
-              )
-              .map((n) => (
-                <button
-                  key={n.id}
-                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-xs hover:bg-muted"
-                  onClick={() => {
-                    navigate(n.id);
-                    setSearch(false);
-                    setSearchTerm("");
-                  }}
-                >
-                  <n.icon size={16} className="text-primary" />
-                  {n.label}
-                  <ArrowRight
-                    size={13}
-                    className="ml-auto text-muted-foreground"
-                  />
-                </button>
-              ))}
-            {!navigation.some((n) =>
-              n.label.toLowerCase().includes(searchTerm.toLowerCase())
-            ) && (
-              <p className="py-8 text-center text-xs text-muted-foreground">
-                No pages found. Try “roles” or “news”.
-              </p>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CommandMenu
+        open={search}
+        onOpenChange={setSearch}
+        onNavigate={(id) => navigate(id)}
+      />
       <Dialog open={notifications} onOpenChange={setNotifications}>
         <DialogContent>
           <DialogHeader>

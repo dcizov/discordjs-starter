@@ -42,3 +42,21 @@ export async function chooseComboboxOption(
   await page.getByRole("option", { name: option }).first().click();
   await expect(page.getByRole("listbox")).toBeHidden();
 }
+
+/**
+ * Set the dashboard appearance through its menu.
+ *
+ * The theme control is a menu (Light / Dark / System) rather than a toggle, so
+ * the system preference is reachable from the UI. Tests drive the real menu.
+ */
+export async function setTheme(page: Page, theme: "light" | "dark" | "system") {
+  const label = theme[0].toUpperCase() + theme.slice(1);
+  const trigger = page.getByRole("button", { name: "Color theme" });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  await page.getByRole("menuitemradio", { name: label }).click();
+  if (theme === "system") return;
+  await expect(page.locator("html")).toHaveClass(
+    theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*/
+  );
+}

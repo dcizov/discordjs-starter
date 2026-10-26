@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { chooseOption } from "./support/ui";
+import { chooseOption, setTheme } from "./support/ui";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, url: string) {
@@ -32,9 +32,9 @@ test("overview is polished, responsive, and clearly labels simulation", async ({
   await page.getByRole("button", { name: "Customize", exact: true }).click();
   await page.getByRole("switch", { name: "A little welcome" }).click();
   await page.getByRole("button", { name: "Looks like home" }).click();
-  await page.getByRole("button", { name: "Toggle color theme" }).click();
+  await setTheme(page, "dark");
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await page.getByRole("button", { name: "Toggle color theme" }).click();
+  await setTheme(page, "light");
 });
 test("role panels have working create, preview, publish, edit, and delete flows", async ({
   page,

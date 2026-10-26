@@ -2,7 +2,7 @@
 import { waitForBotAction } from "@orbit/core/bot-actions";
 import { request } from "@/lib/utils";
 import type { DashboardData, GuildConfig } from "@orbit/core";
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CommunityPage } from "./features/community/community-page";
@@ -19,6 +19,13 @@ import { DemoNotice } from "./layout/demo-notice";
 import { InstallPrompt } from "./layout/install-prompt";
 import { HelpDialog, ModeInfoDialog } from "./layout/guidance";
 import { FirstVisitTour } from "./layout/first-visit-tour";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 export function Dashboard({
   initial,
   section,
@@ -138,26 +145,23 @@ export function Dashboard({
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col overflow-y-auto border-r border-border bg-card px-4 pb-5 pt-7 lg:flex">
           {sidebar}
         </aside>
-        {mobile && (
-          <div
-            className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden"
-            onClick={() => setMobile(false)}
-          >
-            <aside
-              className="absolute inset-y-0 left-0 flex w-[250px] flex-col overflow-y-auto bg-card px-4 pb-5 pt-7"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                className="absolute right-4 top-5 p-2 text-muted-foreground"
-                aria-label="Close navigation"
-                onClick={() => setMobile(false)}
-              >
-                <X size={18} />
-              </button>
-              {sidebar}
-            </aside>
-          </div>
-        )}
+        {/*
+          The mobile navigation is a modal dialog, not a hand-rolled overlay: it
+          traps focus, closes on Escape, locks background scroll and returns
+          focus to the "Open navigation" button. The desktop sidebar above is the
+          same component, so the two can never list different pages.
+        */}
+        <Dialog open={mobile} onOpenChange={setMobile}>
+          <DialogContent className="left-0 top-0 h-dvh w-[264px] max-w-[80vw] translate-x-0 translate-y-0 overflow-y-auto rounded-none rounded-r-2xl p-5">
+            <DialogHeader className="sr-only mb-0 pr-0">
+              <DialogTitle>Workspace navigation</DialogTitle>
+              <DialogDescription>
+                Every page in this community workspace.
+              </DialogDescription>
+            </DialogHeader>
+            {sidebar}
+          </DialogContent>
+        </Dialog>
         <div className="lg:ml-[224px]">
           <DashboardHeader
             section={section}

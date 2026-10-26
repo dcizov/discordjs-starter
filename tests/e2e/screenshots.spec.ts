@@ -140,9 +140,7 @@ test.describe("visual evidence", () => {
     const nav = page.getByRole("button", { name: "Open navigation" });
     if (await nav.count()) {
       await nav.click();
-      await expect(
-        page.getByRole("button", { name: "Close navigation" })
-      ).toBeVisible();
+      await expect(page.getByRole("dialog")).toBeVisible();
       await capture(page, "mobile-navigation");
     }
   });
