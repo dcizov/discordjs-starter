@@ -421,11 +421,10 @@ export function MusicPage() {
               </div>
             </div>
             <p className="mt-5 border-t pt-4 text-[10px] leading-relaxed text-muted-foreground">
-              Approved adapters: SoundCloud, Bandcamp, YouTube and OC ReMix. Use
-              clean recordings you are authorized to play. Adult adapters,
-              arbitrary files and Spotify mirroring are disabled. Public
-              catalogs and lyrics are not automatically SFW-rated; availability
-              varies.
+              Approved adapters: SoundCloud, Bandcamp, YouTube, OC ReMix. Play
+              only what you are authorized to play. Adult adapters, arbitrary
+              files and Spotify mirroring are disabled, and catalogues are not
+              automatically SFW-rated.
             </p>
           </Card>
         </div>

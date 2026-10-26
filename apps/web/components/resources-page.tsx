@@ -39,6 +39,8 @@ import { NewsPreviewFeed } from "./news-preview-feed";
 import type { NewsCard } from "@orbit/core/news-presentation";
 import { sourceFreshness } from "@orbit/core/source-health";
 import { Button } from "./ui/button";
+import { ConfirmDialog } from "./ui/confirm-dialog";
+import { TabBar } from "./ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -362,36 +364,29 @@ export function ResourcesPage({
               </Card>
             ))}
           </div>
-          <div className="mb-5 flex gap-6 border-b">
-            {(section === "news"
-              ? [
-                  { id: "main", label: "Sources" },
-                  { id: "routes", label: "Routing rules" },
-                  { id: "history", label: "Delivery history" },
-                ]
-              : [
-                  { id: "main", label: "Auto moderation" },
-                  { id: "cases", label: "Case history" },
-                ]
-            ).map((t) => (
-              <button
-                className={cn(
-                  "relative -mb-px border-b-2 px-0.5 pb-3 pt-1 text-[12px] font-medium transition",
-                  tab === t.id
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-                key={t.id}
-                onClick={() => {
-                  setTab(t.id);
-                  setQuery("");
-                  setFilter("all");
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <TabBar
+            id={`resources-${section}`}
+            label={`${section} sections`}
+            controls={false}
+            value={tab}
+            onChange={(next) => {
+              setTab(next);
+              setQuery("");
+              setFilter("all");
+            }}
+            tabs={
+              section === "news"
+                ? [
+                    { id: "main", label: "Sources" },
+                    { id: "routes", label: "Routing rules" },
+                    { id: "history", label: "Delivery history" },
+                  ]
+                : [
+                    { id: "main", label: "Auto moderation" },
+                    { id: "cases", label: "Case history" },
+                  ]
+            }
+          />
         </>
       )}
       {section === "deals" && (
@@ -997,55 +992,31 @@ export function ResourcesPage({
           onClose={() => setEditor(null)}
         />
       )}
-      <Dialog
+      <ConfirmDialog
         open={!!deleting}
-        onOpenChange={(o) => {
-          if (!o && !deleteBusy) setDeleting(null);
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
         }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>A little less in your orbit?</DialogTitle>
-            <DialogDescription>
-              Delete “{deleting?.name}”? This can’t be undone. Previously
-              delivered messages and audit records will stay intact.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setDeleting(null)}
-              disabled={deleteBusy}
-            >
-              Keep it
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteBusy}
-              onClick={async () => {
-                if (!deleting) return;
-                setDeleteBusy(true);
-                try {
-                  await api(
-                    `/resources/${deleting.kind}/${deleting.id}`,
-                    "DELETE"
-                  );
-                  await refresh();
-                  toast.success("Configuration deleted");
-                  setDeleting(null);
-                } catch (e: any) {
-                  toast.error(e.message);
-                } finally {
-                  setDeleteBusy(false);
-                }
-              }}
-            >
-              {deleteBusy ? <Spinner /> : <Trash2 size={14} />}Delete
-              configuration
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        title="A little less in your orbit?"
+        description={`Delete “${deleting?.name ?? ""}”? This can’t be undone. Previously delivered messages and audit records will stay intact.`}
+        cancelLabel="Keep it"
+        confirmLabel="Delete configuration"
+        busy={deleteBusy}
+        onConfirm={async () => {
+          if (!deleting) return;
+          setDeleteBusy(true);
+          try {
+            await api(`/resources/${deleting.kind}/${deleting.id}`, "DELETE");
+            await refresh();
+            toast.success("Configuration deleted");
+            setDeleting(null);
+          } catch (e: any) {
+            toast.error(e.message);
+          } finally {
+            setDeleteBusy(false);
+          }
+        }}
+      />
       <Dialog
         open={!!test}
         onOpenChange={(o) => {

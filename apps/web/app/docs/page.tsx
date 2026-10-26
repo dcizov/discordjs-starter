@@ -15,9 +15,8 @@ export default function DocsIndex() {
     <article className="docs-prose">
       <h1>Orbit documentation</h1>
       <p>
-        These pages are generated from the repository&rsquo;s own Markdown, so a
-        guide here is the same file a developer reviews in a pull request. There
-        is no second copy to drift out of sync.
+        Every page here is the repository&rsquo;s own Markdown, rendered at
+        build time — one source, no second copy to drift.
       </p>
       <p>
         <strong>User guides</strong> cover installing Orbit, permissions and

@@ -35,6 +35,7 @@ import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { RolePicker } from "./resource-editor";
 import { Button } from "./ui/button";
+import { TabBar } from "./ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -95,33 +96,26 @@ export function ChannelsPage() {
           </div>
         </div>
       </div>
-      <div className="mb-5 flex gap-6 border-b">
-        {["channels", "roles", "permissions"].map((t) => (
-          <button
-            key={t}
-            className={cn(
-              "-mb-px border-b-2 pb-3 pt-1 text-[12px] font-medium capitalize",
-              tab === t
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground"
-            )}
-            onClick={() => {
-              setTab(t);
-              setQ("");
-              setFilter("all");
-            }}
-          >
-            {t}
-            {t !== "permissions" && (
-              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                {t === "roles"
-                  ? data.guild.roles.length
-                  : data.guild.channels.length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        id="server"
+        label="Server sections"
+        controls={false}
+        value={tab}
+        onChange={(next) => {
+          setTab(next);
+          setQ("");
+          setFilter("all");
+        }}
+        tabs={[
+          {
+            id: "channels",
+            label: "Channels",
+            badge: data.guild.channels.length,
+          },
+          { id: "roles", label: "Roles", badge: data.guild.roles.length },
+          { id: "permissions", label: "Permissions" },
+        ]}
+      />
       {tab !== "permissions" ? (
         <>
           <div className="mb-4 flex justify-between gap-3">

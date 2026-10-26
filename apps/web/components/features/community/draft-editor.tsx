@@ -8,7 +8,7 @@ import {
 } from "@orbit/core/community";
 import { useWorkspace } from "../../workspace";
 import { Button } from "../../ui/button";
-import { Field, Input, Select, Textarea } from "../../ui/primitives";
+import { Checkbox, Field, Input, Select, Textarea } from "../../ui/primitives";
 import {
   Dialog,
   DialogContent,
@@ -102,10 +102,9 @@ export function PostEditor({
           </DialogTitle>
           <DialogDescription>
             Saving never publishes. Plain text only; mentions are suppressed. Do
-            not include secrets or sensitive personal information. Content is
-            visible to server managers. Live content is eligible for deletion
-            after 90 inactive days while the worker runs; demo records persist
-            until deleted.
+            not include secrets or personal information — server managers can
+            read this. Live drafts are removed after 90 inactive days; demo
+            records stay until deleted.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={(e) => void submit(e)} className="space-y-4">
@@ -178,9 +177,7 @@ export function PostEditor({
                 />
               </Field>
               <label className="flex min-h-10 cursor-pointer items-center gap-2 text-xs">
-                <input
-                  className="size-4 accent-violet-600"
-                  type="checkbox"
+                <Checkbox
                   checked={multi}
                   onChange={(e) => setMulti(e.target.checked)}
                 />

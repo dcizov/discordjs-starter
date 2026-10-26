@@ -25,11 +25,9 @@ export function NewsRoutingPreview() {
           Preview news routing — no fetch, no send
         </summary>
         <p className="mb-4 mt-3 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          Use sample text against this server's saved source keywords, source
-          tags and enabled routes. This is the same matcher used by the delivery
-          outbox. It does not fetch a feed, test credentials, ping a role,
-          contact Discord, enqueue a delivery or store the sample. Saved/synced
-          metadata is not proof of live access.
+          Runs sample text through the saved keywords, tags and routes with the
+          same matcher delivery uses. No feed is fetched, nothing is sent, and
+          nothing is stored. Saved metadata is not proof of live access.
         </p>
         <form
           className="grid gap-4 sm:grid-cols-2"

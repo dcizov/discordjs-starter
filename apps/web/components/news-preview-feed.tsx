@@ -59,15 +59,21 @@ export function NewsFeatureCard({ card }: { card: NewsCard }) {
   return (
     <article className="overflow-hidden rounded-xl border bg-card">
       {/* 16:9 keeps a wide Steam header from pushing the text off screen. */}
-      <CoverArt url={card.image ?? ""} className="aspect-[16/9] w-full" />
+      <div className="relative">
+        <CoverArt url={card.image ?? ""} className="aspect-[16/9] w-full" />
+        {card.imageKind === "app-artwork" ? (
+          // A caption, not a badge: the artwork is real provider data and the
+          // reader mainly needs to know it is the game's art, not the article's.
+          // Rendered over the image's lower edge so it stays attached to what it
+          // describes, with a scrim for contrast on bright artwork.
+          <p className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-1.5 pt-6 text-[10px] text-white/90">
+            {card.imageAttribution || "Store artwork"}
+          </p>
+        ) : null}
+      </div>
       <div className="space-y-2 p-4">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone={attributionTone(card)}>{card.attributionLabel}</Badge>
-          {card.imageKind === "app-artwork" ? (
-            <Badge tone="neutral">
-              {card.imageAttribution || "Store artwork"}
-            </Badge>
-          ) : null}
           {card.tags.slice(0, 3).map((tag) => (
             <Badge key={tag} tone="neutral">
               {tag}

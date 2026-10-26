@@ -207,3 +207,28 @@ export function SearchInput({
 export function Skeleton({ className }: { className?: string }) {
   return <div className={cn("animate-pulse rounded-lg bg-muted", className)} />;
 }
+
+/**
+ * Native checkbox with the dashboard's single accent treatment.
+ *
+ * Four call sites previously picked their own size and accent (`size-3`,
+ * `size-4 accent-violet-600`, or no class at all). A native input is kept
+ * because the browser's own keyboard and screen-reader behaviour is exactly what
+ * is wanted here; only the presentation is shared. Always render it inside a
+ * `<label>` so the text is part of the hit target.
+ */
+export function Checkbox({
+  className,
+  ...props
+}: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      type="checkbox"
+      className={cn(
+        "size-4 shrink-0 cursor-pointer accent-violet-600",
+        className
+      )}
+      {...props}
+    />
+  );
+}

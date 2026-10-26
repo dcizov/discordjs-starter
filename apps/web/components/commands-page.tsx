@@ -93,16 +93,12 @@ export function CommandsPage() {
             Same definitions. No guesswork.
           </p>
           <p className="mt-1">
-            Generated from the bot’s registration definitions. This does not
-            verify which commands are currently registered in Discord. Server
-            command overrides and runtime permission checks still apply.
-          </p>
-          <p className="mt-1">
-            After changing definitions, the operator must run{" "}
+            Generated from the registration definitions — it does not check what
+            Discord currently has. After changing definitions, run{" "}
             <code className="rounded bg-muted px-1 py-0.5">
               npm run commands:register
             </code>
-            . This page never registers or executes commands.
+            ; this page never registers or runs anything.
           </p>
           <p className="mt-1">
             Channel types, suggested placement, caller/bot permissions and what

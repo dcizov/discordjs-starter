@@ -25,6 +25,7 @@ import {
 } from "./ui/dialog";
 import {
   Badge,
+  Checkbox,
   Field,
   Input,
   Select,
@@ -459,8 +460,7 @@ export function ResourceEditor({
                       className="flex items-center gap-1.5 text-[11px]"
                       key={c.id}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={(values.exemptChannelIds ?? []).includes(c.id)}
                         onChange={(e) =>
                           set(
@@ -852,11 +852,9 @@ export function ResourceEditor({
                   <span className="text-xs leading-relaxed">
                     Official announcements only
                     <span className="mt-1 block text-[11px] text-muted-foreground">
-                      Asks Steam for this app's announcement feed, so posts
-                      syndicated from other publishers are not requested. Steam
-                      does not publish a "first party" field; Orbit treats
-                      Steam's app-announcement feed as the app's own channel and
-                      never claims more than that.
+                      Uses Steam's app announcement feed only, so posts from
+                      other publishers are not requested. Steam has no "first
+                      party" field — the feed is the signal, nothing more.
                     </span>
                   </span>
                   <Switch
@@ -879,8 +877,7 @@ export function ResourceEditor({
                         key={s.id}
                         className="flex items-center gap-2 text-xs"
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={(values.sourceIds ?? []).includes(s.id)}
                           onChange={(e) =>
                             set(
@@ -984,9 +981,7 @@ export function RolePicker({
           )}
           key={r.id}
         >
-          <input
-            type="checkbox"
-            className="size-3"
+          <Checkbox
             checked={value.includes(r.id)}
             onChange={(e) =>
               onChange(
