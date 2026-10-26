@@ -121,7 +121,7 @@ test("an empty or paused player never presents an active pause control", async (
   if (label === "Nothing is playing") await expect(transport).toBeDisabled();
 });
 
-test("volume moves locally and commits one debounced request per interaction", async ({
+test("volume moves locally and commits once when the interaction ends", async ({
   page,
 }) => {
   const bodies: any[] = [];
@@ -134,18 +134,23 @@ test("volume moves locally and commits one debounced request per interaction", a
   const slider = page.getByRole("slider", { name: "Playback volume" });
   await expect(slider).toBeEnabled();
   const before = Number(await slider.inputValue());
+  const target = Math.min(100, before + 1);
   await slider.focus();
-  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
   // Immediate local feedback, before any request is confirmed.
-  await expect
-    .poll(async () => Number(await slider.inputValue()))
-    .toBeGreaterThanOrEqual(Math.min(100, before + 1));
+  await expect(slider).toHaveValue(String(target));
+  // Leaving the control flushes the pending change. This is what a user does
+  // after nudging the volume, and it is deterministic: the commit no longer
+  // depends on whether three key presses happened to fit inside the debounce
+  // window, which is what made this test flaky.
+  await page.keyboard.press("Tab");
   await expect.poll(() => bodies.length).toBe(1);
-  expect(bodies[0]).toMatchObject({ action: "volume" });
-  expect(bodies[0].volume).toBeGreaterThanOrEqual(Math.min(100, before + 1));
-  await expect(
-    page.getByRole("slider", { name: "Playback volume" })
-  ).toHaveValue(String(bodies[0].volume));
+  expect(bodies[0]).toMatchObject({ action: "volume", volume: target });
+  await expect(slider).toHaveValue(String(bodies[0].volume));
+  // `flush` clears the timer, so the blur cannot send a second, duplicate job;
+  // the live region settles instead of staying on "Saving volume".
+  await expect(page.locator("#volume-status")).toHaveText("Volume queued");
+  expect(bodies).toHaveLength(1);
 });
 
 test("the play form sends the chosen provider and the server default otherwise", async ({

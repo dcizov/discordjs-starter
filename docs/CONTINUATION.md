@@ -1178,3 +1178,75 @@ regression; it was left unchanged rather than weakened.
 UI, LavaSearch/lyrics surfaces, unrelated `<Switch>` labels (8 of 13 still lack
 an `aria-label`), and any plugin upgrade. Dark Reader itself cannot be exercised
 here, so the extension case stays documented rather than "tested".
+
+## Pass 8 (2026-10-26): shadcn/ui rework in slices
+
+The instruction for this pass changed one previous decision outright: **"retain
+the old table" is not the acceptance criterion.** The table experience was
+replaced rather than restyled, and the rest of the work is sliced so each commit
+leaves a working app.
+
+### What landed, by slice
+
+| Commit    | Slice                | What it does                                                                                                                                                                                                           |
+| --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `242bb5f` | Primitives + selects | `select`, `popover`, `command`, `combobox`, `checkbox`, `label`, `alert-dialog`, `tooltip`, `table`, `field-context`; `FormSelect`/`NativeSelect`; **28 native `<select>` sites** migrated (combobox where searchable) |
+| `a55813f` | Tables               | `DataTable` on TanStack v9 manual mode: server paging/sort/filter kept, typed columns, `aria-sort`, debounced search with reset, column visibility, pagination + page size, row actions; 4 consumers converted         |
+| `bdefbc5` | Browser tests        | Context-driven `chooseOption` for a Radix listbox, 13 `selectOption` sites rewritten, new `accessibility.spec.ts` (unnamed controls, type-ahead, `aria-sort`, axe at WCAG 2.2 AA over 9 routes in light and dark)      |
+| `1aaf01b` | Header + mobile nav  | ⌘K command menu (pages only, honest empty state), theme radio group, mobile sidebar as a real dialog sheet with focus trap/Escape/restore                                                                              |
+| `0f9575d` | Docs trust boundary  | The copy control is now built **after** sanitization (`enhanceCodeBlocks`); the sanitizer keeps no interactive tag at all, so `data-docs-copy` is no longer a provenance claim                                         |
+| `131beb4` | Lavalink diagnostics | Refused/DNS/timeout/auth/TLS/closed classification from the error's own `code`/`status`/`cause`/aggregate members; empty-message aggregate explained; hint only when evidenced; repeat counter                         |
+| `f3d8000` | Docs structure       | Eight navigation groups, group descriptions, a `Troubleshooting` router page, GitHub-identical heading ids, and links that resolve (see below)                                                                         |
+
+### Defects found and fixed at the source
+
+- **Empty Lavalink error.** Shoukaku forwards the WebSocket client error, and a
+  refused dual-stack connect is an `AggregateError` with an empty message. The
+  old handler logged `errorDiagnostic(error)` (nothing useful) and stored the
+  fixed string "Lavalink connection error" as health detail. Now the name,
+  message, `code`, HTTP status, causes and aggregate members are read, redacted
+  with the existing `diagnosticText`, and classified; only an evidenced category
+  gets advice.
+- **Docs links that only worked by accident.** `docs/WORKFLOWS.md` linked
+  `README.md` from inside `docs/` (a 404 on GitHub) and reached the in-app page
+  only because the rewriter matched bare basenames. Heading ids also differed
+  from GitHub (`can't` → `can-t`, `redirect_uri` → `redirect-uri`), so a link
+  written for GitHub broke in the dashboard. Ids now follow GitHub's algorithm
+  and relative paths are resolved against the current file.
+- **Uncurated Markdown in links.** A link to a repository note that is
+  deliberately not a docs page used to stay a relative `.md` href and 404 in the
+  app. It now points at the file's source at the configured ref.
+- **The music-actions flake.** `volume moves locally…` pressed three arrow keys
+  and expected exactly one POST; on a slow runner the first press committed
+  before the third arrived, which is the debounce working, not a bug. The test
+  now presses once and leaves the control (blur flushes the pending change),
+  asserts the single request and its value, and asserts the live region settles
+  — no sleeps, no retries, no weaker assertions.
+- **The "8 unlabelled switches" backlog entry is stale.** All 13 `<Switch>`
+  sites carry an `aria-label`; the remaining gap is that most rely on that
+  attribute instead of a `<label for>` association with the visible text.
+
+### Verification (this pass)
+
+| Check                            | Result                                                                                                                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`                 | **897 tests in 71 files pass** (baseline 887 / 70; +7 connection diagnostics, +2 docs, +1 rewritten)                                                                                              |
+| `npm run typecheck`              | pass (`next typegen` + both `tsc --noEmit` runs)                                                                                                                                                  |
+| `npm run lint`                   | pass, no warnings                                                                                                                                                                                 |
+| `npm run format:check`           | pass                                                                                                                                                                                              |
+| `npm run build:web`              | pass (5.4 s); 25 documentation pages prerendered                                                                                                                                                  |
+| `npm run build:services`         | pass                                                                                                                                                                                              |
+| Served HTML (demo, `next start`) | `/docs` 200 with **8 groups** and their descriptions; `/docs/troubleshooting` 200 with in-app anchors; `/docs/music` 200 with 12 copy controls and no relative `.md` href; `/docs/not-a-page` 404 |
+
+**Not verified here**: no browser exists in this sandbox, so the Playwright
+suites (including the rewritten volume test and `accessibility.spec.ts`) run in
+CI only. The screenshots artifact still cannot be downloaded here, so **no
+pixels were reviewed** in this pass either. Dark Reader itself still cannot be
+exercised — the hydration section remains a documented diagnosis, not a test.
+
+### Still deferred (unchanged)
+
+The real server-member list, SponsorBlock guild UI, LavaSearch/lyrics, `<label
+for>` associations on the switches, the `AuthProblem.retryAt` time dependency,
+and the mobile-overflow slug list. No PR was opened; work stays on
+`arena/99c6cf65-discordjs-starter`.
