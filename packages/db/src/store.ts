@@ -573,6 +573,16 @@ export async function recordCase(
     return serialize<Resource>(r);
   });
 }
+/**
+ * Claim one (guild, source, external item, channel) delivery, or return `null`
+ * when it was already claimed.
+ *
+ * This is the deduplication boundary for feeds and deals: the unique constraint
+ * decides the winner, so two workers racing on the same item produce exactly one
+ * row. A returned row is a *reservation* (`status: "pending"`, `attempts: 0`),
+ * not a delivery — the caller sends, then records success or failure. Callers must
+ * treat `null` as "someone else has it" and stay silent rather than retrying.
+ */
 export async function reserveDelivery(
   input: Omit<
     Delivery,

@@ -70,6 +70,20 @@ function allowed(
   if (i.type === "transfer" && !c.economy.transferEnabled)
     throw new Error("Transfers are disabled");
 }
+/**
+ * Apply one balance change and return the resulting account state.
+ *
+ * Callers must pass a stable idempotency `key` (a Discord interaction id, or a
+ * dashboard request id). Replaying the same key with the same payload returns the
+ * original result with `replayed: true` and writes nothing; reusing a key for a
+ * different payload throws instead of guessing which request is real. Both the
+ * balance update and the ledger row happen in one transaction, so a crash leaves
+ * neither behind.
+ *
+ * Errors are user-facing (`"Activity reward cooldown is still active"`): they are
+ * shown verbatim in Discord and the dashboard, so they must stay free of ids,
+ * balances and other users' data.
+ */
 export async function economyTransaction(
   i: EconomyInput
 ): Promise<EconomyResult> {

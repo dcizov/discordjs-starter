@@ -209,6 +209,19 @@ export class HttpError extends Error {
     super(message);
   }
 }
+/**
+ * The single dashboard authorization boundary. Every guild-scoped route handler
+ * calls this before touching data; it returns the caller's and guild's Discord
+ * state or throws an `HttpError` the route turns into a JSON response.
+ *
+ * `mutating` shortens the permission cache window (`PERMISSION_MUTATION_MAX_AGE_MS`
+ * versus `PERMISSION_READ_MAX_AGE_MS`): a write re-reads permissions much closer
+ * to the request, so a revoked role stops working quickly. Pass `true` for
+ * anything that changes state, including "harmless" toggles.
+ *
+ * This checks the *dashboard*. It grants no bot ability and is not a substitute
+ * for the runtime checks Discord performs when a command runs.
+ */
 export async function authorize(guildId: string, mutating = false) {
   const user = await identity();
   if (!user) throw new HttpError(401, "Sign in with Discord to continue");
