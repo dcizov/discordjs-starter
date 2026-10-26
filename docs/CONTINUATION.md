@@ -1158,6 +1158,8 @@ FlexSearch/Pagefind/Algolia (a second index or a hosted service), Shiki/Prism
 | CI on `5ab9cf0` (first attempt)                       | `containers` success, `verify` **failed**: two docs overflow assertions reported 19 px                                                                                                         |
 | CI on `895cc9e` (fix: header label hidden below `sm`) | runs **40319779402** / **40319785550**: `verify` and `containers` **success**; browser suite **68 passed / 5 skipped / 1 flaky**; screenshot step passed 5 cases (4 dashboard + documentation) |
 
+| CI on `a53b39c` (this report) | runs **40322787107** (push) / **40322794843** (PR): `verify` and `containers` **success**; browser suite **69 passed / 5 skipped** on the push run and **68 passed / 5 skipped / 1 flaky** on the PR run (same music timing race); screenshot step 5 passed |
+
 **Not verified here**: no browser exists in this sandbox (`playwright install
 chromium` fails on the network, no system Chromium and no apt path), so the new
 Playwright cases were executed by CI, not locally. The uploaded
