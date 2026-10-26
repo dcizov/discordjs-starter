@@ -356,6 +356,43 @@ Slash-command errors use a red embed with a fenced, sanitized multiline diagnost
 
 Music slash/action/playback failures are also sent to the dashboard's **Audit** log. **Copy error** copies the exact stored sanitized detail, and **Copy full event** copies JSON. Line breaks are preserved, credentials/auth fields/URL query values are redacted, and storage is bounded to 8,192 characters with a truncation marker. The embed is only a presentation layer; it does not rewrite the audit detail or doctor JSON. Old shortened records cannot be recovered. Inspect/redact logs before sharing; never share `.env`, tokens, passwords, or private source URLs.
 
+### What `Lavalink connection error` means
+
+The bot used to log the fixed string `Lavalink connection error` with whatever
+the Shoukaku error event carried. Shoukaku forwards the WebSocket client's error,
+and for a refused dual-stack connect that is an `AggregateError` whose own
+message is **empty** — so the log line named no cause at all.
+
+The handler now reads only the fields the library actually sets — `name`,
+`message`, `code`, HTTP `status`, the `cause` chain and the members of an
+`AggregateError` — and prints them with the configured target. Everything passes
+through the same redaction as every other diagnostic, so a password or a signed
+URL that ends up in a message becomes `[REDACTED]`.
+
+| Category  | Evidence the bot saw                          | What it means                                                               |
+| --------- | --------------------------------------------- | --------------------------------------------------------------------------- |
+| `refused` | `ECONNREFUSED` (also as aggregate members)    | Nothing is listening at that address/port.                                  |
+| `dns`     | `ENOTFOUND`, `EAI_AGAIN`, …                   | The host name does not resolve from where the bot runs.                     |
+| `timeout` | `ETIMEDOUT`, `UND_ERR_CONNECT_TIMEOUT`, …     | A connection was attempted and nothing answered in time.                    |
+| `auth`    | HTTP `401`/`403`                              | Lavalink answered and rejected the request.                                 |
+| `tls`     | `DEPTH_ZERO_SELF_SIGNED_CERT`, `ERR_SSL_*`, … | The TLS handshake failed before Lavalink answered.                          |
+| `closed`  | `ECONNABORTED`, `EPIPE`                       | The socket opened and then closed.                                          |
+| `unknown` | nothing above                                 | No evidence in the error, so **no cause is invented** and no hint is shown. |
+
+Only the evidenced categories get a next step. For a refusal the log says to
+check that Lavalink is running and that the address and port are right — a
+host-run bot reaches `localhost:2333`, a Compose bot reaches `lavalink:2333`.
+The health row shows the same summary (category, code and sanitized message), so
+"Music backend — degraded" no longer hides the reason.
+
+An identical error repeating while the library retries with backoff is logged
+once and then counted at debug level, so a flapping backend cannot bury the first
+line that explains it. `disconnect` resets that counter.
+
+Music remains optional: a failed backend degrades the music module only. The
+dashboard, news, deals, moderation and economy keep working, and Orbit never
+starts a container for you.
+
 ## Capability matrix
 
 Installed is not the same as working. This table records what Orbit implements,

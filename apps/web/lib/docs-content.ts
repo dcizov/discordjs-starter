@@ -11,6 +11,7 @@
  * is still sanitized: a doc must not be able to inject a script, an iframe or
  * an inline event handler into the dashboard's origin.
  */
+import { configuredSourceRef, sourceFileLink } from "@orbit/core/source-links";
 import { marked } from "marked";
 import sanitizeHtml from "sanitize-html";
 import { readFileSync, existsSync } from "node:fs";
@@ -52,14 +53,6 @@ export const DOC_INDEX: readonly DocEntry[] = [
       "Exact least-privilege bits, channel overrides, role hierarchy and what Orbit refuses to do.",
   },
   {
-    slug: "deployment",
-    file: "docs/DEPLOYMENT.md",
-    title: "Deployment",
-    group: "Getting started",
-    audience: "developer",
-    summary: "Environment, containers, startup order and troubleshooting.",
-  },
-  {
     slug: "dashboard",
     file: "docs/DASHBOARD-UX.md",
     title: "Dashboard guide",
@@ -67,50 +60,6 @@ export const DOC_INDEX: readonly DocEntry[] = [
     audience: "user",
     summary:
       "Navigation, states, identity, audit identity and the first-visit tour.",
-  },
-  {
-    slug: "news",
-    file: "docs/INTEGRATIONS.md",
-    title: "News sources and webhooks",
-    group: "Using Orbit",
-    audience: "user",
-    summary:
-      "Steam app news, RSS/Atom, signed webhooks, routing, previews and delivery history.",
-  },
-  {
-    slug: "news-formatting",
-    file: "docs/NEWS-FORMATTING.md",
-    title: "News formatting contract",
-    group: "Using Orbit",
-    audience: "user",
-    summary: "How cards are rendered, attributed and truncated.",
-  },
-  {
-    slug: "deals",
-    file: "docs/DEALS.md",
-    title: "Deals and watchlists",
-    group: "Using Orbit",
-    audience: "user",
-    summary:
-      "IsThereAnyDeal setup, regions, historical lows and what Orbit refuses to claim.",
-  },
-  {
-    slug: "music",
-    file: "docs/MUSIC.md",
-    title: "Music and voice",
-    group: "Using Orbit",
-    audience: "user",
-    summary:
-      "Lavalink, the listening room, DJ role, queue rules, seek and troubleshooting.",
-  },
-  {
-    slug: "music-plugins",
-    file: "docs/MUSIC-PLUGINS.md",
-    title: "Music plugins and sources",
-    group: "Using Orbit",
-    audience: "developer",
-    summary:
-      "Installed plugins, source ownership, SFW boundaries and what is not supported.",
   },
   {
     slug: "community",
@@ -131,54 +80,54 @@ export const DOC_INDEX: readonly DocEntry[] = [
       "Required channel types and permissions per command, with recommendations kept separate from requirements.",
   },
   {
-    slug: "commands",
-    file: "docs/COMMANDS.md",
-    title: "Command reference",
-    group: "Using Orbit",
+    slug: "news",
+    file: "docs/INTEGRATIONS.md",
+    title: "News sources and webhooks",
+    group: "Admin and setup",
     audience: "user",
     summary:
-      "How the generated command catalog behaves and what it does not verify.",
+      "Steam app news, RSS/Atom, signed webhooks, routing, previews and delivery history.",
+  },
+  {
+    slug: "deals",
+    file: "docs/DEALS.md",
+    title: "Deals and watchlists",
+    group: "Admin and setup",
+    audience: "user",
+    summary:
+      "IsThereAnyDeal setup, regions, historical lows and what Orbit refuses to claim.",
   },
   {
     slug: "channels",
     file: "docs/CHANNEL_EXPORT.md",
     title: "Channel and role export",
-    group: "Using Orbit",
+    group: "Admin and setup",
     audience: "developer",
     summary: "Read-only export tooling, formats and privacy.",
   },
   {
-    slug: "architecture",
-    file: "docs/ARCHITECTURE.md",
-    title: "Architecture",
-    group: "Building on Orbit",
-    audience: "developer",
+    slug: "music",
+    file: "docs/MUSIC.md",
+    title: "Music and voice",
+    group: "Music",
+    audience: "user",
     summary:
-      "Runtime responsibilities, data flow, serialization and the web/bot boundary.",
+      "Lavalink, the listening room, DJ role, queue rules, seek and troubleshooting.",
   },
   {
-    slug: "integrations",
-    file: "docs/INTEGRATION-ARCHITECTURE.md",
-    title: "Integration architecture",
-    group: "Building on Orbit",
+    slug: "music-plugins",
+    file: "docs/MUSIC-PLUGINS.md",
+    title: "Music plugins and sources",
+    group: "Music",
     audience: "developer",
     summary:
-      "Provider ownership, shared transport rules and how to add a provider.",
-  },
-  {
-    slug: "security",
-    file: "docs/SECURITY.md",
-    title: "Security model",
-    group: "Building on Orbit",
-    audience: "developer",
-    summary:
-      "Trust boundaries, OAuth, SSRF, secrets, webhooks and failure handling.",
+      "Installed plugins, source ownership, SFW boundaries and what is not supported.",
   },
   {
     slug: "workflows",
     file: "docs/WORKFLOWS.md",
     title: "Development workflows",
-    group: "Building on Orbit",
+    group: "Development",
     audience: "developer",
     summary:
       "Choose between the host-Node workflow, full-stack Docker and the Dev Container, and where each guide lives.",
@@ -187,7 +136,7 @@ export const DOC_INDEX: readonly DocEntry[] = [
     slug: "development",
     file: "docs/DEVELOPMENT.md",
     title: "Development workflow",
-    group: "Building on Orbit",
+    group: "Development",
     audience: "developer",
     summary: "Scripts, containers, checks and lifecycle.",
   },
@@ -195,7 +144,7 @@ export const DOC_INDEX: readonly DocEntry[] = [
     slug: "devcontainer",
     file: "docs/DEVCONTAINER.md",
     title: "Dev container",
-    group: "Building on Orbit",
+    group: "Development",
     audience: "developer",
     summary: "Container-based development, ports and data safety.",
   },
@@ -203,7 +152,7 @@ export const DOC_INDEX: readonly DocEntry[] = [
     slug: "developer-navigation",
     file: "docs/DEVELOPER-NAVIGATION.md",
     title: "Developer navigation",
-    group: "Building on Orbit",
+    group: "Development",
     audience: "developer",
     summary:
       "Where every runtime, domain service, job, screen and test lives, and where to start.",
@@ -212,16 +161,77 @@ export const DOC_INDEX: readonly DocEntry[] = [
     slug: "dashboard-workflows",
     file: "docs/DASHBOARD-WORKFLOWS.md",
     title: "Dashboard workflows",
-    group: "Building on Orbit",
+    group: "Development",
     audience: "developer",
     summary:
       "Reference-dashboard workflows, the accepted slice, and the table foundation decisions.",
   },
   {
+    slug: "deployment",
+    file: "docs/DEPLOYMENT.md",
+    title: "Deployment",
+    group: "Deployment and operations",
+    audience: "developer",
+    summary: "Environment, containers, startup order and troubleshooting.",
+  },
+  {
+    slug: "continuation",
+    file: "docs/CONTINUATION.md",
+    title: "Current status",
+    group: "Deployment and operations",
+    audience: "developer",
+    summary:
+      "What is verified, what is deferred and what still needs a live check.",
+  },
+  {
+    slug: "architecture",
+    file: "docs/ARCHITECTURE.md",
+    title: "Architecture",
+    group: "Architecture and reference",
+    audience: "developer",
+    summary:
+      "Runtime responsibilities, data flow, serialization and the web/bot boundary.",
+  },
+  {
+    slug: "integrations",
+    file: "docs/INTEGRATION-ARCHITECTURE.md",
+    title: "Integration architecture",
+    group: "Architecture and reference",
+    audience: "developer",
+    summary:
+      "Provider ownership, shared transport rules and how to add a provider.",
+  },
+  {
+    slug: "security",
+    file: "docs/SECURITY.md",
+    title: "Security model",
+    group: "Architecture and reference",
+    audience: "developer",
+    summary:
+      "Trust boundaries, OAuth, SSRF, secrets, webhooks and failure handling.",
+  },
+  {
+    slug: "commands",
+    file: "docs/COMMANDS.md",
+    title: "Command reference",
+    group: "Architecture and reference",
+    audience: "user",
+    summary:
+      "How the generated command catalog behaves and what it does not verify.",
+  },
+  {
+    slug: "news-formatting",
+    file: "docs/NEWS-FORMATTING.md",
+    title: "News formatting contract",
+    group: "Architecture and reference",
+    audience: "user",
+    summary: "How cards are rendered, attributed and truncated.",
+  },
+  {
     slug: "orpc",
     file: "docs/ORPC-DECISION.md",
     title: "oRPC decision",
-    group: "Building on Orbit",
+    group: "Architecture and reference",
     audience: "developer",
     summary:
       "Why Orbit keeps its hand-written API contract, what was reduced instead, and the revisit triggers.",
@@ -230,27 +240,73 @@ export const DOC_INDEX: readonly DocEntry[] = [
     slug: "documentation",
     file: "docs/DOCUMENTATION.md",
     title: "Documentation platform",
-    group: "Project",
+    group: "Architecture and reference",
     audience: "developer",
     summary:
       "Framework research, hosting and visibility decisions, and how to add a page.",
   },
   {
-    slug: "continuation",
-    file: "docs/CONTINUATION.md",
-    title: "Current status",
-    group: "Project",
-    audience: "developer",
+    slug: "troubleshooting",
+    file: "docs/TROUBLESHOOTING.md",
+    title: "Troubleshooting",
+    group: "Troubleshooting",
+    audience: "user",
     summary:
-      "What is verified, what is deferred and what still needs a live check.",
+      "Start from the symptom you see; every fix stays owned by the page that can verify it.",
   },
 ];
+
+/**
+ * Sidebar groups, in reading order. The manifest above is the single place that
+ * decides both order and membership: a page belongs to exactly one group and a
+ * group exists because it has pages, so the navigation cannot drift from the
+ * index. These descriptions are used on `/docs` only — a guide page states its
+ * own audience instead of restating its group.
+ */
+export const DOC_GROUP_INFO: Record<string, { description: string }> = {
+  "Getting started": {
+    description:
+      "Invite Orbit, grant only what it needs, and see what it refuses to do.",
+  },
+  "Using Orbit": {
+    description:
+      "The dashboard and the community modules a member or moderator works in.",
+  },
+  "Admin and setup": {
+    description:
+      "Connect news sources, deals and channel exports for a server.",
+  },
+  Music: {
+    description:
+      "The optional Lavalink backend, the listening room, and the source boundaries.",
+  },
+  Development: {
+    description:
+      "Choose a workflow, run the same checks CI runs, and find the code.",
+  },
+  "Deployment and operations": {
+    description:
+      "Run the same images without hot reload, and read the current verified status.",
+  },
+  "Architecture and reference": {
+    description:
+      "How Orbit is put together, what it guarantees, and the contracts it keeps.",
+  },
+  Troubleshooting: {
+    description:
+      "Start from the symptom; each fix stays owned by the page that can verify it.",
+  },
+};
 
 export const DOC_GROUPS = [
   "Getting started",
   "Using Orbit",
-  "Building on Orbit",
-  "Project",
+  "Admin and setup",
+  "Music",
+  "Development",
+  "Deployment and operations",
+  "Architecture and reference",
+  "Troubleshooting",
 ] as const;
 
 /** Resolve the repository root without depending on the process cwd alone. */
@@ -333,28 +389,54 @@ export function summaryOf(markdown: string) {
 }
 
 /** `docs/MUSIC.md#x` and `MUSIC.md` both point at the in-app page. */
-export function rewriteDocLinks(html: string, entries = DOC_INDEX) {
+export function rewriteDocLinks(
+  html: string,
+  entries = DOC_INDEX,
+  context: {
+    /** The Markdown file being rendered, so `../README.md` resolves. */
+    file?: string;
+    /** Where a repository-only page lives, when it is not a docs page. */
+    sourceUrl?: (file: string) => string;
+  } = {}
+) {
   const byFile = new Map(entries.map((entry) => [entry.file, entry.slug]));
   const byBase = new Map(
     entries.map((entry) => [path.basename(entry.file), entry.slug])
   );
+  const resolve = (target: string) =>
+    context.file
+      ? path.posix
+          .normalize(path.posix.join(path.posix.dirname(context.file), target))
+          .replace(/^\.\//, "")
+      : "";
   return html.replace(/href="([^"]+)"/g, (whole, href: string) => {
     if (/^(https?:|mailto:|#)/i.test(href)) return whole;
     const [target, hash] = href.split("#");
     const normalized = target.replace(/^\.\//, "").replace(/^\.\.\//, "");
+    const fromFile = context.file ? resolve(target) : "";
     const candidates = [
+      fromFile,
       normalized,
       normalized.replace(/^\.\//, ""),
       path.posix.normalize(normalized),
       path.basename(normalized),
-    ];
+    ].filter(Boolean);
     for (const candidate of candidates) {
       const slug =
         byFile.get(candidate) ?? byBase.get(path.basename(candidate));
       if (slug) return `href="/docs/${slug}${hash ? `#${hash}` : ""}"`;
     }
-    if (/\.md$/i.test(target)) return `href="${escapeHtml(href)}"`;
-    return whole;
+    if (!/\.md$/i.test(target)) return whole;
+    // A curated page is a page; anything else really lives in the repository.
+    // Sending the reader to the file's source is honest, and it keeps a working
+    // link instead of an in-app URL that would 404.
+    if (context.sourceUrl && fromFile)
+      return [
+        `href="${escapeHtml(context.sourceUrl(fromFile))}${hash ? `#${escapeHtml(hash)}` : ""}"`,
+        'target="_blank"',
+        'rel="noreferrer noopener"',
+      ].join(" ");
+    return `href="${escapeHtml(href)}"`;
   });
 }
 
@@ -464,10 +546,20 @@ export type RenderedDoc = {
   toc: { id: string; text: string; level: number }[];
 };
 
+/**
+ * Heading id in the same shape GitHub uses for its own anchors: punctuation is
+ * dropped (an apostrophe becomes nothing, not a hyphen), spaces become single
+ * hyphens and underscores survive. A guide written to be read on GitHub and in
+ * the dashboard then has one anchor, not two, which is what lets a
+ * `docs/PAGE.md#section` link work in both places.
+ */
 export function slugifyHeading(text: string) {
   return plain(text)
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/['\u2018\u2019]/g, "")
+    .replace(/[^\p{L}\p{N}\s_-]+/gu, "")
+    .trim()
+    .replace(/\s/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80);
 }
@@ -556,7 +648,10 @@ export function renderDoc(entry: DocEntry, markdown: string): RenderedDoc {
     return `<blockquote data-tone="${calloutTone(text)}">${inner}</blockquote>`;
   };
   const raw = marked.parse(markdown, { async: false, renderer }) as string;
-  const linked = rewriteDocLinks(raw)
+  const linked = rewriteDocLinks(raw, DOC_INDEX, {
+    file: entry.file,
+    sourceUrl: (file) => sourceFileLink(file, { ref: configuredSourceRef() }),
+  })
     // Wide tables scroll inside their own frame instead of pushing the whole
     // page sideways; `tabindex` keeps that scroll reachable from the keyboard.
     // Tables cannot nest, so the wrapper stays balanced.

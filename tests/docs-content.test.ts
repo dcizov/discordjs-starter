@@ -1,6 +1,10 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   DOC_INDEX,
+  DOC_GROUP_INFO,
+  DOC_GROUPS,
   docNeighbors,
   docsNavigation,
   docsRoot,
@@ -60,7 +64,9 @@ describe("in-app documentation is generated from the repository", () => {
     expect(rendered.html).toContain("integration-http.ts");
     expect(rendered.toc[0]).toMatchObject({
       text: "Shared responsibilities (integration-http.ts)",
-      id: "shared-responsibilities-integration-http-ts",
+      // GitHub removes the period too, so `integration-http.ts` ends in
+      // "httpts" in both places. One anchor for one heading.
+      id: "shared-responsibilities-integration-httpts",
     });
   });
 
@@ -82,6 +88,14 @@ describe("in-app documentation is generated from the repository", () => {
     );
     expect(slugifyHeading("What Orbit never does (by design)")).toBe(
       "what-orbit-never-does-by-design"
+    );
+    // Anchors match GitHub's own algorithm: an apostrophe is removed rather
+    // than turned into a hyphen, and underscores survive.
+    expect(slugifyHeading("How Orbit's API works today")).toBe(
+      "how-orbits-api-works-today"
+    );
+    expect(slugifyHeading("Discord says `Invalid OAuth2 redirect_uri`")).toBe(
+      "discord-says-invalid-oauth2-redirect_uri"
     );
   });
 
@@ -211,6 +225,89 @@ describe("in-app documentation is generated from the repository", () => {
       expect(button).toContain("data-docs-copy");
       expect(button).toContain('aria-label="Copy this code block"');
     }
+  });
+
+  it("keeps every navigation group non-empty, described and in reading order", () => {
+    const nav = docsNavigation();
+    expect(nav.map((section) => section.group)).toEqual([...DOC_GROUPS]);
+    expect(new Set(nav.map((section) => section.group)).size).toBe(nav.length);
+    for (const section of nav) {
+      expect(section.entries.length).toBeGreaterThan(0);
+      expect(DOC_GROUP_INFO[section.group]?.description.length).toBeGreaterThan(
+        20
+      );
+      // A page belongs to exactly one group, and that group is its own.
+      for (const entry of section.entries)
+        expect(entry.group).toBe(section.group);
+    }
+    expect(Object.keys(DOC_GROUP_INFO).sort()).toEqual([...DOC_GROUPS].sort());
+    // Production groups live where an operator looks for them, not in "using".
+    for (const slug of ["deployment", "workflows", "troubleshooting", "music"])
+      expect(DOC_INDEX.find((entry) => entry.slug === slug)?.group).not.toBe(
+        "Using Orbit"
+      );
+    expect(DOC_INDEX.find((entry) => entry.slug === "deployment")?.group).toBe(
+      "Deployment and operations"
+    );
+    expect(
+      DOC_INDEX.find((entry) => entry.slug === "troubleshooting")?.group
+    ).toBe("Troubleshooting");
+  });
+
+  it("resolves every relative documentation link and its anchor", () => {
+    const root = docsRoot();
+    // Heading ids come from the renderer, so the check uses the same ids a
+    // reader can actually click instead of a second slug implementation.
+    const ids = new Map<string, Set<string>>();
+    for (const entry of DOC_INDEX) {
+      const doc = renderDoc(entry, readDocFile(entry.file, root));
+      ids.set(
+        entry.file,
+        new Set([...doc.html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]))
+      );
+    }
+    const links = /(?<!!)\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+    const uncurated = new Set<string>();
+    let checked = 0;
+    for (const entry of DOC_INDEX) {
+      const markdown = readDocFile(entry.file, root);
+      for (const match of markdown.matchAll(links)) {
+        const target = match[1];
+        if (/^(?:https?:|mailto:|#|\/)/.test(target)) continue;
+        const [relative, anchor] = target.split("#");
+        if (!relative) continue;
+        const resolved = path
+          .relative(
+            root,
+            path.resolve(root, path.dirname(entry.file), relative)
+          )
+          .split(path.sep)
+          .join("/");
+        const where = `${entry.file} → ${target}`;
+        expect(existsSync(path.resolve(root, resolved)), where).toBe(true);
+        // A page that is not curated stays out of the navigation on purpose;
+        // its link is rewritten to the source file instead of a relative href.
+        if (resolved.endsWith(".md") && !ids.has(resolved))
+          uncurated.add(resolved);
+        if (anchor) {
+          const targetIds = ids.get(resolved);
+          // A non-curated target is reported by the assertion above; only check
+          // anchors where the renderer produced ids.
+          if (targetIds) expect(targetIds.has(anchor), where).toBe(true);
+        }
+        checked += 1;
+      }
+    }
+    expect(uncurated.size).toBeGreaterThan(0);
+    for (const entry of DOC_INDEX) {
+      const html = renderDoc(entry, readDocFile(entry.file, root)).body;
+      // Either an in-app `/docs/<slug>` or an absolute source URL — never a
+      // relative path that only works in a checkout.
+      expect(html, entry.file).not.toMatch(
+        /href="(?!https?:|\/)[^"]*\.md(?:#|")/
+      );
+    }
+    expect(checked).toBeGreaterThan(100);
   });
 
   it("refuses a path outside the documentation root", () => {

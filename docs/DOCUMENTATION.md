@@ -92,12 +92,23 @@ second design system and no new dependency**.
 | Code blocks and anchors | Server-rendered `<figure>`/`<figcaption>` frames plus a small enhancer that adds copy handlers after hydration | Highlighting libraries (Shiki, Prism) are heavy for shell/config snippets and need a theme per colour scheme; line numbers and animation add noise.                                                                        |
 | Tabs                    | Rejected for setup instructions                                                                                | Tabs hide commands and split deep links. The three workflows are a comparison table plus one section each, so every command is visible, printable and linkable (`/docs/workflows#full-stack-development-with-hot-reload`). |
 
-Rendering stays build-time: `renderDoc` emits anchored headings, code frames,
-tone-aware quotes and a scrollable table wrapper, then sanitizes the result.
-The sanitizer allows exactly one generated interactive tag — the code-block
-copy `<button>`, which is dropped unless `renderDoc` produced it — so Markdown
-still cannot introduce a control, script, iframe or inline handler. Copy
-buttons are hidden until their handler is attached, so a reader without
+Rendering stays build-time and happens in three explicit stages:
+
+1. `renderDoc` turns Markdown into headings, minimal `<pre><code>` blocks,
+   tone-aware quotes and tables. No interactive element is produced from
+   content, at all.
+2. `sanitizeHtml` runs with an allowed-tag list that has **no** interactive
+   element (`button`, `input`, `select`, `textarea`, `form` are stripped
+   together with their text), no inline handlers, no `javascript:` URLs and no
+   protocol-relative URLs.
+3. `enhanceCodeBlocks` runs **after** sanitization and wraps each surviving
+   `<pre>` in the `figure.docs-code` frame with its language label and copy
+   button.
+
+The consequence is the point: a copy button's provenance is the function that
+built it, not an attribute in the content. An author-supplied `<button>` cannot
+pass, and a forged `data-docs-copy` attribute has nothing to attach to. Copy
+buttons are still hidden until their handler is attached, so a reader without
 JavaScript never sees a dead control.
 
 ### Reading behaviour and states
@@ -148,23 +159,59 @@ role check.
    unlisted file is still readable in the repository but gets no navigation
    entry — implementation diaries must not pose as user help.
 3. Keep the first `#` heading as the page title; give sections `##`/`###`
-   headings. Heading ids are generated from the text, so anchor links stay
-   stable as long as the heading text does. The page renders that title itself
-   (with breadcrumb and intro), so do not repeat it in the body.
+   headings. Heading ids are generated with **GitHub's own algorithm** — lower
+   case, punctuation removed (an apostrophe disappears, it does not become a
+   hyphen), underscores kept, spaces become hyphens — so one `PAGE.md#section`
+   link resolves the same way on GitHub and in the dashboard. The page renders
+   that title itself (with breadcrumb and intro), so do not repeat it in the
+   body.
 4. Label a fenced code block (`sh`, `dotenv`, `text`, …): the label is shown in
    the frame header. Write `> **Warning:** …`, `> **Prerequisite:** …` or
    `> **Note:** …` for a callout — the tone is read from that lead-in, and an
    unrecognised quote stays a plain quote rather than being mislabelled.
-5. Link other docs by file name (`PERMISSIONS.md`, `docs/MUSIC.md#source-policy`);
-   the renderer rewrites those to `/docs/<slug>#anchor`. Absolute `https://`
-   links are kept and marked `rel="noopener noreferrer"`.
+5. Link other docs relative to the file you are editing (`PERMISSIONS.md`,
+   `../README.md#run-live`, `MUSIC.md#source-policy`); the renderer resolves
+   that path and rewrites it to `/docs/<slug>#anchor`. A link to a Markdown file
+   that is **not** curated becomes an absolute link to the file's source at the
+   configured ref, marked `rel="noopener noreferrer"`, because a relative `.md`
+   href would 404 inside the docs. Absolute `https://` links are kept as they
+   are.
 6. Run `npm test` — `tests/docs-content.test.ts` checks that every listed file
-   exists, that slugs are unique, that headings get unique ids, that raw HTML is
-   sanitized and that links are rewritten. Run `npm run build:web` to confirm
-   every page still prerenders.
-7. Keep product help and implementation history apart: `CONTINUATION.md`,
-   `IMPLEMENTATION-REVIEW.md` and similar belong to the `Project` group, not to
-   the user guides.
+   exists, that slugs are unique, that every group has pages and a description,
+   that headings get unique ids, that raw HTML is sanitized, that code controls
+   are the renderer's own, and that **every relative link and its anchor
+   resolves** in the curated set. Run `npm run build:web` to confirm every page
+   still prerenders.
+7. Keep product help and implementation history apart. `IMPLEMENTATION-REVIEW.md`,
+   `STRUCTURE-REFACTOR.md`, `FEATURE-RESEARCH.md`, `COMMUNITY-REVIEW.md` and
+   `DASHBOARD-MAINTENANCE.md` are **not** curated: they stay repository notes,
+   and links to them point at the source file. `CONTINUATION.md` is the one
+   status report that is curated, under **Deployment and operations**, because an
+   operator needs to know what was verified.
+
+### Groups and order
+
+`DOC_INDEX` in `apps/web/lib/docs-content.ts` is the single maintained manifest:
+it decides membership, order and the group a page belongs to, and `DOC_GROUPS`
+decides the order of the groups themselves. `DOC_GROUP_INFO` holds the one-line
+description shown on `/docs`. Adding a group means adding it to both lists; a
+group with no pages is dropped from the navigation by `docsNavigation()`.
+
+| Group                      | What belongs there                                                   |
+| -------------------------- | -------------------------------------------------------------------- |
+| Getting started            | Invite, first run, least privilege, what Orbit refuses to do         |
+| Using Orbit                | The dashboard and the community modules people work in               |
+| Admin and setup            | News sources, deals, channel/role export                             |
+| Music                      | The optional backend, the listening room, sources and plugins        |
+| Development                | Which workflow to use, the commands, the code map                    |
+| Deployment and operations  | Runtime images, updates, health, the current status report           |
+| Architecture and reference | Architecture, integrations, security, commands, formatting contracts |
+| Troubleshooting            | A router from symptom to the page that owns the fix                  |
+
+`/docs/<slug>` is the URL contract. The slug lives in the manifest, not in the
+file name, so a page can be renamed or moved on disk without breaking a link
+someone bookmarked — and no redirect table is needed for a reorganisation that
+does not change slugs.
 
 ## Accessibility and mobile behaviour
 

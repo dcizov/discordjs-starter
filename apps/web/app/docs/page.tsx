@@ -1,5 +1,5 @@
 import { DocsSearch } from "@/components/docs/docs-search";
-import { DOC_INDEX, docsNavigation } from "@/lib/docs-content";
+import { DOC_INDEX, DOC_GROUP_INFO, docsNavigation } from "@/lib/docs-content";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -43,6 +43,12 @@ export default function DocsIndex() {
         search index.
       </p>
       <DocsSearch
+        descriptions={Object.fromEntries(
+          Object.entries(DOC_GROUP_INFO).map(([group, info]) => [
+            group,
+            info.description,
+          ])
+        )}
         sections={nav.map((section) => ({
           group: section.group,
           entries: section.entries.map((entry) => ({

@@ -2,7 +2,7 @@
 
 Orbit supports three development workflows. This page is a **router**: it tells you which one fits your machine, shows the command that starts it, and links to the guide that owns the exact steps. It deliberately does not repeat those steps — a second copy of a setup procedure is a second thing that can drift out of date.
 
-The three labels below are the same ones used in the [README](README.md) and in the dashboard.
+The three labels below are the same ones used in the [README](../README.md) and in the dashboard.
 
 ## Pick a workflow
 
@@ -22,7 +22,7 @@ The three labels below are the same ones used in the [README](README.md) and in 
 
 ## Host-Node workflow
 
-Use it when Node is already installed on your machine and you only want containers for PostgreSQL and Redis. It is also the path the [demo](README.md#try-it-without-credentials) uses, where no Discord credentials are configured at all.
+Use it when Node is already installed on your machine and you only want containers for PostgreSQL and Redis. It is also the path the [demo](../README.md#try-it-without-credentials) uses, where no Discord credentials are configured at all.
 
 ```sh
 npm ci
@@ -37,7 +37,7 @@ npm run dev:worker     # schedules, feeds, deals, and outbound deliveries
 docker compose up -d --wait postgres redis && npm run db:migrate
 ```
 
-Steps, OAuth redirect, slash-command registration and the optional integrations are in the [start-here guide](README.md#run-live). Container-versus-host differences are documented in [the comparison with `main`](DEVELOPMENT.md#docker-development-compared-with-main).
+Steps, OAuth redirect, slash-command registration and the optional integrations are in the [start-here guide](../README.md#run-live). Container-versus-host differences are documented in [the comparison with `main`](DEVELOPMENT.md#docker-development-compared-with-main).
 
 ## Full-stack development with hot reload
 

@@ -214,7 +214,7 @@ a database, Redis, gateway login or restart. Export output goes to the ignored
 `.exports/` directory and can contain private channel names and member IDs —
 keep it private. Options, JSON shape and limits:
 [channel/role export](docs/CHANNEL_EXPORT.md); audio source diagnostics:
-[music troubleshooting](docs/MUSIC.md#connected-but-a-track-will-not-load).
+[music troubleshooting](docs/MUSIC.md#other-failures-and-diagnostics).
 
 ## Dashboard setup, activity and permission checks
 

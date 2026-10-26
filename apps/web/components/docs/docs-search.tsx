@@ -23,7 +23,14 @@ const groupId = (group: string) =>
  * page never loaded would be worse than no search at all. Every page stays in the
  * server-rendered HTML, so the index is usable without JavaScript.
  */
-export function DocsSearch({ sections }: { sections: DocsSection[] }) {
+export function DocsSearch({
+  sections,
+  descriptions = {},
+}: {
+  sections: DocsSection[];
+  /** One line per group, so a heading is not the only orientation cue. */
+  descriptions?: Record<string, string>;
+}) {
   const [query, setQuery] = useState("");
   const term = query.trim().toLowerCase();
   const matches = sections
@@ -106,6 +113,11 @@ export function DocsSearch({ sections }: { sections: DocsSection[] }) {
                 {section.entries.length}
               </span>
             </h2>
+            {descriptions[section.group] ? (
+              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+                {descriptions[section.group]}
+              </p>
+            ) : null}
             <ul className="mt-3 grid gap-3 sm:grid-cols-2">
               {section.entries.map((entry) => (
                 <li
