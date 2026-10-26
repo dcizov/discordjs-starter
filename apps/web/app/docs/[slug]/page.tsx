@@ -107,7 +107,16 @@ function DocFooter({
         )}
       </nav>
       <p className="mt-6 text-[10px] text-muted-foreground">
-        Generated from <code>{doc.entry.file}</code> in the Orbit repository.
+        Generated from <code>{doc.entry.file}</code> in the Orbit repository.{" "}
+        <a
+          href={`https://github.com/dcizov/discordjs-starter/blob/main/${doc.entry.file}`}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="underline underline-offset-2"
+        >
+          View the source of this page
+        </a>
+        <span className="sr-only"> on GitHub (opens in a new tab)</span>.
       </p>
     </>
   );
