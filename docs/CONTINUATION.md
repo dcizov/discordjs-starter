@@ -573,3 +573,169 @@ commits has not been observed.
 - Row selection and bulk actions: no dataset has a multi-row action that is safe
   (audit, deliveries and cases are append-only evidence).
 - oRPC: deferred with explicit revisit triggers in `docs/ORPC-DECISION.md`.
+
+## Pass 4 (2026-10-26): verified provisioning, shared UI primitives, honest visual status
+
+Start `9c1c98c` → end `7d33b70` (all on `arena/99c6cf65-discordjs-starter`,
+pushed, no PR operations). Previous reports were treated as historical: the state
+was re-read (`git status`, `git log`, `git ls-remote`, `docs/`) before any edit.
+
+Commits: `5035f30` (dependency provisioning), `4c439ae` (shared tab bar, confirm
+dialog, checkbox, news caption, copy), `5502068` (domain boundary comments),
+`3c8c2ca` (screenshot evidence + table decision), `08cba2b` (e2e tab roles),
+`7d33b70` (screenshot output path).
+
+### Completion matrix (five-way, not aspirational)
+
+| Area                                                        | Status                                          | Evidence / what is missing                                                                                                                                                                                                                                                                    |
+| ----------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependency provisioning (detection _and_ refresh)           | **Implemented**                                 | Reproduced the stale-volume case and the documented refresh in a mount namespace; guard rewritten around the verified path (`5035f30`). See the table below.                                                                                                                                  |
+| Dependency guard scope                                      | **Implemented**                                 | 10 production imports only, ~50 ms, no installs, no package-manager duplication, `pretest` hook dropped.                                                                                                                                                                                      |
+| Steam artwork hierarchy + honest labelling                  | **Implemented, visually unverified**            | Article art → verified event art → app-art fallback → text-only unchanged. The prominent per-card badge became a caption over the artwork it describes, matching the Discord footer's "Store artwork". Pixels not inspected.                                                                  |
+| Table behaviour and query contract                          | **Implemented**                                 | Server-side sort/filter/pagination, allow-lists, `aria-sort`, column visibility, page reset. Regression-tested through the history API and browser specs.                                                                                                                                     |
+| Table library decision                                      | **Deliberately rejected** (TanStack v8)         | Earlier justification ("the server paginates") was wrong and is corrected in `docs/TABLE-DECISION.md`; the decision now rests on measured cost and what stays caller-owned, with revisit triggers.                                                                                            |
+| Shared UI primitives on the Radix base                      | **Partially implemented**                       | This pass: one tab bar (was three copies), one destructive confirm (was two), one checkbox (was four ad-hoc sizes/accents). Not yet uniform: card/section headers, a few page toolbars, error/retry blocks, and the permission checklist's own table markup.                                  |
+| Dashboard-wide copy reduction                               | **Partially implemented**                       | Eight more blocks shortened this pass (table below). Still verbose by the same measure: `permission-setup.tsx`, `layout/install-prompt.tsx`, `login`, and the community page's notices.                                                                                                       |
+| Comment review at public boundaries                         | **Partially implemented**                       | Four highest-risk boundaries documented (`economyTransaction`, `reserveDelivery`, `dispatchItems`, `authorize`). Command/event bootstrap, music lifecycle internals and some dashboard shared infra still lack a responsibility note.                                                         |
+| Reference interaction patterns (shadcn Tasks, dashboard-01) | **Deliberately rejected** as wholesale adoption | Radix base retained; `aria` base would add `react-aria-components` (a second primitive library). Individual patterns (tab semantics, confirm dialog, caption-over-status) adapted where they solve a real duplication.                                                                        |
+| Facet counts, row selection/bulk actions, share action      | **Deferred**                                    | No dataset has a bulk operation that is safe without new server-side authorization; facet counts must come from `GROUP BY` under the same predicate (documented in the table decision) and no filter currently needs them.                                                                    |
+| Status inventory with counts and sorting                    | **Deferred**                                    | Unchanged: state exists in `module-setup.ts`; it is presentation work with no correctness value yet.                                                                                                                                                                                          |
+| Visual verification (desktop + mobile screenshots)          | **Not verified by this environment**            | CI now produces and uploads `dashboard-screenshots` (2.26 MB, run `40251261615`). The sandbox cannot download GitHub artifacts (Azure blob host is outside its allowlist) and cannot install Chromium, so **no pixels were reviewed by me**. The user must open the artifact to judge layout. |
+| Live Discord / Lavalink / real PostgreSQL-or-Redis deploy   | **Not verified**                                | Unchanged: no tokens, no Lavalink, no Docker daemon here. CI exercises containers and the pinned music backend headlessly.                                                                                                                                                                    |
+
+#### Four things this pass does _not_ claim
+
+1. The dashboard-wide shadcn normalisation is **not finished** (see the "partially
+   implemented" rows above); touched pages improved, the inventory below is the
+   remaining list.
+2. No visual approval. Screenshots exist; nobody has looked at them yet.
+3. `npm ci` repairs a stale **dependency** volume in this stack; that is a
+   different statement from "any container install repairs any mount".
+4. The table decision is a _rejection with triggers_, not proof that TanStack is
+   unsuitable in general.
+
+### Dependency provisioning: what was actually tested
+
+Conditions: this sandbox has no `docker`/`podman`, but `unshare -rm` works, so a
+named volume could be emulated faithfully — a directory installed from an older
+commit, bind-mounted over the checkout's `node_modules`.
+
+| Case                                                        | How                                                                                                                                   | Result                                                                                                                                                   |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| (a) fresh checkout                                          | `git archive HEAD` into a clean dir, `npm ci`                                                                                         | 628 packages, `marked@16.4.2`, guard passes                                                                                                              |
+| (b) fresh container without a dependency volume             | image `deps` stage runs the same `npm ci`; first use seeds the volume from the image                                                  | Equivalent to (a); nothing depends on the host's `node_modules`                                                                                          |
+| (c) existing volume created before `marked` existed         | tree installed from `eeb0e68` (pre-`marked`) mounted over `node_modules`                                                              | `scripts/check-dependencies.mjs` fails naming `marked`; `next build` fails with `Module not found: Can't resolve 'marked'` (previous symptom reproduced) |
+| (d) **documented refresh inside the container**, then build | `npm ci` **inside** the mounted tree, then `next build`                                                                               | 628 packages installed **into the volume**, guard passes, build compiles — so the refresh path works                                                     |
+| (e) fallback only when npm cannot write to the volume       | earlier text told users to delete `<project>_dev_node_modules` _first_, on the false premise that an in-container install cannot work | Now: `npm ci` first; recreate that one volume only for `EACCES`; database/Redis/demo-data/Next-cache volumes and `down -v` explicitly off-limits         |
+
+What distinguishes the layers, and is now written down once:
+**image** = a lockfile snapshot taken at build time; **named volume** = the live
+install directory (`/app/node_modules`), seeded from the image only on first use;
+**bind mount** = the source checkout, which also supplies the current
+`package-lock.json`; **ownership** = `node` (uid 1000) inside the image, so a
+volume created by another uid is the one case where the install fails;
+**lockfile changes** = the trigger for the whole problem.
+
+### Data table: corrected reasoning
+
+`docs/TABLE-DECISION.md` replaces the wrong client-side/server-side argument with:
+measured tree-shaken cost of `@tanstack/react-table@8` (54,133 bytes → **14.4 kB
+gzip**, 5 packages), what remains caller-owned even with it (`aria-sort`,
+keyboard, faceted counts still needing `GROUP BY`), and the fact that four fixed
+datasets already share one validated server query contract. Decision: **retain**,
+with explicit revisit triggers (a fifth dataset needing grouping/selection, shared
+column definitions, or client-side filtering).
+
+### Shared UI consolidated this pass
+
+| Duplication                                             | Before                                                                                                               | After                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Section tab bar (economy, resources, server pages)      | Three copies with different padding/hover/capitalisation, and no tab semantics: plain buttons, no roles, no keyboard | `components/ui/tabs.tsx`: `role=tablist/tab`, roving `tabindex`, Left/Right/Home/End move selection **and** focus. Economy wires `TabPanel`; the two sections with large conditional trees opt out of `aria-controls` rather than pointing at a missing element |
+| Destructive confirmation (shop item, configuration)     | Two hand-rolled footers, one dismissible while the request was in flight                                             | `components/ui/confirm-dialog.tsx`: one component, destructive button disabled and dialog non-dismissable in flight, consequence text required                                                                                                                  |
+| Checkbox accent/size (resource editor ×3, draft editor) | `size-3`, `size-4 accent-violet-600`, or no class                                                                    | `Checkbox` in `ui/primitives.tsx` (native input kept for real keyboard/AT behaviour)                                                                                                                                                                            |
+| News provenance chip                                    | Filled `Badge` competing with source attribution for the first line of every app-artwork card                        | Caption over the artwork's lower edge with a gradient scrim, so provenance stays attached to the image it describes                                                                                                                                             |
+
+Assertion added instead of a claim: `tests/e2e/layout.spec.ts` now pins the tab
+contract (selected state, roving tabindex, ArrowRight/End/Home). Four existing
+specs had been clicking tabs as `role=button`, which encoded the old, wrong
+semantics; they now use `role=tab`.
+
+### Copy before → after (this pass)
+
+| Where                    | Before                                                                                                                                                                                                                                                                                                                    | After                                                                                                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| News routing preview     | "Use sample text against this server's saved source keywords, source tags and enabled routes. This is the same matcher used by the delivery outbox. It does not fetch a feed, test credentials, ping a role, contact Discord, enqueue a delivery or store the sample. Saved/synced metadata is not proof of live access." | "Runs sample text through the saved keywords, tags and routes with the same matcher delivery uses. No feed is fetched, nothing is sent, and nothing is stored. Saved metadata is not proof of live access."                          |
+| Draft dialog description | "Saving never publishes. Plain text only; mentions are suppressed. Do not include secrets or sensitive personal information. Content is visible to server managers. Live content is eligible for deletion after 90 inactive days while the worker runs; demo records persist until deleted."                              | "Saving never publishes. Plain text only; mentions are suppressed. Do not include secrets or personal information — server managers can read this. Live drafts are removed after 90 inactive days; demo records stay until deleted." |
+| Commands page helper     | Three paragraphs including "Generated from the bot's registration definitions. This does not verify which commands are currently registered in Discord. Server command overrides and runtime permission checks still apply." plus a separate registration paragraph                                                       | One paragraph: "Generated from the registration definitions — it does not check what Discord currently has. After changing definitions, run `npm run commands:register`; this page never registers or runs anything."                |
+| Steam source note        | "Asks Steam for this app's announcement feed, so posts syndicated from other publishers are not requested. Steam does not publish a "first party" field; Orbit treats Steam's app-announcement feed as the app's own channel and never claims more than that."                                                            | "Uses Steam's app announcement feed only, so posts from other publishers are not requested. Steam has no "first party" field — the feed is the signal, nothing more."                                                                |
+| Music adapter note       | Five sentences including catalogue availability disclaimers                                                                                                                                                                                                                                                               | Four shorter sentences; the same constraints (approved adapters, authorization, disabled sources, no SFW guarantee)                                                                                                                  |
+| Economy helper card      | "Every reward and transfer is recorded. Atomic transactions mean no double claims, no negative balances, and no lost little thank-yous."                                                                                                                                                                                  | "Every reward and transfer is recorded; atomic transactions rule out double claims and negative balances." (the virtual-currency/no-gambling line is untouched)                                                                      |
+| Docs index intro         | "These pages are generated from the repository's own Markdown, so a guide here is the same file a developer reviews in a pull request. There is no second copy to drift out of sync."                                                                                                                                     | "Every page here is the repository's own Markdown, rendered at build time — one source, no second copy to drift."                                                                                                                    |
+
+Kept verbatim on purpose: the webhook-secret note, the stop-playback warning, the
+delivery "Do not resend" ambiguity warning, the OAuth scope description, the
+privileged-intent note, and every setup blocker (a shortened sentence that hid a
+requirement would be a regression, not a tidy-up).
+
+### Comments and navigation
+
+Four boundary functions gained the contract a caller has to hold, and nothing else
+was annotated (no diary entries, no restating the code):
+
+- `packages/db/src/economy.ts` `economyTransaction` — idempotency key semantics
+  (replay returns the original result; same key + different payload throws), one
+  transaction for balance and ledger, errors are user-facing text.
+- `packages/db/src/store.ts` `reserveDelivery` — `null` means "already claimed, do
+  not retry"; a returned row is a reservation, not a delivery.
+- `packages/db/src/outbox.ts` `dispatchItems` — silent `0` for
+  uninstalled/disabled races, demo throws, belongs to the worker, never a request.
+- `apps/web/lib/auth.ts` `authorize` — the single dashboard authorization
+  boundary, why `mutating` shortens the permission cache, and that it grants no
+  bot ability.
+
+`docs/DEVELOPMENT.md` and `docs/DEVCONTAINER.md` were corrected rather than
+expanded: one install path, the real mechanism, and the verification date.
+
+### Visual verification: precise status
+
+- A CI step now runs `tests/e2e/screenshots.spec.ts` with `VISUAL_EVIDENCE=1`
+  (fixed light theme, desktop 1440×900, mobile 390×844, demo data, tour dismissed,
+  animations disabled) and uploads `visual-evidence/` as **`dashboard-screenshots`**
+  (2.26 MB on run `40251261615`). Captures: overview, news, music, audit, settings
+  form, economy, channels, the stop-playback confirmation, an audit no-match state,
+  mobile overview and mobile navigation.
+- These are **evidence for a human reviewer**, not assertions. The spec says so in
+  its own header; a green run proves the pages loaded, not that they look right.
+- This environment **could not inspect them**: GitHub artifact downloads redirect
+  to `*.blob.core.windows.net`, which is not in the sandbox's allowlist (verified by
+  direct request: TLS connection refused), and no Chromium/Firefox binary exists or
+  can be downloaded (`cdn.playwright.dev` unreachable). So spacing, contrast,
+  truncation and mobile usability were **not** reviewed here, and no visual
+  approval is claimed. What was checked instead: server-rendered markup (tab
+  roles/`aria-selected`/`tabindex` on `/channels`, `/economy`, `/news`), and the
+  browser specs that assert behaviour and focus handling.
+
+### Checks actually run (fresh, this session)
+
+| Check                                             | Result                                                                                                                                                                                                                                 |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`                                  | **772 tests in 65 files pass** (was 771; +1 guard/documentation test)                                                                                                                                                                  |
+| `npm run typecheck`                               | pass                                                                                                                                                                                                                                   |
+| `npx eslint apps packages tests`                  | pass                                                                                                                                                                                                                                   |
+| `npm run format:check`                            | pass                                                                                                                                                                                                                                   |
+| `npm run build:web`                               | pass                                                                                                                                                                                                                                   |
+| Demo server (`DEMO_MODE=true`, port 3100)         | `/overview`, `/economy`, `/music`, `/news`, `/roles`, `/moderation`, `/deals`, `/settings`, `/audit`, `/channels`, `/commands` → 200; `/channels`, `/economy`, `/news` render `role="tablist"` with exactly one `aria-selected="true"` |
+| Stale-volume reproduction                         | guard fails + `Module not found: marked`; then in-place `npm ci` → 628 packages, guard passes, build compiles                                                                                                                          |
+| CI `verify` (run `40251261615`, commit `7d33b70`) | **success** — lint, typecheck, vitest on PostgreSQL 17, `npm audit --omit=dev`, build, screenshots step (4 tests), browser suite **57 passed / 4 skipped**, artifact uploaded                                                          |
+| CI `containers` (same run)                        | success — Compose validation, both image targets, unprivileged dev-image smoke test, pinned Lavalink build and headless backend check                                                                                                  |
+
+Not run, and not claimed: live Discord, real Lavalink audio, a real
+Postgres/Redis deployment, and any review of the screenshot pixels.
+
+### Still deferred
+
+Unchanged from pass 3 (status inventory, facet counts, share action, bulk
+actions with defined page-vs-filtered semantics, oRPC), plus the items the matrix
+marks partially implemented: card/section header normalisation, the remaining long
+copy in `permission-setup.tsx` / `install-prompt.tsx` / `login`, and comment
+coverage for bootstrap, music lifecycle and dashboard shared infra.
