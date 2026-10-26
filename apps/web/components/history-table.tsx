@@ -21,6 +21,7 @@ export function HistoryTable<T extends { id: string }>({
 }) {
   const { api, data } = useWorkspace();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(7);
   // Sorting is a server contract: changing it restarts at page 1 so the reader
   // never sees page 4 of a different ordering.
   const [sort, setSort] = useState<{ field: string; dir: "asc" | "desc" }>({
@@ -42,6 +43,7 @@ export function HistoryTable<T extends { id: string }>({
           ? data.deliveries[0]?.id
           : data.resources.find((r) => r.kind === "case")?.id;
   useEffect(() => setPage(1), [query, filter, kind]);
+  useEffect(() => setPage(1), [pageSize]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -50,6 +52,7 @@ export function HistoryTable<T extends { id: string }>({
         `/history?${historyQueryString({
           kind,
           page,
+          pageSize,
           query,
           filter,
           sort: sort.field,
@@ -73,7 +76,7 @@ export function HistoryTable<T extends { id: string }>({
       active = false;
       clearTimeout(timer);
     };
-  }, [api, kind, page, query, filter, sort, token, retry]);
+  }, [api, kind, page, pageSize, query, filter, sort, token, retry]);
   const retryRequest = () => setRetry((v) => v + 1);
   if (!result)
     return (
@@ -88,7 +91,13 @@ export function HistoryTable<T extends { id: string }>({
       rows={result.rows}
       columns={columns}
       loading={loading}
-      pagination={{ page, total: result.total, onPage: setPage }}
+      pageSize={pageSize}
+      pagination={{
+        page,
+        total: result.total,
+        onPage: setPage,
+        onPageSize: setPageSize,
+      }}
       sort={{
         field: sort.field,
         dir: sort.dir,

@@ -4,7 +4,7 @@ import type { DashboardData } from "@orbit/core";
 import { communityDate } from "@orbit/core/community";
 import { useWorkspace } from "./workspace";
 import { ErrorState, Card } from "./ui/primitives";
-import { TableFooter } from "./data-table";
+import { TablePagination } from "./data-table";
 export function OwnHistory() {
   const { data, api } = useWorkspace();
   const [history, setHistory] = useState<
@@ -82,10 +82,10 @@ export function OwnHistory() {
         </p>
       )}
       {error && <ErrorState detail={error} className="px-0 py-4" />}
-      <TableFooter
+      <TablePagination
         className="mt-3 border-t-0 px-0 pb-0"
         page={history.page}
-        totalPages={Math.max(1, Math.ceil(history.total / history.pageSize))}
+        pageCount={Math.max(1, Math.ceil(history.total / history.pageSize))}
         totalItems={history.total}
         pageSize={history.pageSize}
         onPage={(page) => {

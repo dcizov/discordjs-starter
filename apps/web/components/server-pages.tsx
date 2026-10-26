@@ -68,6 +68,13 @@ export function ChannelsPage() {
   const roles = data.guild.roles.filter((r) =>
     r.name.toLowerCase().includes(q.toLowerCase())
   );
+  // Built once instead of scanning every resource for every channel row.
+  const channelUsage = new Map<string, number>();
+  for (const resource of data.resources) {
+    const id = resource.data.channelId;
+    if (typeof id === "string")
+      channelUsage.set(id, (channelUsage.get(id) ?? 0) + 1);
+  }
   async function copy(id: string) {
     try {
       await copyText(id);
@@ -150,6 +157,7 @@ export function ChannelsPage() {
                   {
                     key: "name",
                     label: "Channel",
+                    sortValue: (r) => r.name,
                     render: (r) => (
                       <span className="flex items-center gap-2.5 font-medium">
                         {r.type === "voice" ? (
@@ -169,6 +177,7 @@ export function ChannelsPage() {
                   {
                     key: "type",
                     label: "Type",
+                    sortValue: (r) => r.type,
                     render: (r) => <Badge>{r.type}</Badge>,
                   },
                   {
@@ -200,14 +209,10 @@ export function ChannelsPage() {
                   {
                     key: "route",
                     label: "Used by",
+                    sortValue: (r) => channelUsage.get(r.id) ?? 0,
                     render: (r) => (
                       <span className="text-muted-foreground">
-                        {
-                          data.resources.filter(
-                            (s) => s.data.channelId === r.id
-                          ).length
-                        }{" "}
-                        configurations
+                        {channelUsage.get(r.id) ?? 0} configurations
                       </span>
                     ),
                   },
@@ -235,6 +240,7 @@ export function ChannelsPage() {
                   {
                     key: "name",
                     label: "Role",
+                    sortValue: (r) => r.name,
                     render: (r) => (
                       <span className="flex items-center gap-2 font-medium">
                         <span

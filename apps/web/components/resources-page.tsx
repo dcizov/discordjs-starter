@@ -789,6 +789,7 @@ export function ResourcesPage({
                     {
                       key: "name",
                       label: "Rule",
+                      sortValue: (r) => r.name,
                       render: (r) => (
                         <div className="flex items-center gap-3">
                           <span className="flex size-8 items-center justify-center rounded-lg bg-[#fbf0e5] text-[#cba276]">
@@ -854,6 +855,7 @@ export function ResourcesPage({
                       {
                         key: "name",
                         label: "Subscription",
+                        sortValue: (r) => r.name,
                         render: (r) => (
                           <div>
                             <p className="font-medium">{r.name}</p>
@@ -921,6 +923,7 @@ export function ResourcesPage({
                       {
                         key: "name",
                         label: "Routing rule",
+                        sortValue: (r) => r.name,
                         render: (r) => (
                           <span className="font-medium">{r.name}</span>
                         ),
