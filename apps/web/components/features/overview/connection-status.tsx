@@ -135,11 +135,22 @@ export function ConnectionStatus() {
                           : "amber"
                     }
                   >
-                    {h.status}
+                    {/* Same words as the summary card, so "degraded" and
+                        "Not connected" are not two names for one state. */}
+                    {h.status === "healthy"
+                      ? "Connected"
+                      : h.status === "degraded"
+                        ? "Degraded"
+                        : "Offline"}
                   </Badge>
                 </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {h.detail} · {h.latency}ms ·{" "}
+                <p className="mt-2 break-words text-[11px] leading-relaxed text-muted-foreground">
+                  {h.detail}
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {/* A zero latency is "not measured", not "0 ms": the music
+                      backend reports no round trip of its own. */}
+                  {h.latency > 0 ? `${h.latency} ms · ` : ""}
                   {relativeTime(h.updatedAt, data.presentation.referenceAt)}
                 </p>
               </div>

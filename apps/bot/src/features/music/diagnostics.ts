@@ -6,6 +6,7 @@ import {
   providerUnavailableMessage,
   supportedPrefixes,
 } from "@orbit/core/music-sources";
+import { musicConnectionDiagnostic } from "./connection";
 import { parseArgs } from "node:util";
 import { LoadType, type LavalinkResponse } from "shoukaku";
 import { z } from "zod";
@@ -230,6 +231,8 @@ type DoctorReport = {
     provider?: string | null;
   };
   error?: string;
+  /** Why the backend check failed, when the error carried that evidence. */
+  category?: string;
 };
 export async function runMusicDoctor(
   client: MusicDoctorClient,
@@ -239,6 +242,9 @@ export async function runMusicDoctor(
     resolveHost?: MusicLookup;
     /** Provider to test the optional lookup with; defaults to the config. */
     source?: string;
+    /** Configured `host:port`, used only to phrase a failure that has evidence. */
+    host?: string;
+    secure?: boolean;
   } = {}
 ): Promise<DoctorReport> {
   const settings = options.settings ?? musicSourceSettings();
@@ -320,7 +326,15 @@ export async function runMusicDoctor(
         "No track was looked up. Add --query with the same failing search text or approved source URL to test the source."
       );
   } catch (error) {
-    report.error = errorDiagnostic(error);
+    // Same reading of the error as the runtime uses: a refused connection is
+    // named as one, and an error that answers nothing gets no invented cause.
+    const connection = musicConnectionDiagnostic(error, {
+      host: options.host,
+      secure: options.secure,
+    });
+    report.error = connection.detail;
+    report.category = connection.category;
+    if (connection.hint) report.warnings.push(connection.hint);
   }
   return report;
 }

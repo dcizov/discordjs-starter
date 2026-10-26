@@ -46,14 +46,18 @@ async function main() {
       "Music diagnostics require DEMO_MODE=false. Demo mode never contacts Lavalink or audio providers."
     );
   validateEnvironment("music-doctor");
+  const host = required("LAVALINK_URL");
+  const secure = process.env.LAVALINK_SECURE === "true";
   const client = createMusicDoctorClient({
-    host: required("LAVALINK_URL"),
+    host,
     password: required("LAVALINK_PASSWORD"),
-    secure: process.env.LAVALINK_SECURE === "true",
+    secure,
   });
   const report = await runMusicDoctor(client, {
     query: options.query,
     source: options.source,
+    host,
+    secure,
   });
   await new Promise<void>((done, fail) => {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`, (error) =>

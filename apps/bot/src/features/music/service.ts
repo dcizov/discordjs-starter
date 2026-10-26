@@ -32,6 +32,7 @@ import type {
   MusicSearchProvider,
   MusicSearchProviderId,
 } from "@orbit/core/music-sources";
+import { MusicConnectionReporter } from "./connection";
 import { MusicNodeMetadata } from "./node";
 import { joinMusicVoice, MusicDiscordConnector } from "./voice";
 import { MusicPluginRest, sponsorBlockCategories } from "./plugins";
@@ -78,6 +79,8 @@ export class MusicService {
   private locks = new Map<string, Promise<unknown>>();
   private lastSave = new Map<string, number>();
   private metadata = new MusicNodeMetadata();
+  /** Collapses a reconnect loop's identical errors into one log line. */
+  private connectionErrors = new MusicConnectionReporter();
   private voiceConnector: MusicDiscordConnector;
   /**
    * Owns every "leave voice later" timer. Nothing else in this class calls
@@ -183,34 +186,48 @@ export class MusicService {
             );
           });
     });
-    this.backend?.on("error", (_name, error) => {
+    this.backend?.on("error", (name, error) => {
+      // The library's error events are the only evidence available, and for a
+      // refused dual-stack connect they arrive as an AggregateError with no
+      // message at all. Read the name/code/causes, then say what they support.
+      const reported = this.connectionErrors.report(error, {
+        node: name,
+        host: process.env.LAVALINK_URL,
+        secure: process.env.LAVALINK_SECURE === "true",
+      });
+      if (reported.repeated)
+        logger.debug(
+          { repeats: reported.repeats, category: reported.category },
+          "Lavalink connection error repeated with identical evidence"
+        );
+      else
+        logger.warn(
+          {
+            category: reported.category,
+            evidence: reported.detail,
+            ...(reported.hint ? { hint: reported.hint } : {}),
+          },
+          "Lavalink connection error"
+        );
+      void setHealth("Music backend", "degraded", 0, reported.summary);
+    });
+    this.backend?.on("reconnecting", (_name, tries, seconds) => {
       logger.warn(
-        { error: errorDiagnostic(error) },
-        "Lavalink connection error"
+        { retryInSeconds: seconds, attempt: tries },
+        "Lavalink disconnected; automatic retry scheduled"
       );
+    });
+    this.backend?.on("disconnect", () => {
+      // A new disconnect is new evidence: the next error of the same kind is
+      // worth logging again rather than being counted as a repeat.
+      this.connectionErrors.reset();
       void setHealth(
         "Music backend",
         "degraded",
         0,
-        "Lavalink connection error"
+        "Lavalink disconnected; retrying automatically"
       );
     });
-    this.backend?.on("reconnecting", (_name, _tries, seconds) => {
-      logger.warn(
-        { retryInSeconds: seconds },
-        "Lavalink disconnected; automatic retry scheduled"
-      );
-    });
-    this.backend?.on(
-      "disconnect",
-      () =>
-        void setHealth(
-          "Music backend",
-          "degraded",
-          0,
-          "Lavalink disconnected; retrying automatically"
-        )
-    );
   }
   private async locked<T>(id: string, fn: () => Promise<T>): Promise<T> {
     const prior = this.locks.get(id) ?? Promise.resolve();
