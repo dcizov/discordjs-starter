@@ -143,6 +143,9 @@ async function main() {
     }
   }
   async function deliver(job: Job) {
+    // The bot identity is cached after the first lookup and is resolved outside
+    // the transaction, so a slow Discord API call cannot hold a row lock.
+    const actor = await auditActor();
     const result = await database().db.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${job.data.deliveryId}, 1))`
@@ -279,7 +282,6 @@ async function main() {
             messageId: message?.id ?? null,
           })
           .where(eq(schema.deliveries.id, row.id));
-        const actor = await auditActor();
         await tx.insert(schema.auditLogs).values({
           guildId: row.guildId,
           actorId: actor.id,
