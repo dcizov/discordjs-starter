@@ -162,9 +162,13 @@ images. Next 16.4.3, Webpack build.
 - The dashboard deliberately renders time-sensitive data from serialized server
   values: relative times are computed from `presentation.referenceAt`, and the
   activity chart exposes its labels/values/reference as `data-activity-*`
-  attributes computed on the server. No component reads `Date.now()` while
-  rendering. `tests/e2e/activity-hydration.spec.ts` checks that equality across
-  three client timezones.
+  attributes computed on the server. `tests/e2e/activity-hydration.spec.ts`
+  checks that equality across three client timezones.
+- The one place that did read the clock while rendering was the server's
+  `retryAt` prop for `AuthProblem` (a rate-limit countdown). It was removed in
+  pass 8: the page now passes only the serialized `retryAfterSeconds`, the first
+  paint uses that number verbatim, and the deadline is resolved in a client
+  effect. See [continuation, pass 8](CONTINUATION.md#pass-8-2026-10-26-fixing-what-the-new-checks-found).
 - The only `suppressHydrationWarning` in the codebase is on `<html>`, where
   `next-themes` sets the theme class before React hydrates. It stays exactly
   that narrow.

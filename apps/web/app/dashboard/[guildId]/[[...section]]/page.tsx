@@ -29,7 +29,6 @@ export default async function Page({
           status={e.status}
           message={e.message}
           retryAfterSeconds={e.retryAfterSeconds}
-          retryAt={Date.now() + (e.retryAfterSeconds ?? 0) * 1000}
         />
       );
     throw e;

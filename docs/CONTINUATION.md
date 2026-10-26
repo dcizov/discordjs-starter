@@ -1046,7 +1046,10 @@ Evidence gathered before touching any rendering path:
   chart publishes `data-activity-reference`/`-labels`/`-values` computed on the
   server, and no component calls `Date.now()` during render. The one countdown
   (`AuthProblem`) starts from a serialized `retryAfterSeconds` prop, so its first
-  client render equals the server render.
+  client render equals the server render — but its two server callers also passed
+  `retryAt={Date.now() + …}`, i.e. a clock read during the RSC render. That was
+  corrected in pass 8 (below); it never caused a mismatch, because the value
+  never reached the markup.
 - `style="color:transparent"` on images is React's own hydration-inserted style
   for `next/image` and plain `<img>`; it appears in a clean browser too.
 - Lucide, `next/image` and the chart markup are deterministic; the new e2e case
@@ -1247,6 +1250,59 @@ exercised — the hydration section remains a documented diagnosis, not a test.
 ### Still deferred (unchanged)
 
 The real server-member list, SponsorBlock guild UI, LavaSearch/lyrics, `<label
-for>` associations on the switches, the `AuthProblem.retryAt` time dependency,
-and the mobile-overflow slug list. No PR was opened; work stays on
-`arena/99c6cf65-discordjs-starter`.
+for>` associations on the switches, and the mobile-overflow slug list. No PR was
+opened; work stays on `arena/99c6cf65-discordjs-starter`.
+
+## Pass 8 (2026-10-26): fixing what the new checks found
+
+### App-owned clock read removed (`AuthProblem`)
+
+Pass 7 said "no component reads `Date.now()` while rendering". That was true of
+every client component but not of the two server pages that render
+`AuthProblem`: both passed `retryAt={Date.now() + (retryAfterSeconds ?? 0) *
+1000}`. It never produced a hydration mismatch — `retryAt` is a prop and never
+reaches the markup, and the first client render used the serialized
+`retryAfterSeconds` — but it was still the wrong place for the value:
+
+- the deadline belonged to the instant the **response was produced**, so any
+  reused HTML (back/forward restore, a prefetched or cached response) started
+  its countdown already short, and
+- it put a clock read inside the RSC render, which is exactly what the rest of
+  the dashboard avoids by serializing `presentation.referenceAt`.
+
+`AuthProblem` now takes only `retryAfterSeconds`. The first paint still renders
+the server's number, so hydration is byte-identical; the deadline is resolved
+once in a client effect (`useRef` guard) and the interval counts down from
+there. There is no `suppressHydrationWarning`, no mounted-only rendering and no
+change to what a user sees: the button still says "Try again in Ns" and then
+"Try again".
+
+The hydration claim is therefore now literally true for both surfaces, and the
+two guides that stated it (this file and
+[dashboard UX](DASHBOARD-UX.md#hydration-warnings-in-the-browser-console)) say
+what is actually serialized versus resolved on the client.
+
+### What the first axe run found (and what was wrong with the tests)
+
+The new accessibility suite found real defects rather than test noise:
+
+- seven focusable chart points carried `aria-label` on an SVG `<circle>` with no
+  role (`aria-prohibited-attr`); they now carry `role="img"` and their value is
+  announced;
+- the paused-module cards dimmed to 70 % opacity, which put their own status
+  text at 3.55:1 in dark mode and encoded state with transparency alone; they
+  keep full contrast and use a dashed border instead;
+- 19 hand-picked hex accents (used for 9–11 px text) were below 4.5:1 in one or
+  both themes and were replaced by the status tone tokens (violet / amber /
+  emerald / rose at `-700` light and `-300` dark);
+- two opacity modifiers on `muted-foreground` (`/85` on the module cards, `/75`
+  in the dashboard footer) rendered 9–10 px text at 3.85:1 and 4.05:1. The
+  undimmed token measures 5.27:1 on white and 6.31:1 on the dark canvas, so the
+  dimming was the whole defect; `/40` and `/50` survive only on `aria-hidden`
+  decoration and disabled text.
+
+Four test-side assumptions were wrong for the same reason — they described
+native selects, or looked for a portalled popup inside a dialog, or assumed
+Radix tracks `aria-activedescendant`, or assumed the trigger keeps focus during
+type-ahead. The helpers and specs were corrected; no assertion was relaxed, no
+retry added and no primitive changed to satisfy a test.
