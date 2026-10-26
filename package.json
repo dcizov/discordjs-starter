@@ -24,7 +24,6 @@
     "start:bot": "node dist/bot.js",
     "start:worker": "node dist/worker.js",
     "commands:register": "tsx apps/bot/src/commands/register.ts",
-    "pretest": "node scripts/check-dependencies.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "next typegen apps/web && tsc --noEmit && tsc --noEmit -p apps/web/tsconfig.json",

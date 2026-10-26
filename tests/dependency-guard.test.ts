@@ -33,11 +33,25 @@ describe("dependency guard for the shared root manifest", () => {
     expect(REQUIRED_DEPENDENCIES).toContain("next");
   });
 
-  it("explains both a normal install and a masked Docker volume", () => {
+  it("gives the verified remedy for both host and container installs", () => {
     expect(REMEDIATION).toContain("npm ci");
+    // The container remedy is the same command: the volume is the install path.
+    expect(REMEDIATION).toContain("docker compose exec web npm ci");
     expect(REMEDIATION).toContain("dev_node_modules");
-    expect(REMEDIATION).toMatch(/never the database volume/);
+    // Volume recreation is the fallback, scoped to the dependency volume only.
+    expect(REMEDIATION).toMatch(/Never delete the database, Redis/);
+    expect(REMEDIATION).toContain("down -v");
+    expect(REMEDIATION).not.toMatch(/remove only that volume/i);
+    // It must not repeat the earlier, false claim about npm inside a container.
+    expect(REMEDIATION).not.toMatch(/does not fix a masked volume/);
     // Guidance must never invite printing environment values.
     expect(REMEDIATION).not.toMatch(/\.env\b|printenv|cat .*env/i);
+  });
+
+  it("does not pretend to install or to be a package-manager replacement", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("scripts/check-dependencies.mjs", "utf8");
+    expect(source).not.toMatch(/execFile|spawn|exec\(/);
+    expect(source).toMatch(/It only reports that the tree is incomplete/);
   });
 });

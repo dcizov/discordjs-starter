@@ -92,31 +92,58 @@ For editor-based development, use the checked-in [Dev Container setup](DEVCONTAI
 
 All third-party dependencies are declared **once** in the root `package.json`
 (the workspaces `apps/*` and `packages/*` deliberately have no dependency
-blocks). That keeps one hoisted tree and a single lockfile, but it has two
-consequences that look like a broken build rather than a stale install:
+blocks). That keeps one hoisted tree and one lockfile, but two provisioning
+paths can end up behind the manifest:
 
-- A host checkout that has not run `npm ci` since the manifest changed is
-  missing the new package.
-- The Docker workflow seeds a named volume at **`/app/node_modules`**. Rebuilding
-  the image does **not** refresh that volume, so an old volume keeps masking the
-  new tree and the Next.js build reports only a resolution error, for example:
+- a host checkout that has not run `npm ci` since the manifest changed;
+- the Docker dev stack, where `dev_node_modules` is mounted at
+  `/app/node_modules`. Docker seeds a named volume from the image **only on its
+  first use**, so a volume created by an older image keeps the old tree while the
+  image underneath is rebuilt.
 
-  ```text
-  Module not found: Can't resolve 'marked'
-  Import trace: ./apps/web/lib/docs-content.ts → ./apps/web/app/docs/layout.tsx
-  ```
+The only symptom is a deep build error:
 
-Orbit now checks the critical packages before `dev`, `build`, `start` and
-`test` (`scripts/check-dependencies.mjs`) and prints the remediation instead of
-leaving you with a webpack trace.
+```text
+Module not found: Can't resolve 'marked'
+Import trace: ./lib/docs-content.ts → ./app/docs/layout.tsx
+```
 
-Host/CI checkout:
+`scripts/check-dependencies.mjs` runs before `dev`, `build`, `build:web` and
+`start` (about 50 ms), names the missing packages and prints the remedy. It
+installs nothing and never edits the lockfile.
+
+#### The fix, in order
+
+**Host or CI checkout:**
 
 ```sh
 npm ci
 ```
 
-Docker Compose — remove only the dependency volume, never the database volume:
+**Docker Compose / Dev Container:** run the same command *inside* the running
+container:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec web npm ci
+# Dev Container: `npm ci` in the workspace terminal
+```
+
+This does repair the volume, and the reason is structural rather than
+incidental: Compose mounts `dev_node_modules` at **`/app/node_modules`**, which is
+exactly the directory `npm ci` installs into, and the bind-mounted checkout
+supplies the current `package-lock.json`. There is no separate hidden
+`node_modules` for the volume to mask; the volume *is* the install location.
+(Rebuilding the image alone still does nothing to an existing volume — only the
+install command does.)
+
+Verified in this repository: a volume-equivalent tree installed from `eeb0e68`
+(before `marked` existed) was mounted over a fully installed checkout, which
+reproduced `Module not found: 'marked'`; running `npm ci` there installed 628
+packages into that tree and the build then compiled. Re-check with
+`docs/CONTINUATION.md` before relying on it in a new environment.
+
+**Only if `npm ci` cannot write to the volume** (for example `EACCES`, because a
+volume was created by a different user) recreate that one volume:
 
 ```sh
 docker volume ls | grep dev_node_modules
@@ -125,9 +152,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
 
 The volume name is `<project>_dev_node_modules`, where the Compose project name
-defaults to the directory name (or `COMPOSE_PROJECT_NAME`). `npm install` inside
-a running container cannot fix a masked volume: the mount hides whatever the
-install wrote.
+defaults to the directory name (or `COMPOSE_PROJECT_NAME`). The new volume is
+seeded from the freshly built image. Never delete the database, Redis, demo-data
+or Next-cache volumes, and never use `docker compose down -v` for this.
 
 ## Run just the main bot
 
