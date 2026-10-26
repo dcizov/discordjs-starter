@@ -828,15 +828,16 @@ failure, stale-timer re-check, real empty state, shutdown cleanup).
 
 ### Verification (fresh, this branch)
 
-| Check                      | Result                                                                                          |
-| -------------------------- | ----------------------------------------------------------------------------------------------- |
-| `npx vitest run`           | **836 tests in 69 files pass** (was 818 before this pass)                                       |
-| `npm run typecheck`        | pass                                                                                            |
-| `npm run lint`             | pass                                                                                            |
-| `npm run format:check`     | pass                                                                                            |
-| `npm run build:web`        | pass (`/docs` prerendered with the filter)                                                      |
-| `npm run build:services`   | pass                                                                                            |
-| CI `verify` / `containers` | see the run ids recorded below; the browser suite is the only live check of the new docs filter |
+| Check                                      | Result                                                                                                                                                                        |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`                           | **836 tests in 69 files pass** (was 818 before this pass)                                                                                                                     |
+| `npm run typecheck`                        | pass                                                                                                                                                                          |
+| `npm run lint`                             | pass                                                                                                                                                                          |
+| `npm run format:check`                     | pass                                                                                                                                                                          |
+| `npm run build:web`                        | pass (`/docs` prerendered with the filter)                                                                                                                                    |
+| `npm run build:services`                   | pass                                                                                                                                                                          |
+| CI `verify` (run 40258147290 on `fa98624`) | **success** — lint, typecheck, vitest on PostgreSQL 17, `npm audit --omit=dev`, build, screenshots step (4 tests), browser suite **58 passed / 4 skipped**, artifact uploaded |
+| CI `containers` (same run)                 | **success** — Compose validation, both image targets, unprivileged dev-image smoke test, pinned Lavalink build, headless backend check                                        |
 
 **Not verified here**: live Discord login, real Lavalink audio, audible playback,
 and the screenshot pixels. The `dashboard-screenshots` artifact is produced by CI,
