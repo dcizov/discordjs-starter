@@ -4,6 +4,27 @@ import { test, expect } from "@playwright/test";
 // without signing in, without JavaScript-only navigation and on a phone.
 test.use({ storageState: { cookies: [], origins: [] } });
 
+/**
+ * Report what is actually wider than the viewport, so a failure names the
+ * element instead of only a number of pixels.
+ */
+async function overflowOffenders(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const width = window.innerWidth;
+    return Array.from(document.querySelectorAll<HTMLElement>("body *"))
+      .filter((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width > 0 && rect.right > width + 1;
+      })
+      .slice(0, 6)
+      .map((element) => {
+        const rect = element.getBoundingClientRect();
+        const classes = element.className.toString().slice(0, 50);
+        return `${element.tagName.toLowerCase()}.${classes} right=${Math.round(rect.right)} width=${Math.round(rect.width)}`;
+      });
+  });
+}
+
 test("documentation index lists grouped user and developer guides", async ({
   page,
 }) => {
@@ -58,7 +79,10 @@ test("documentation stays usable on a narrow screen", async ({ page }) => {
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth
   );
-  expect(overflow).toBeLessThanOrEqual(1);
+  expect(
+    overflow,
+    `overflowing elements: ${(await overflowOffenders(page)).join(" | ")}`
+  ).toBeLessThanOrEqual(1);
 });
 
 test("the index can be filtered down to a page", async ({ page }) => {
@@ -181,7 +205,9 @@ test("long commands and wide tables scroll inside their frames on a phone", asyn
     );
     expect(
       overflow,
-      `${slug} must not scroll the page sideways`
+      `${slug} must not scroll the page sideways; overflowing elements: ${(
+        await overflowOffenders(page)
+      ).join(" | ")}`
     ).toBeLessThanOrEqual(1);
   }
   await page.goto("/docs/workflows");

@@ -101,7 +101,7 @@ export default async function DocPage({
       {doc.toc.length > 2 && (
         <nav
           aria-label="On this page"
-          className="rounded-xl border bg-card p-4 xl:col-start-2 xl:row-start-2 xl:sticky xl:top-[4.5rem]"
+          className="min-w-0 rounded-xl border bg-card p-4 [overflow-wrap:anywhere] xl:col-start-2 xl:row-start-2 xl:sticky xl:top-[4.5rem]"
         >
           <h2 className="flex items-center gap-2 text-xs font-semibold">
             <ListTree size={14} aria-hidden="true" />
@@ -136,7 +136,7 @@ export default async function DocPage({
         <div dangerouslySetInnerHTML={{ __html: doc.body }} />
       </article>
 
-      <footer className="xl:col-span-2">
+      <footer className="min-w-0 [overflow-wrap:anywhere] xl:col-span-2">
         {related.length > 0 && (
           <section aria-labelledby="related-pages" className="mt-10">
             <h2 id="related-pages" className="text-xs font-semibold">

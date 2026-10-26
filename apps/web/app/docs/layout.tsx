@@ -48,10 +48,15 @@ export default function DocsLayout({
           </span>
           <Link
             href="/docs"
+            aria-label="Documentation"
             className="flex items-center gap-1.5 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             <BookOpen size={15} aria-hidden="true" />
-            Documentation
+            {/* The label is dropped on phones so the bar never scrolls sideways;
+                the link keeps its accessible name. */}
+            <span className="hidden sm:inline" aria-hidden="true">
+              Documentation
+            </span>
           </Link>
           <div className="ml-auto flex items-center gap-3">
             <a
