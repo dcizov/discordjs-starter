@@ -159,6 +159,60 @@ describe("in-app documentation is generated from the repository", () => {
     ).toBe(true);
   });
 
+  it("builds code controls itself instead of trusting author markup", () => {
+    const forged = renderDoc(
+      { ...DOC_INDEX[0], file: "inline" },
+      [
+        "# T",
+        "",
+        '<button data-docs-copy aria-label="Run this">Fake control</button>',
+        "",
+        '<button onclick="alert(1)">Inline handler</button>',
+        "",
+        '<a href="http://insecure.example">plain http</a>',
+        '<a href="javascript:alert(1)">javascript</a>',
+        '<a href="//evil.example">protocol relative</a>',
+        "",
+        "```sh",
+        'npm run dev -- --flag "<script>"',
+        "```",
+        "",
+        '<pre><code class="language-yaml">forged: frame</code></pre>',
+        "",
+        '<form action="/steal"><input name=x></form>',
+        '<iframe src="https://evil.example"></iframe>',
+        "<img src=x onerror=alert(1)>",
+      ].join("\n")
+    );
+    // Two code blocks (one fenced, one raw) and therefore exactly two controls;
+    // both are the renderer's, and the author's buttons are gone even though one
+    // carried the real marker attribute.
+    expect(forged.html.match(/<pre/g) ?? []).toHaveLength(2);
+    expect(forged.html.match(/<button/g) ?? []).toHaveLength(2);
+    expect(forged.html.match(/data-docs-copy/g) ?? []).toHaveLength(2);
+    expect(forged.html).not.toContain("Fake control");
+    expect(forged.html).not.toContain("onclick");
+    expect(forged.html).not.toContain("onerror");
+    expect(forged.html).not.toContain("<form");
+    expect(forged.html).not.toContain("<input");
+    expect(forged.html).not.toContain("<iframe");
+    expect(forged.html).not.toContain("<img");
+    expect(forged.html).not.toContain("javascript:");
+    expect(forged.html).not.toContain("//evil.example");
+    expect(forged.html).not.toContain("http://insecure.example");
+    // The generated frames carry the language and the code verbatim.
+    expect(forged.html).toContain('data-language="sh"');
+    expect(forged.html).toContain("&lt;script&gt;");
+    expect(forged.html).toContain('data-language="yaml"');
+    // Every control is one this module built: type, class, label and marker.
+    for (const button of forged.html.match(/<button[^>]*>/g) ?? []) {
+      expect(button).toContain('type="button"');
+      expect(button).toContain('class="docs-copy"');
+      expect(button).toContain("data-docs-copy");
+      expect(button).toContain('aria-label="Copy this code block"');
+    }
+  });
+
   it("refuses a path outside the documentation root", () => {
     expect(() => readDocFile("../package.json", docsRoot())).toThrow();
   });
