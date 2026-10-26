@@ -115,6 +115,14 @@ export type Account = {
   guildId: string;
   userId: string;
   name: string;
+  /**
+   * Avatar hash as last captured by the bot when this member earned, spent or
+   * received something. Current-ish identity from an already-authorized
+   * interaction, not historical evidence and not a per-row API lookup.
+   */
+  avatar: string | null;
+  /** Server-derived display URL for that hash; null when none was captured. */
+  avatarUrl?: string | null;
   balance: number;
   lastDaily: string | null;
 };

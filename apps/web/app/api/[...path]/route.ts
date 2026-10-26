@@ -18,7 +18,7 @@ import {
 import { simulateCommunityAction } from "@orbit/db/src/community-demo";
 import { eq, and, sql } from "drizzle-orm";
 import { authorize, HttpError } from "@/lib/auth";
-import { loadDashboard } from "@/lib/dashboard";
+import { loadDashboard, withAuditAvatarUrl } from "@/lib/dashboard";
 import { assertOrigin, body, rateLimit } from "@/lib/security";
 import type { ResourceKind } from "@orbit/core";
 import { encrypt, resourceSchemas, snowflake } from "@orbit/core";
@@ -254,12 +254,23 @@ async function handle(req: Request, context: Context) {
       // these parameters, so the dashboard cannot request a filter the route
       // quietly ignores. Sorting is further checked per dataset in @orbit/db.
       const params = parseHistoryQuery(u.searchParams);
-      return NextResponse.json(
-        await queryHistory(guildId, kind, {
-          ...params,
-          sort: params.sort as never,
-        })
-      );
+      const result = await queryHistory(guildId, kind, {
+        ...params,
+        sort: params.sort as never,
+      });
+      // Audit rows carry the hash that was recorded with the action. The URL is
+      // derived here, on the server, from that stored hash — never from the
+      // actor's current profile and never with a per-row Discord request. The
+      // paged table is built from this response, so this is the only place the
+      // historical picture can survive.
+      if (kind === "audit")
+        return NextResponse.json({
+          ...result,
+          rows: (
+            result.rows as { actorId: string; actorAvatar: string | null }[]
+          ).map(withAuditAvatarUrl),
+        });
+      return NextResponse.json(result);
     }
     if (path[2] === "config" && req.method === "PATCH")
       return NextResponse.json(

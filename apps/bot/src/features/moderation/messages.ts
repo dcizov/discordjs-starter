@@ -125,6 +125,7 @@ async function processMessage(message: Message) {
         guildId: guild.id,
         userId: member.id,
         userName: member.displayName,
+        userAvatar: member.user.avatar,
         type: "activity",
         key: `activity-${message.id}`,
       });

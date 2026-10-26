@@ -29,7 +29,7 @@ vi.mock("@orbit/db", () => ({
   getOwnEconomyHistory: deps.history,
   emptyMusic: () => music,
 }));
-import { loadDashboard } from "../apps/web/lib/dashboard";
+import { loadDashboard, withAuditAvatarUrl } from "../apps/web/lib/dashboard";
 import { HttpError } from "../apps/web/lib/auth";
 const gid = "120000000000000001";
 const uid = "120000000000000099";
@@ -190,6 +190,66 @@ describe("dashboard identity projection and tenant boundary", () => {
     // Resolution is purely local: no REST client or fetcher is involved.
     expect(JSON.stringify(result.audit)).not.toContain("accessToken");
   });
+  it("gives every leaderboard row the avatar hash the bot captured, once, without a Discord call", async () => {
+    deps.dashboard.mockResolvedValue({
+      guild,
+      resources: [],
+      audit: [],
+      ledger: [],
+      accounts: [
+        {
+          guildId: gid,
+          userId: uid,
+          name: "Current member",
+          avatar,
+          balance: 500,
+          lastDaily: null,
+        },
+        {
+          // A row from before avatars were captured, or a member the bot has
+          // only ever seen through a slash command without a member object.
+          guildId: gid,
+          userId: "120000000000000556",
+          name: "Legacy member",
+          avatar: null,
+          balance: 120,
+          lastDaily: null,
+        },
+        {
+          guildId: gid,
+          userId: "120000000000000557",
+          name: "Broken hash",
+          avatar: "not-a-hash",
+          balance: 10,
+          lastDaily: null,
+        },
+      ],
+      deliveries: [],
+      music,
+      health: [],
+      demo: false,
+    });
+    deps.account.mockResolvedValue({
+      guildId: gid,
+      userId: uid,
+      name: "Current member",
+      avatar,
+      balance: 500,
+      lastDaily: null,
+    });
+    const result = await loadDashboard(gid);
+    expect(result.accounts.map((a) => a.avatarUrl)).toEqual([
+      `https://cdn.discordapp.com/avatars/${uid}/${avatar}.webp?size=128`,
+      null,
+      // An unusable hash is not turned into a URL that would 404.
+      null,
+    ]);
+    // The wallet is the same identity, resolved the same way.
+    expect(result.wallet?.avatarUrl).toBe(result.accounts[0].avatarUrl);
+    // Current identity stays current: the stored hash is kept verbatim so the
+    // UI never claims a historical picture it does not have.
+    expect(result.accounts[0].avatar).toBe(avatar);
+  });
   it("denies foreign access before loading any tenant data", async () => {
     deps.authorize.mockRejectedValue(new HttpError(403, "Forbidden"));
     await expect(loadDashboard("990000000000000999")).rejects.toMatchObject({
@@ -236,4 +296,61 @@ it("refreshes the selected name/icon from authorized OAuth metadata instead of a
   });
   expect(result.guild.memberCount).toBe(guild.memberCount);
   expect(result.guild.config).toEqual(guild.config);
+});
+
+describe("historical audit identity", () => {
+  it("derives the picture from the hash stored with the action", () => {
+    // The paged audit table is built from `/history`, so the projection has to
+    // work on a raw row that carries only the recorded hash.
+    expect(
+      withAuditAvatarUrl({
+        actorId: uid,
+        actorAvatar: avatar,
+        action: "updated",
+      }).actorAvatarUrl
+    ).toBe(`https://cdn.discordapp.com/avatars/${uid}/${avatar}.webp?size=128`);
+  });
+  it("keeps an honest null when nothing was recorded and never substitutes a profile", () => {
+    const row = withAuditAvatarUrl({
+      actorId: uid,
+      actorAvatar: null,
+      action: "created",
+    });
+    expect(row.actorAvatarUrl).toBeNull();
+    // The row itself is untouched: the stored identity is the evidence.
+    expect(row).toMatchObject({
+      actorId: uid,
+      actorAvatar: null,
+      action: "created",
+    });
+    const legacy = withAuditAvatarUrl({ actorId: uid, action: "created" });
+    expect(legacy.actorAvatarUrl).toBeNull();
+  });
+  it("refuses to mint a URL for a hash that is not an avatar", () => {
+    for (const broken of ["not-a-hash", "a_short", "../etc/passwd"])
+      expect(
+        withAuditAvatarUrl({ actorId: uid, actorAvatar: broken }).actorAvatarUrl
+      ).toBeNull();
+  });
+  it("supports animated avatar hashes", () => {
+    const animated = "a_0123456789abcdef0123456789abcdef";
+    expect(
+      withAuditAvatarUrl({ actorId: uid, actorAvatar: animated }).actorAvatarUrl
+    ).toBe(
+      `https://cdn.discordapp.com/avatars/${uid}/${animated}.webp?size=128`
+    );
+  });
+  it("uses the bundled illustration for a demo persona and nothing for a system actor", () => {
+    vi.stubEnv("DEMO_MODE", "true");
+    expect(
+      withAuditAvatarUrl({ actorId: uid, actorAvatar: "/demo/jamie-davis.svg" })
+        .actorAvatarUrl
+    ).toBe("/demo/jamie-davis.svg");
+    // A system actor has no avatar hash; the component shows the Orbit glyph
+    // rather than a URL that would 404.
+    expect(
+      withAuditAvatarUrl({ actorId: "system:orbit", actorAvatar: null })
+        .actorAvatarUrl
+    ).toBeNull();
+  });
 });

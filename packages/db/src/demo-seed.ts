@@ -404,6 +404,9 @@ export function createDemo(): DemoState {
     guildId: guild.id,
     userId: i === 0 ? DEMO_USER_ID : `12000000000000040${i}`,
     name,
+    // Four personas have a bundled illustration; the rest deliberately do not,
+    // so the "no avatar was ever captured" fallback is exercised in the demo.
+    avatar: DEMO_PERSONA_AVATARS[name] ?? null,
     balance: [4250, 38750, 34200, 28150, 26400, 22750, 18200, 15450][i],
     lastDaily: null,
   }));

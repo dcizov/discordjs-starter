@@ -28,7 +28,7 @@ export function ActorAvatar({
   id: string;
   name: string;
   src?: string | null;
-  size?: 28 | 30 | 33;
+  size?: 24 | 28 | 30 | 33;
 }) {
   if (src)
     return (

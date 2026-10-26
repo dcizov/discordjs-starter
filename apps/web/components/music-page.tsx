@@ -30,6 +30,7 @@ import { safeImageUrl } from "@orbit/core/feed-content";
 import { safePublicLink } from "@orbit/core/public-url";
 import { MUSIC_SEARCH_PROVIDERS } from "@orbit/core/music-sources";
 import { CoverArt } from "./artwork";
+import { IdentityCell } from "./identity/identity-cell";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -86,6 +87,10 @@ export function MusicPage() {
   // fallback to a signed/stream URL.
   const artwork = m.current?.artwork ? safeImageUrl(m.current.artwork) : "";
   const sourceUrl = m.current?.uri ? safePublicLink(m.current.uri) : "";
+  // Requester identity comes from the same authorized account snapshot as the
+  // leaderboard. Missing means "not captured", never a guessed picture.
+  const requester = (id?: string) =>
+    id ? data.accounts.find((a) => a.userId === id) : undefined;
   const sourceLabel = m.current?.source
     ? (SOURCE_NAMES[m.current.source] ?? "source")
     : "source";
@@ -223,7 +228,15 @@ export function MusicPage() {
             </p>
             {m.current && (
               <span className="relative mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
-                <span>Requested by {m.current.requestedBy}</span>
+                <span className="flex items-center gap-1.5">
+                  Requested by
+                  <IdentityCell
+                    id={m.current.requestedById ?? ""}
+                    name={m.current.requestedBy}
+                    src={requester(m.current.requestedById)?.avatarUrl}
+                    size={24}
+                  />
+                </span>
                 {sourceUrl && (
                   <>
                     <span aria-hidden="true">·</span>
@@ -567,8 +580,14 @@ export function MusicPage() {
                     {t.source ? ` · ${SOURCE_NAMES[t.source] ?? t.source}` : ""}
                   </p>
                 </div>
-                <span className="hidden text-[10px] text-muted-foreground sm:block">
-                  Added by {t.requestedBy}
+                <span className="hidden items-center gap-1.5 text-[10px] text-muted-foreground sm:flex">
+                  Added by
+                  <IdentityCell
+                    id={t.requestedById ?? ""}
+                    name={t.requestedBy}
+                    src={requester(t.requestedById)?.avatarUrl}
+                    size={24}
+                  />
                 </span>
                 <span className="ml-4 text-[11px] tabular-nums text-muted-foreground">
                   {duration(t.duration)}

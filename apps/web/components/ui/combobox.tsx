@@ -11,6 +11,7 @@ import {
   CommandList,
 } from "./command";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { ActorAvatar } from "../identity/actor-avatar";
 import { FieldContext } from "./field-context";
 
 /**
@@ -35,7 +36,17 @@ export function Combobox({
 }: {
   value: string;
   onValueChange: (value: string) => void;
-  options: { value: string; label: string; hint?: string }[];
+  options: {
+    value: string;
+    label: string;
+    hint?: string;
+    /**
+     * People are pictures and names. A member list built from the dashboard's
+     * own account data passes the same identity the leaderboard shows, so the
+     * picker does not fall back to a generic initial when an avatar exists.
+     */
+    person?: { id: string; name: string; src?: string | null };
+  }[];
   placeholder?: string;
   searchPlaceholder?: string;
   emptyText?: string;
@@ -95,6 +106,14 @@ export function Combobox({
                     option.value === value ? "opacity-100" : "opacity-0"
                   )}
                 />
+                {option.person && (
+                  <ActorAvatar
+                    id={option.person.id}
+                    name={option.person.name}
+                    src={option.person.src}
+                    size={24}
+                  />
+                )}
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 {option.hint && (
                   <span className="shrink-0 text-[10px] text-muted-foreground">

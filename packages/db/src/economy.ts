@@ -9,9 +9,16 @@ export type EconomyInput = {
   guildId: string;
   userId: string;
   userName: string;
+  /**
+   * Avatar hash the bot already holds for this member. Identity is captured
+   * where the interaction happens — the dashboard never asks Discord per row.
+   */
+  userAvatar?: string | null;
   key: string;
   type: "daily" | "activity" | "transfer" | "purchase";
   toUserId?: string;
+  toUserName?: string;
+  toUserAvatar?: string | null;
   amount?: number;
   itemId?: string;
   note?: string;
@@ -112,6 +119,7 @@ export async function economyTransaction(
           guildId: i.guildId,
           userId: i.userId,
           name: i.userName,
+          avatar: i.userAvatar ?? null,
           balance: 0,
           lastDaily: null,
         };
@@ -161,7 +169,8 @@ export async function economyTransaction(
           b = {
             guildId: i.guildId,
             userId: i.toUserId!,
-            name: i.toUserId!,
+            name: i.toUserName ?? i.toUserId!,
+            avatar: i.toUserAvatar ?? null,
             balance: 0,
             lastDaily: null,
           };
@@ -173,6 +182,7 @@ export async function economyTransaction(
         d.ledger.unshift(makeEntry(i, i.toUserId!, -amount, i.userId, date));
       }
       a.name = i.userName;
+      if (i.userAvatar) a.avatar = i.userAvatar;
       a.balance += amount;
       if (i.type === "daily") a.lastDaily = date.toISOString();
       if (item) {
@@ -221,10 +231,21 @@ export async function economyTransaction(
     if (!g || !g.installed) throw new Error("Server not available");
     await tx
       .insert(s.accounts)
-      .values({ guildId: i.guildId, userId: i.userId, name: i.userName })
+      .values({
+        guildId: i.guildId,
+        userId: i.userId,
+        name: i.userName,
+        avatar: i.userAvatar ?? null,
+      })
       .onConflictDoUpdate({
         target: [s.accounts.guildId, s.accounts.userId],
-        set: { name: i.userName },
+        // Keep the name current. The avatar is only overwritten when this
+        // interaction actually carried one, so an older row never loses a
+        // picture because a later call site had no member object.
+        set: {
+          name: i.userName,
+          ...(i.userAvatar ? { avatar: i.userAvatar } : {}),
+        },
       });
     const [a] = await tx
       .select()
@@ -282,10 +303,28 @@ export async function economyTransaction(
     if (a.balance + amount > 9000000000000)
       throw new Error("Balance limit exceeded");
     if (i.type === "transfer") {
-      await tx
-        .insert(s.accounts)
-        .values({ guildId: i.guildId, userId: i.toUserId!, name: i.toUserId! })
-        .onConflictDoNothing();
+      // A recipient with no account yet used to be stored under their raw ID,
+      // which the leaderboard then rendered as a "name". Store the display name
+      // and avatar the caller already has, and repair an ID-shaped old row.
+      const recipientUpdate = {
+        ...(i.toUserName ? { name: i.toUserName } : {}),
+        ...(i.toUserAvatar ? { avatar: i.toUserAvatar } : {}),
+      };
+      const recipientInsert = tx.insert(s.accounts).values({
+        guildId: i.guildId,
+        userId: i.toUserId!,
+        name: i.toUserName ?? i.toUserId!,
+        avatar: i.toUserAvatar ?? null,
+      });
+      // A caller that knows nothing about the recipient must not overwrite what
+      // is already stored, and an empty `set` is not a valid update — so that
+      // case leaves the existing row exactly as it was.
+      await (Object.keys(recipientUpdate).length
+        ? recipientInsert.onConflictDoUpdate({
+            target: [s.accounts.guildId, s.accounts.userId],
+            set: recipientUpdate,
+          })
+        : recipientInsert.onConflictDoNothing());
       const [b] = await tx
         .select()
         .from(s.accounts)

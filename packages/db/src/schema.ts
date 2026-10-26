@@ -84,6 +84,12 @@ export const accounts = pgTable(
       .references(() => guilds.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull(),
     name: text("name").notNull(),
+    /*
+      Avatar hash captured the last time the bot saw this member earn, spend or
+      receive something. Current-ish identity from data the bot already has in
+      hand — never fetched per row by the dashboard.
+    */
+    avatar: text("avatar"),
     balance: bigint("balance", { mode: "number" }).notNull().default(0),
     lastDaily: timestamp("last_daily", { withTimezone: true }),
     lastActivity: timestamp("last_activity", { withTimezone: true }),

@@ -58,7 +58,11 @@ function interaction(commandName: string) {
     guild: {
       id: guildId,
       members: {
-        fetch: vi.fn(async () => ({ id: memberId, displayName: "Member" })),
+        fetch: vi.fn(async () => ({
+          id: memberId,
+          displayName: "Member",
+          user: { id: memberId, avatar: AVATAR_HASH },
+        })),
       },
     },
     user: { id: memberId, displayName: "Member" },
@@ -82,6 +86,7 @@ function interaction(commandName: string) {
   };
   return i;
 }
+const AVATAR_HASH = "a_0123456789abcdef0123456789abcdef";
 const music = {
   action: vi.fn(),
   limits: vi.fn(async () => ({ maxQueue: 100, idleDisconnectSeconds: 60 })),
@@ -187,6 +192,9 @@ describe("interaction reply wiring (no Discord login)", () => {
       guildId,
       userId: memberId,
       userName: "Member",
+      // The avatar hash is captured with the interaction so the dashboard can
+      // show the member's picture without a per-row Discord request.
+      userAvatar: AVATAR_HASH,
       type: "daily",
       key: `interaction-${i.id}`,
     });

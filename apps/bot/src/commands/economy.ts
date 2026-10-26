@@ -60,6 +60,7 @@ export async function economyCommand(context: CommandContext) {
         guildId: guild.id,
         userId: member.id,
         userName: member.displayName,
+        userAvatar: member.user.avatar,
         type: "daily",
         key,
       });
@@ -76,9 +77,12 @@ export async function economyCommand(context: CommandContext) {
         guildId: guild.id,
         userId: member.id,
         userName: member.displayName,
+        userAvatar: member.user.avatar,
         type: "transfer",
         key,
         toUserId: recipient.id,
+        toUserName: recipient.displayName,
+        toUserAvatar: recipient.user.avatar,
         amount: i.options.getInteger("amount", true),
         note: `A thank-you from ${member.displayName}`,
       });
@@ -120,6 +124,7 @@ export async function economyCommand(context: CommandContext) {
         guildId: guild.id,
         userId: member.id,
         userName: member.displayName,
+        userAvatar: member.user.avatar,
         type: "purchase",
         key,
         itemId,

@@ -196,6 +196,39 @@ describe("atomic PostgreSQL economy transactions", () => {
       economyTransaction(input({ type: "transfer", amount: 1, toUserId: u1 }))
     ).rejects.toThrow("another");
   });
+  it("captures the actor avatar at the interaction and keeps it current, not historical", async () => {
+    const first = "a_0123456789abcdef0123456789abcdef";
+    const second = "0123456789abcdef0123456789abcdef";
+    await economyTransaction(input({ userAvatar: first }));
+    expect((await account()).avatar).toBe(first);
+    // A later interaction that carries a newer hash refreshes the stored
+    // identity (a transfer is used because daily and activity are rate limited).
+    await economyTransaction(
+      input({ type: "transfer", toUserId: u2, amount: 25, userAvatar: second })
+    );
+    expect((await account()).avatar).toBe(second);
+    // An interaction with no hash (a caller without a member object) must not
+    // erase what is already known.
+    await economyTransaction(
+      input({ type: "transfer", toUserId: u2, amount: 25 })
+    );
+    expect((await account()).avatar).toBe(second);
+  });
+  it("stores a transfer recipient's display name and avatar instead of their id", async () => {
+    await economyTransaction(input());
+    await economyTransaction(
+      input({
+        type: "transfer",
+        toUserId: u2,
+        amount: 50,
+        toUserName: "Recipient name",
+        toUserAvatar: "0123456789abcdef0123456789abcdef",
+      })
+    );
+    const recipient = await account(g1, u2);
+    expect(recipient.name).toBe("Recipient name");
+    expect(recipient.avatar).toBe("0123456789abcdef0123456789abcdef");
+  });
   it("enforces the daily window even with a new idempotency key", async () => {
     await economyTransaction(input());
     await expect(economyTransaction(input())).rejects.toThrow("24 hours");
