@@ -82,6 +82,7 @@ describe("read-only music doctor", () => {
       status: "loaded",
       tracks: 1,
       source: "soundcloud",
+      provider: "soundcloud",
       kind: "search",
     });
     expect(request).toHaveBeenCalledTimes(2);
@@ -177,11 +178,153 @@ describe("read-only music doctor", () => {
     ).toThrow();
     expect(request).not.toHaveBeenCalled();
   });
+  it("reports every supported provider with its adapter status", async () => {
+    const request = vi.fn<typeof fetch>(async () =>
+      response({ ...metadata, sourceManagers: ["soundcloud", "youtube"] })
+    );
+    const report = await runMusicDoctor(
+      createMusicDoctorClient(config, request),
+      {
+        settings,
+      }
+    );
+    expect(report.providers).toEqual([
+      {
+        id: "soundcloud",
+        prefix: "scsearch",
+        manager: "soundcloud",
+        available: true,
+        configured: true,
+      },
+      {
+        id: "youtube",
+        prefix: "ytsearch",
+        manager: "youtube",
+        available: true,
+        configured: false,
+      },
+      {
+        id: "youtube-music",
+        prefix: "ytmsearch",
+        manager: "youtube",
+        available: true,
+        configured: false,
+      },
+      {
+        id: "bandcamp",
+        prefix: "bcsearch",
+        manager: "bandcamp",
+        available: false,
+        configured: false,
+      },
+    ]);
+    expect(report.ok).toBe(true);
+    expect(report.warnings.join(" ")).toContain("bandcamp (bandcamp)");
+  });
+  it.each([
+    ["ytsearch", "youtube"],
+    ["ytmsearch", "youtube"],
+    ["bcsearch", "bandcamp"],
+    ["scsearch", "soundcloud"],
+  ])(
+    "accepts the configured prefix %s and checks the %s manager",
+    async (prefix, manager) => {
+      const report = await runMusicDoctor(
+        createMusicDoctorClient(
+          config,
+          vi.fn<typeof fetch>(async () =>
+            response({ ...metadata, sourceManagers: [manager] })
+          )
+        ),
+        { settings: { ...settings, searchPrefix: prefix } }
+      );
+      expect(report.ok).toBe(true);
+      expect(report.configuredSearch).toBe(prefix);
+      expect(report.providers.find((p) => p.configured)?.manager).toBe(manager);
+    }
+  );
+  it("names the supported prefixes when the configured one is unknown", async () => {
+    const report = await runMusicDoctor(
+      createMusicDoctorClient(
+        config,
+        vi.fn<typeof fetch>(async () => response(metadata))
+      ),
+      { settings: { ...settings, searchPrefix: "phsearch" } }
+    );
+    expect(report.ok).toBe(false);
+    expect(report.warnings.join(" ")).toContain(
+      "scsearch, ytsearch, ytmsearch, bcsearch"
+    );
+    // Invalid configuration is reported, never "fixed" by switching providers.
+    expect(report.warnings.join(" ")).toContain(
+      "nothing is switched automatically"
+    );
+  });
+  it("says so when Lavalink answers but registers no search adapter at all", async () => {
+    const report = await runMusicDoctor(
+      createMusicDoctorClient(
+        config,
+        vi.fn<typeof fetch>(async () =>
+          response({ ...metadata, sourceManagers: [] })
+        )
+      ),
+      { settings }
+    );
+    expect(report.ok).toBe(false);
+    expect(report.warnings.join(" ")).toContain(
+      "No search adapter is registered"
+    );
+    expect(report.warnings.join(" ")).toContain("backend is reachable");
+  });
+  it("keeps a successful lookup distinct from playback", async () => {
+    const request = vi.fn<typeof fetch>(async (url) =>
+      new URL(String(url)).pathname === "/v4/info"
+        ? response({
+            ...metadata,
+            sourceManagers: [...metadata.sourceManagers, "youtube"],
+          })
+        : response({
+            loadType: "track",
+            data: { ...track, info: { ...track.info, sourceName: "youtube" } },
+          })
+    );
+    const report = await runMusicDoctor(
+      createMusicDoctorClient(config, request),
+      {
+        settings,
+        query: "Public track",
+        source: "youtube",
+      }
+    );
+    // The lookup used the chosen provider's prefix.
+    expect(
+      new URL(String(request.mock.calls[1][0])).searchParams.get("identifier")
+    ).toBe("ytsearch:Public track");
+    expect(report.lookup?.provider).toBe("youtube");
+    expect(report.scope).toContain("does not prove playback");
+  });
   it("parses strictly and rejects duplicate or invalid query arguments", () => {
     expect(parseMusicDoctorArgs(["--query", "Public track"])).toEqual({
       help: false,
       query: "Public track",
+      source: undefined,
     });
+    expect(
+      parseMusicDoctorArgs(["--query", "Public track", "--source", "bandcamp"])
+    ).toEqual({ help: false, query: "Public track", source: "bandcamp" });
+    for (const args of [
+      ["--query", "Public track", "--source", "twitch"],
+      [
+        "--query",
+        "Public track",
+        "--source",
+        "bandcamp",
+        "--source",
+        "youtube",
+      ],
+      ["--source", "bandcamp"],
+    ])
+      expect(() => parseMusicDoctorArgs(args)).toThrow();
     expect(parseMusicDoctorArgs(["--help"])).toEqual({ help: true });
     for (const args of [
       ["--query", "a"],

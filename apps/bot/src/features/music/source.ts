@@ -1,5 +1,12 @@
 import { assertFeedUrl, isPublicAddress } from "@orbit/core";
 import { diagnosticText, errorDiagnostic } from "@orbit/core/diagnostics";
+import {
+  DEFAULT_MUSIC_SEARCH_PREFIX,
+  providerUnavailableMessage,
+  resolveSearchProvider,
+  type MusicSearchProvider,
+  type MusicSearchProviderId,
+} from "@orbit/core/music-sources";
 import { lookup } from "node:dns/promises";
 import {
   LoadType,
@@ -8,6 +15,9 @@ import {
   type NodeInfo,
   type Track,
 } from "shoukaku";
+
+/** Hard cap on search candidates, matching `/search`'s menu size. */
+export const MAX_SEARCH_CANDIDATES = 5;
 
 export type MusicSourceSettings = {
   searchPrefix: string;
@@ -26,7 +36,8 @@ export type MusicLookup = (
 ) => Promise<{ address: string; family: number }[]>;
 export function musicSourceSettings(): MusicSourceSettings {
   return {
-    searchPrefix: process.env.MUSIC_SEARCH_PREFIX ?? "scsearch",
+    searchPrefix:
+      process.env.MUSIC_SEARCH_PREFIX ?? DEFAULT_MUSIC_SEARCH_PREFIX,
     allowedHosts: (
       process.env.MUSIC_ALLOWED_HOSTS ??
       "soundcloud.com,bandcamp.com,youtube.com,youtu.be,ocremix.org"
@@ -36,12 +47,6 @@ export function musicSourceSettings(): MusicSourceSettings {
       .filter(Boolean),
   };
 }
-const SEARCH_SOURCES: Record<string, string> = {
-  scsearch: "soundcloud",
-  bcsearch: "bandcamp",
-  ytsearch: "youtube",
-  ytmsearch: "youtube",
-};
 const SOURCE_HOSTS: Record<string, string[]> = {
   soundcloud: ["soundcloud.com"],
   bandcamp: ["bandcamp.com"],
@@ -58,6 +63,23 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 const providerLabel = (source: string | null) =>
   PROVIDER_LABELS[source ?? ""] ?? "Configured source";
+
+/**
+ * Why a source manager is missing, in terms of the switch that actually exists in
+ * this deployment's Lavalink config. Used for direct URLs, where the provider was
+ * derived from the hostname instead of chosen.
+ */
+function urlSourceUnavailable(source: string) {
+  const extra =
+    source === "soundcloud"
+      ? "Enable plugins.soundy.enabled in the Soundy-enabled backend (keep the built-in sources.soundcloud disabled)."
+      : source === "youtube"
+        ? "Enable plugins.youtube.enabled; leave the built-in youtube loader disabled."
+        : source === "ocremix"
+          ? "Enable plugins.dunctebot.sources.ocremix."
+          : `Enable lavalink.server.sources.${source}.`;
+  return `${providerLabel(source)} is not enabled on this Lavalink node. ${extra} Restart Lavalink, then run npm run music:doctor. See docs/MUSIC.md. A connected backend does not guarantee an enabled source.`;
+}
 export function musicNodeDescription(info?: MusicNodeInfo | null) {
   if (!info) return "Backend version unavailable";
   const soundy = info.plugins?.find(
@@ -208,15 +230,26 @@ export function musicSourceFailure(
 }
 
 /** Policy checks shared by the live player and the read-only music doctor. */
+/**
+ * Policy checks shared by the live player, the read-only music doctor and the
+ * dashboard. Returns the identifier to send to Lavalink plus the provider it
+ * belongs to.
+ *
+ * `provider` is an explicit user choice. For text it selects the search prefix;
+ * for a URL it may only confirm the host's own provider (see below).
+ */
 export async function prepareMusicQuery(
   query: string,
   settings = musicSourceSettings(),
-  resolveHost: MusicLookup = lookup
-) {
+  resolveHost: MusicLookup = lookup,
+  provider?: MusicSearchProviderId | string | null
+): Promise<{
+  identifier: string;
+  source: string;
+  kind: "url" | "search";
+  provider: MusicSearchProvider | null;
+}> {
   let value = query.trim();
-  // Pasted identifiers for the configured search provider must not get prefixed twice.
-  if (value.startsWith(`${settings.searchPrefix}:`))
-    value = value.slice(settings.searchPrefix.length + 1).trim();
   if (value.length < 2 || value.length > 200)
     throw new Error(
       "Enter 2–200 characters of search text or an approved source URL."
@@ -242,21 +275,38 @@ export async function prepareMusicQuery(
       throw new Error(
         "This audio source is not enabled. Ask your administrator which sources are supported."
       );
+    // A link is routed by its hostname, never rewritten into a search. An explicit
+    // provider that belongs to a different source manager is a contradiction, so
+    // it is refused instead of silently ignored.
+    const chosen = provider
+      ? resolveSearchProvider(provider, settings.searchPrefix)
+      : null;
+    if (chosen && "error" in chosen) throw new Error(chosen.error);
+    if (chosen && chosen.provider.manager !== source)
+      throw new Error(
+        `That link belongs to ${providerLabel(source)}, but the selected source is ${chosen.provider.label}. Remove the source option, or paste a ${chosen.provider.label} link. Direct links always follow their hostname.`
+      );
     const addresses = await resolveHost(url.hostname, { all: true });
     if (
       !addresses.length ||
       addresses.some((ip) => !isPublicAddress(ip.address))
     )
       throw new Error("Private audio-source addresses are not allowed.");
-    return { identifier: url.toString(), source, kind: "url" as const };
+    return { identifier: url.toString(), source, kind: "url", provider: null };
   }
-  if (!Object.hasOwn(SEARCH_SOURCES, settings.searchPrefix))
+  const chosen = resolveSearchProvider(provider, settings.searchPrefix);
+  if ("error" in chosen) throw new Error(chosen.error);
+  const selected = chosen.provider;
+  // A pasted identifier for the selected provider must not be prefixed twice.
+  if (value.toLowerCase().startsWith(`${selected.prefix}:`))
+    value = value.slice(selected.prefix.length + 1).trim();
+  if (value.length < 2 || value.length > 200)
     throw new Error(
-      "Configure a supported MUSIC_SEARCH_PREFIX: scsearch, bcsearch, ytsearch or ytmsearch."
+      "Enter 2–200 characters of search text or an approved source URL."
     );
   if (/^[a-z]+search:/i.test(value))
     throw new Error(
-      "Use plain search text for the configured provider or an approved source URL, not another provider’s search identifier."
+      `Use plain search text with the selected source (${selected.label}), or an approved source URL — not another provider’s search identifier.`
     );
   // A bare YouTube id is not a URL: it cannot be host-checked, so it must not be
   // silently sent to the search adapter (where it becomes a meaningless query).
@@ -265,11 +315,20 @@ export async function prepareMusicQuery(
       "That looks like a bare YouTube identifier. Paste the full link (https://www.youtube.com/watch?v=… , https://youtu.be/… or https://www.youtube.com/playlist?list=…) so Orbit can check the host and the public address first."
     );
   return {
-    identifier: `${settings.searchPrefix}:${value}`,
-    source: SEARCH_SOURCES[settings.searchPrefix],
-    kind: "search" as const,
+    identifier: `${selected.prefix}:${value}`,
+    source: selected.manager,
+    kind: "search",
+    provider: selected,
   };
 }
+
+/**
+ * Resolve one query into tracks.
+ *
+ * `limit` only applies to text search: `/play` takes the first result (quick
+ * play), `/search` takes its bounded candidate list. A direct URL or playlist is
+ * always an explicit request, so it is never truncated here.
+ */
 export async function resolveMusicQuery(
   rest: MusicResolver,
   query: string,
@@ -277,12 +336,22 @@ export async function resolveMusicQuery(
     info?: MusicNodeInfo | null;
     settings?: MusicSourceSettings;
     resolveHost?: MusicLookup;
+    /** Explicit provider choice; omit to use `MUSIC_SEARCH_PREFIX`. */
+    provider?: MusicSearchProviderId | string | null;
+    /** Search candidates to return (1 for quick play). */
+    limit?: number;
   } = {}
-): Promise<{ tracks: Track[]; source: string | null; kind: "url" | "search" }> {
+): Promise<{
+  tracks: Track[];
+  source: string | null;
+  kind: "url" | "search";
+  provider: MusicSearchProvider | null;
+}> {
   const prepared = await prepareMusicQuery(
     query,
     options.settings,
-    options.resolveHost
+    options.resolveHost,
+    options.provider
   );
   const managers = options.info?.sourceManagers;
   if (
@@ -291,7 +360,9 @@ export async function resolveMusicQuery(
     !managers.some((name) => name.toLowerCase() === prepared.source)
   )
     throw new Error(
-      `${providerLabel(prepared.source)} is not enabled on this Lavalink node. ${prepared.source === "soundcloud" ? "Enable plugins.soundy.enabled in the Soundy-enabled backend (keep the built-in sources.soundcloud disabled)." : prepared.source === "youtube" ? "Enable plugins.youtube.enabled; leave the built-in youtube loader disabled." : prepared.source === "ocremix" ? "Enable plugins.dunctebot.sources.ocremix." : `Enable lavalink.server.sources.${prepared.source}.`} Restart Lavalink, then run npm run music:doctor. See docs/MUSIC.md. A connected backend does not guarantee an enabled source.`
+      prepared.provider
+        ? providerUnavailableMessage(prepared.provider)
+        : urlSourceUnavailable(prepared.source)
     );
   let result: LavalinkResponse | undefined;
   try {
@@ -315,13 +386,17 @@ export async function resolveMusicQuery(
         info: options.info,
       })
     );
+  const searchLimit = Math.min(
+    Math.max(1, Math.floor(options.limit ?? 1)),
+    MAX_SEARCH_CANDIDATES
+  );
   const tracks =
     result.loadType === LoadType.TRACK
       ? [result.data]
       : result.loadType === LoadType.PLAYLIST
         ? result.data.tracks
         : result.loadType === LoadType.SEARCH
-          ? result.data.slice(0, 1)
+          ? result.data.slice(0, searchLimit)
           : [];
   if (!tracks.length)
     throw new Error(
@@ -352,5 +427,10 @@ export async function resolveMusicQuery(
     throw new Error(
       "The backend returned a source outside the approved music-source policy. No audio was started."
     );
-  return { tracks, source: prepared.source, kind: prepared.kind };
+  return {
+    tracks,
+    source: prepared.source,
+    kind: prepared.kind,
+    provider: prepared.provider,
+  };
 }

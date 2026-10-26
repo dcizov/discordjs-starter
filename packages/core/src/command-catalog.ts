@@ -122,10 +122,10 @@ function runtimeNotes(path: string, module: CommandModule) {
       path === "queue"
         ? "Reads the queue snapshot; it does not start audio. Queue history can be read even when the music module is paused."
         : path === "search"
-          ? "Searches the same approved sources as /play and lists up to five tracks to choose from. Each menu belongs to the member who ran it, works once, and expires after two minutes; the chosen tracks are re-checked and queue admission applies, so nothing is queued twice."
+          ? "Searches the same approved sources as /play and lists up to five tracks to choose from. The optional source option picks SoundCloud, YouTube, YouTube Music or Bandcamp; leaving it out uses this server's configured search source, and a provider the backend has not enabled is reported instead of being substituted. Each menu belongs to the member who ran it, works once, and expires after two minutes; the chosen tracks are re-checked and queue admission applies, so nothing is queued twice."
           : path === "seek"
             ? "Requires an active player with a known duration. Live or unknown-length sources cannot seek. The position is clamped to the track, and playback resumes from the server-reported position."
-            : "Requires the music module, a configured Lavalink backend, an approved source, and a voice channel. Same-room, DJ-role, Connect, and Speak checks apply at execution."
+            : "Requires the music module, a configured Lavalink backend, an approved source, and a voice channel. Same-room, DJ-role, Connect, and Speak checks apply at execution. For /play, source is optional: it selects the text-search provider (SoundCloud, YouTube, YouTube Music or Bandcamp) and never reroutes a pasted URL, which always follows its hostname."
     );
   if (module === "deals")
     notes.push(

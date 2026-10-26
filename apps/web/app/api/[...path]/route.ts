@@ -1,6 +1,7 @@
 import { previewNewsRouting } from "@orbit/db/src/news-preview";
 import { getOwnEconomyHistory } from "@orbit/db";
 import { assertMusicQueueAdmission } from "@orbit/core/music-policy";
+import { musicSearchProvider } from "@orbit/core/music-sources";
 import {
   communityActionSchema,
   CommunityConflict,
@@ -565,12 +566,25 @@ async function handle(req: Request, context: Context) {
             "seek",
           ]),
           query: z.string().min(2).max(200).optional(),
+          // Approved provider id only; the bot maps it to a search prefix and
+          // re-validates it. Arbitrary Lavalink prefixes/ids are never accepted.
+          source: z.string().max(32).optional(),
           volume: z.number().int().min(0).max(100).optional(),
           position: z.number().int().min(1).max(86400).optional(),
           repeat: z.enum(["off", "track", "queue"]).optional(),
           trackId: z.string().max(100).optional(),
         })
         .parse(await body(req));
+      if (input.source && !musicSearchProvider(input.source))
+        throw new HttpError(
+          400,
+          "Unknown search provider. Choose SoundCloud, YouTube, YouTube Music or Bandcamp, or leave it to the server default."
+        );
+      if (input.source && input.action !== "play")
+        throw new HttpError(
+          400,
+          "A search provider only applies to the play action."
+        );
       const g = (await getDashboardData(guildId)).guild;
       if (!g.config.modules.music)
         throw new HttpError(400, "The music module is disabled");
@@ -629,10 +643,17 @@ async function handle(req: Request, context: Context) {
               g.config.music.maxQueue,
               g.config.music.maxPerMember ?? 0
             );
+            const provider = input.source
+              ? musicSearchProvider(input.source)
+              : undefined;
             const t = {
               id: randomUUID(),
               title: input.query,
-              author: "Demo request · no audio playback",
+              // The preview has no backend lookup, so it says so instead of
+              // implying that a provider searched for anything.
+              author: provider
+                ? `Demo request · ${provider.label} not searched · no audio playback`
+                : "Demo request · no audio playback",
               duration: 180000,
               uri: "",
               requestedBy: actor.name,

@@ -28,6 +28,7 @@ import { usePlaybackNow } from "./features/music/playback-clock";
 import { playbackProgress } from "@orbit/core/music-progress";
 import { safeImageUrl } from "@orbit/core/feed-content";
 import { safePublicLink } from "@orbit/core/public-url";
+import { MUSIC_SEARCH_PROVIDERS } from "@orbit/core/music-sources";
 import { CoverArt } from "./artwork";
 import { Button } from "./ui/button";
 import {
@@ -58,6 +59,9 @@ const SOURCE_NAMES: Record<string, string> = {
 export function MusicPage() {
   const { data, api, refresh, saveConfig } = useWorkspace();
   const [query, setQuery] = useState("");
+  // "" means "whatever this server configured" — the dashboard never guesses a
+  // provider, and it never applies `source` to a pasted URL (those route by host).
+  const [source, setSource] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   // Survives the same tick, where `busy` state has not been applied yet.
   const inflight = useRef(false);
@@ -422,7 +426,7 @@ export function MusicPage() {
               className="space-y-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                action("play", { query });
+                action("play", { query, source: source || undefined });
               }}
             >
               <Input
@@ -431,8 +435,25 @@ export function MusicPage() {
                 maxLength={200}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                aria-label="Track title or source URL"
                 required
               />
+              <Field
+                label="Search with"
+                hint="Direct links are always routed by their hostname; this choice only applies to a text search."
+              >
+                <Select
+                  value={source}
+                  onChange={(e) => setSource(e.target.value)}
+                >
+                  <option value="">Server default</option>
+                  {MUSIC_SEARCH_PROVIDERS.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {provider.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <Button
                 className="w-full"
                 disabled={!!busy || !data.guild.config.modules.music}
@@ -472,9 +493,12 @@ export function MusicPage() {
               </div>
             </div>
             <p className="mt-5 border-t pt-4 text-[10px] leading-relaxed text-muted-foreground">
-              Approved adapters: SoundCloud, Bandcamp, YouTube, OC ReMix. Play
-              only what you are authorized to play. Adult adapters, arbitrary
-              files and Spotify mirroring are disabled, and catalogues are not
+              Approved adapters: SoundCloud, Bandcamp, YouTube, YouTube Music,
+              OC ReMix. “Server default” uses whichever search source this
+              deployment configured; a provider that the Lavalink node has not
+              enabled is reported instead of being substituted. Play only what
+              you are authorized to play. Adult adapters, arbitrary files and
+              Spotify mirroring are disabled, and catalogues are not
               automatically SFW-rated.
             </p>
           </Card>

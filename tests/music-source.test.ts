@@ -230,6 +230,172 @@ describe("music source resolution", () => {
       expect(resolve).toHaveBeenCalledWith("scsearch:Public track");
     }
   });
+  it("returns as many search candidates as asked for, up to five", async () => {
+    const hits = Array.from({ length: 7 }, (_, n) => track(`Hit ${n}`));
+    const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({
+      loadType: LoadType.SEARCH,
+      data: hits,
+    }));
+    const five = await resolveMusicQuery({ resolve }, "Public track", {
+      info,
+      settings,
+      limit: 5,
+    });
+    expect(five.tracks).toHaveLength(5);
+    // A default lookup (quick play) still takes one.
+    const one = await resolveMusicQuery({ resolve }, "Public track", {
+      info,
+      settings,
+    });
+    expect(one.tracks).toHaveLength(1);
+    // Over-large or fractional limits are clamped, never forwarded unbounded.
+    const clamped = await resolveMusicQuery({ resolve }, "Public track", {
+      info,
+      settings,
+      limit: 500,
+    });
+    expect(clamped.tracks).toHaveLength(5);
+    expect(resolve).toHaveBeenCalledTimes(3);
+  });
+  it("never truncates a direct URL or playlist to the search limit", async () => {
+    const first = track(),
+      second = track("Second");
+    const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({
+      loadType: LoadType.PLAYLIST,
+      data: {
+        encoded: "",
+        info: { name: "Playlist", selectedTrack: 0 },
+        pluginInfo: {},
+        tracks: [first, second],
+      },
+    }));
+    const loaded = await resolveMusicQuery(
+      { resolve },
+      "https://soundcloud.com/artist/sets/public",
+      { info, settings, resolveHost: publicDns, limit: 1 }
+    );
+    expect(loaded.tracks).toEqual([first, second]);
+    expect(loaded.kind).toBe("url");
+    expect(resolve).toHaveBeenCalledWith(
+      "https://soundcloud.com/artist/sets/public"
+    );
+  });
+  it("maps an explicit provider choice to its approved prefix and manager", async () => {
+    const youtubeTrack: Track = {
+      ...track(),
+      info: {
+        ...track().info,
+        title: "Track",
+        sourceName: "youtube",
+        uri: "https://www.youtube.com/watch?v=example",
+      },
+    };
+    const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({
+      loadType: LoadType.SEARCH,
+      data: [youtubeTrack],
+    }));
+    const youtube = await prepareMusicQuery(
+      "Track",
+      settings,
+      publicDns,
+      "youtube"
+    );
+    expect(youtube).toMatchObject({
+      identifier: "ytsearch:Track",
+      source: "youtube",
+      kind: "search",
+    });
+    expect(youtube.provider?.id).toBe("youtube");
+    const music = await prepareMusicQuery(
+      "Track",
+      settings,
+      publicDns,
+      "youtube-music"
+    );
+    // Distinct provider/catalogue, same Lavalink source manager.
+    expect(music).toMatchObject({
+      identifier: "ytmsearch:Track",
+      source: "youtube",
+    });
+    expect(music.provider?.id).toBe("youtube-music");
+    expect(
+      await prepareMusicQuery("Track", settings, publicDns, "bandcamp")
+    ).toMatchObject({ identifier: "bcsearch:Track", source: "bandcamp" });
+    // A prefix is accepted as the configured default, never as raw backend input
+    // from a user-facing option (`scsearch:raw` is rejected below).
+    expect(
+      await prepareMusicQuery("Track", {
+        ...settings,
+        searchPrefix: "ytsearch",
+      })
+    ).toMatchObject({ identifier: "ytsearch:Track" });
+    const selected = await resolveMusicQuery({ resolve }, "Track", {
+      info: { ...info, sourceManagers: [...info.sourceManagers, "youtube"] },
+      settings,
+      provider: "youtube",
+      limit: 5,
+    });
+    expect(selected.provider?.label).toBe("YouTube");
+    expect(resolve).toHaveBeenCalledWith("ytsearch:Track");
+  });
+  it("refuses unknown providers and raw backend identifiers", async () => {
+    for (const bad of ["scsearch:raw", "http://example.com", "twitch", " "])
+      await expect(
+        prepareMusicQuery("Track", settings, publicDns, bad)
+      ).rejects.toThrow(/Unknown search provider|approved source URL/);
+  });
+  it("defines a provider plus URL contradiction instead of ignoring it", async () => {
+    // The host decides: a YouTube link with a Bandcamp selection is refused, and
+    // the same link with 'youtube' is accepted as a URL (no search prefix).
+    await expect(
+      prepareMusicQuery(
+        "https://www.youtube.com/watch?v=example",
+        {
+          ...settings,
+          allowedHosts: [...settings.allowedHosts, "youtube.com"],
+        },
+        publicDns,
+        "bandcamp"
+      )
+    ).rejects.toThrow(
+      /belongs to YouTube, but the selected source is Bandcamp/
+    );
+    expect(
+      await prepareMusicQuery(
+        "https://www.youtube.com/watch?v=example",
+        {
+          ...settings,
+          allowedHosts: [...settings.allowedHosts, "youtube.com"],
+        },
+        publicDns,
+        "youtube"
+      )
+    ).toMatchObject({ kind: "url", source: "youtube", provider: null });
+  });
+  it("names the provider whose adapter is missing for an explicit choice", async () => {
+    const resolve = vi.fn();
+    await expect(
+      resolveMusicQuery({ resolve }, "Track", {
+        info,
+        settings,
+        provider: "youtube",
+      })
+    ).rejects.toThrow(
+      /YouTube search is not enabled on this Lavalink node\. Enable plugins\.youtube\.enabled/
+    );
+    expect(resolve).not.toHaveBeenCalled();
+  });
+  it("explains how to enable a direct URL's missing adapter", async () => {
+    const resolve = vi.fn();
+    await expect(
+      resolveMusicQuery({ resolve }, "https://soundcloud.com/artist/track", {
+        info: { ...info, sourceManagers: ["bandcamp"] },
+        settings,
+        resolveHost: publicDns,
+      })
+    ).rejects.toThrow(/plugins\.soundy\.enabled/);
+    expect(resolve).not.toHaveBeenCalled();
+  });
   it("retains cause, severity, backend version, and long errors instead of reporting generic lookup failure", async () => {
     const cause = `java.io.IOException: HTTP 403 ${"nested detail ".repeat(150)}`;
     const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({

@@ -4,6 +4,22 @@ import {
   SlashCommandBuilder,
   type SlashCommandStringOption,
 } from "discord.js";
+import { MUSIC_SEARCH_PROVIDERS } from "./music-sources";
+/**
+ * The explicit provider choice for text search. The same table drives the
+ * doctor and the dashboard, so a listed provider is one the backend can be
+ * expected to serve — and omitting the option keeps the configured default.
+ */
+const searchProviderOption = (o: SlashCommandStringOption) => {
+  o.setName("source")
+    .setDescription(
+      "Where to search (default: this server’s configured source)"
+    )
+    .setRequired(false);
+  for (const provider of MUSIC_SEARCH_PROVIDERS)
+    o.addChoices({ name: provider.label, value: provider.id });
+  return o;
+};
 const command = (name: string, description: string) =>
   new SlashCommandBuilder()
     .setName(name)
@@ -153,28 +169,26 @@ export const commandDefinitions = [
         )
     ),
   command("inventory", "View your purchased community rewards"),
-  command(
-    "play",
-    "Add a track from a configured, supported audio source"
-  ).addStringOption((o) =>
-    o
-      .setName("query")
-      .setDescription("Track search or supported source URL")
-      .setMinLength(2)
-      .setMaxLength(200)
-      .setRequired(true)
-  ),
-  command(
-    "search",
-    "Search a source and choose exactly which track to queue"
-  ).addStringOption((o) =>
-    o
-      .setName("query")
-      .setDescription("What should Orbit look for?")
-      .setMinLength(1)
-      .setMaxLength(200)
-      .setRequired(true)
-  ),
+  command("play", "Add a track from a configured, supported audio source")
+    .addStringOption((o) =>
+      o
+        .setName("query")
+        .setDescription("Track search or supported source URL")
+        .setMinLength(2)
+        .setMaxLength(200)
+        .setRequired(true)
+    )
+    .addStringOption(searchProviderOption),
+  command("search", "Search a source and choose exactly which track to queue")
+    .addStringOption((o) =>
+      o
+        .setName("query")
+        .setDescription("What should Orbit look for?")
+        .setMinLength(1)
+        .setMaxLength(200)
+        .setRequired(true)
+    )
+    .addStringOption(searchProviderOption),
   command("queue", "See what’s playing and what’s up next"),
   command("pause", "Pause the listening room"),
   command("resume", "Resume the listening room"),

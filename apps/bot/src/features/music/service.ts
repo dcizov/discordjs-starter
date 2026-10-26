@@ -27,6 +27,10 @@ import {
   EMPTY_CHANNEL_GRACE_SECONDS,
   IdleDisconnector,
 } from "./idle";
+import type {
+  MusicSearchProvider,
+  MusicSearchProviderId,
+} from "@orbit/core/music-sources";
 import { MusicNodeMetadata } from "./node";
 import { joinMusicVoice, MusicDiscordConnector } from "./voice";
 import { MusicPluginRest, sponsorBlockCategories } from "./plugins";
@@ -37,6 +41,12 @@ import {
   resolveMusicQuery,
 } from "./source";
 const MAX_SEARCH_RESULTS = 5;
+
+/** Result of one text search: candidates plus the provider that answered. */
+export type MusicSearchResult = {
+  tracks: ResolvedTrack[];
+  provider: MusicSearchProvider | null;
+};
 const INVALID_SEARCH =
   "That search result is no longer available. Run /search again.";
 
@@ -418,7 +428,18 @@ export class MusicService {
     };
   }
 
-  private async resolve(query: string) {
+  /**
+   * One backend lookup. `limit` applies to text search only (1 for quick play,
+   * the candidate count for `/search`); an explicit URL or playlist is never
+   * truncated here.
+   */
+  private async resolve(
+    query: string,
+    options: {
+      provider?: MusicSearchProviderId | string | null;
+      limit?: number;
+    } = {}
+  ) {
     const node = this.backend?.getIdealNode();
     if (!node)
       throw new Error(
@@ -431,8 +452,7 @@ export class MusicService {
       );
       return null;
     });
-    const result = await resolveMusicQuery(node.rest, query, { info });
-    return result.tracks;
+    return resolveMusicQuery(node.rest, query, { info, ...options });
   }
 
   /**
@@ -510,6 +530,8 @@ export class MusicService {
     input: {
       action: string;
       query?: string;
+      /** Explicit text-search provider; unknown values are rejected in resolve. */
+      source?: MusicSearchProviderId | string | null;
       volume?: number;
       repeat?: "off" | "track" | "queue";
       trackId?: string;
@@ -522,9 +544,19 @@ export class MusicService {
       if (input.action === "play") {
         if (!input.query)
           throw new Error("Enter a track title or supported source URL.");
-        const tracks = (await this.resolve(input.query)).map(
-          (t: LavalinkTrack) => this.describe(t)
-        );
+        // Quick play takes the first result; `source` only selects the text
+        // search provider, never the routing of a pasted link.
+        const resolved = await this.resolve(input.query, {
+          provider: input.source,
+          limit: 1,
+        });
+        // Quick play is exactly one track for a text search (the resolver was
+        // asked for one); a pasted playlist keeps all of its tracks.
+        const chosen =
+          resolved.kind === "search"
+            ? resolved.tracks.slice(0, 1)
+            : resolved.tracks;
+        const tracks = chosen.map((t: LavalinkTrack) => this.describe(t));
         return this.enqueue(member, authority, tracks);
       }
       const player = this.backend!.players.get(guild.id);
@@ -628,12 +660,20 @@ export class MusicService {
    * Text search for explicit selection. Returns candidates without queueing
    * anything and without joining voice: the caller shows them, and the chosen
    * track goes through {@link playSelection}, which re-runs every check.
+   *
+   * The number of candidates is bounded by `MAX_SEARCH_RESULTS` and handed to the
+   * resolver, so the backend answers with exactly that many instead of being
+   * truncated afterwards. `provider` selects one of the approved text-search
+   * providers; omitting it uses `MUSIC_SEARCH_PREFIX`.
    */
   async search(
     member: GuildMember,
     query: string,
-    limit = 5
-  ): Promise<ResolvedTrack[]> {
+    options: {
+      limit?: number;
+      provider?: MusicSearchProviderId | string | null;
+    } = {}
+  ): Promise<MusicSearchResult> {
     const stored = await getGuild(member.guild.id);
     if (!stored?.config.modules.music)
       throw new Error("Music is paused in this server.");
@@ -649,9 +689,20 @@ export class MusicService {
       throw new Error("Enter a search term from 1 to 200 characters.");
     if (/[\u0000-\u001f\u007f]/.test(query))
       throw new Error("Remove control characters from the search term.");
-    const tracks = await this.resolve(query);
-    const bounded = Math.min(Math.max(1, limit), MAX_SEARCH_RESULTS);
-    return tracks.slice(0, bounded).map((t: LavalinkTrack) => this.describe(t));
+    const bounded = Math.min(
+      Math.max(1, Math.floor(options.limit ?? MAX_SEARCH_RESULTS)),
+      MAX_SEARCH_RESULTS
+    );
+    const resolved = await this.resolve(query, {
+      provider: options.provider,
+      limit: bounded,
+    });
+    return {
+      tracks: resolved.tracks
+        .slice(0, bounded)
+        .map((t: LavalinkTrack) => this.describe(t)),
+      provider: resolved.provider,
+    };
   }
 
   /**

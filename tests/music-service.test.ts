@@ -291,20 +291,27 @@ it("serializes same-member admissions and rejects oversized playlists before que
   music.backend!.players.set(guildId, {} as Player);
   const resolve = vi
     .spyOn(
-      music as unknown as { resolve: (q: string) => Promise<unknown[]> },
+      music as unknown as { resolve: (q: string) => Promise<unknown> },
       "resolve"
     )
-    .mockResolvedValue([
-      {
-        encoded: "fixture",
-        info: {
-          title: "Clean recording",
-          author: "Artist",
-          length: 1000,
-          uri: "",
+    // The resolver returns tracks *plus* the provider that answered; the mocked
+    // shape has to match, otherwise the service's own mapping is never exercised.
+    .mockResolvedValue({
+      tracks: [
+        {
+          encoded: "fixture",
+          info: {
+            title: "Clean recording",
+            author: "Artist",
+            length: 1000,
+            uri: "",
+          },
         },
-      },
-    ]);
+      ],
+      provider: null,
+      source: "soundcloud",
+      kind: "search",
+    });
   const results = await Promise.allSettled([
     music.action(member, { action: "play", query: "first" }),
     music.action(member, { action: "play", query: "second" }),
@@ -312,12 +319,15 @@ it("serializes same-member admissions and rejects oversized playlists before que
   expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
   expect(state.tracks).toHaveLength(1);
   expect(state.tracks[0].requestedById).toBe(memberId);
-  resolve.mockResolvedValue(
-    Array.from({ length: 3 }, () => ({
+  resolve.mockResolvedValue({
+    tracks: Array.from({ length: 3 }, () => ({
       encoded: "fixture",
       info: { title: "Playlist", author: "Artist", length: 1000, uri: "" },
-    }))
-  );
+    })),
+    provider: null,
+    source: "soundcloud",
+    kind: "search",
+  });
   const before = structuredClone(state.tracks);
   await expect(
     music.action(member, { action: "play", query: "playlist" })

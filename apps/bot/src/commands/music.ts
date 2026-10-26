@@ -30,10 +30,14 @@ export async function musicCommand(
      */
     case "search": {
       const query = i.options.getString("query", true);
-      const tracks = await music.search(member, query, 5);
+      const requested = i.options.getString("source") ?? null;
+      const { tracks, provider } = await music.search(member, query, {
+        limit: 5,
+        provider: requested,
+      });
       if (!tracks.length) {
         await reply(
-          "No tracks matched that search on the configured sources. Try a different title or paste a supported link."
+          `No tracks matched that search on ${provider ? provider.label : "the configured source"}. Try a different title, choose another source, or paste a supported link.`
         );
         break;
       }
@@ -43,7 +47,9 @@ export async function musicCommand(
         tracks,
       });
       await i.editReply({
-        content: `**Results for “${query.slice(0, 100)}”** — choose what to queue. This menu works once and expires in 2 minutes.`,
+        // The provider is named so a listener can tell which catalogue answered
+        // (YouTube and YouTube Music share one adapter but not one catalogue).
+        content: `**Results for “${query.slice(0, 100)}” on ${provider ? provider.label : "the configured source"}** — choose what to queue. This menu works once and expires in 2 minutes.`,
         allowedMentions: { parse: [] },
         components: searchResultComponents(session),
       });
@@ -61,6 +67,7 @@ export async function musicCommand(
       await music.action(member, {
         action: i.commandName,
         query: i.options.getString("query") ?? undefined,
+        source: i.options.getString("source") ?? undefined,
         volume: i.options.getInteger("level") ?? undefined,
         position: i.options.getInteger("position") ?? undefined,
         repeat: (i.options.getString("mode") ?? undefined) as

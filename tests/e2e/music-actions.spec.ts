@@ -146,3 +146,44 @@ test("volume moves locally and commits one debounced request per interaction", a
     page.getByRole("slider", { name: "Playback volume" })
   ).toHaveValue(String(bodies[0].volume));
 });
+
+test("the play form sends the chosen provider and the server default otherwise", async ({
+  page,
+}) => {
+  const bodies: any[] = [];
+  await page.route(`**${base}/music`, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true, demo: true } });
+  });
+  await openMusic(page);
+  const provider = page.getByLabel("Search with");
+  // The default is the server's configured source, not a guess by the dashboard.
+  await expect(provider).toHaveValue("");
+  await expect(provider.locator("option")).toHaveText([
+    "Server default",
+    "SoundCloud",
+    "YouTube",
+    "YouTube Music",
+    "Bandcamp",
+  ]);
+  await provider.selectOption("bandcamp");
+  await page
+    .getByRole("button", { name: "Add to the queue", exact: true })
+    .click();
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0]).toMatchObject({
+    action: "play",
+    query: "A clean test recording",
+    source: "bandcamp",
+  });
+  // Back to the default: the option is omitted rather than sent as "".
+  await page.getByPlaceholder("Set the mood…").fill("A second request");
+  await provider.selectOption("");
+  await page
+    .getByRole("button", { name: "Add to the queue", exact: true })
+    .click();
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1]).toMatchObject({ action: "play" });
+  expect(bodies[1]).not.toHaveProperty("source");
+});

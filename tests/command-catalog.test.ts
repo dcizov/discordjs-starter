@@ -54,7 +54,7 @@ describe("implemented command catalog", () => {
   it("documents the explicit music search and seek contracts", () => {
     expect(find("search")).toMatchObject({
       module: "music",
-      usage: "/search <query>",
+      usage: "/search <query> [source]",
     });
     expect(find("search").arguments[0]).toMatchObject({
       type: "String",
@@ -62,6 +62,25 @@ describe("implemented command catalog", () => {
       minLength: 1,
       maxLength: 200,
     });
+    // The provider option and its four approved choices come from the shared
+    // provider table, so /help, the doctor and the dashboard cannot drift apart.
+    expect(find("search").arguments[1]).toMatchObject({
+      name: "source",
+      type: "String",
+      required: false,
+      choices: [
+        { name: "SoundCloud", value: "soundcloud" },
+        { name: "YouTube", value: "youtube" },
+        { name: "YouTube Music", value: "youtube-music" },
+        { name: "Bandcamp", value: "bandcamp" },
+      ],
+    });
+    expect(find("play").usage).toBe("/play <query> [source]");
+    expect(find("play").arguments[1]).toMatchObject({
+      name: "source",
+      required: false,
+    });
+    expect(find("play").notes.join(" ")).toMatch(/never reroutes a pasted URL/);
     expect(find("seek")).toMatchObject({
       module: "music",
       usage: "/seek <position>",
