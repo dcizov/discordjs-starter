@@ -999,16 +999,16 @@ reuses cookies/tokens/accounts or auto-enables OAuth/`poToken`.
 
 ### Verification (this pass)
 
-| Check                    | Result                                                                  |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `npx vitest run`         | **882 tests in 70 files pass** (baseline was 836 in 69)                 |
-| `npm run typecheck`      | pass                                                                    |
-| `npm run lint`           | pass                                                                    |
-| `npm run format:check`   | pass                                                                    |
-| `npm run build:web`      | pass, also with `ORBIT_SOURCE_REF` set (verified in the emitted pages)  |
-| `npm run build:services` | pass                                                                    |
-| Intermediate commits     | `4a6041b` re-checked in a clean worktree: typecheck + music suites pass |
-| CI (this pass)           | see the CI row added in the final handover message                      |
+| Check                    | Result                                                                                                                                                                                                  |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`         | **882 tests in 70 files pass** (baseline was 836 in 69)                                                                                                                                                 |
+| `npm run typecheck`      | pass                                                                                                                                                                                                    |
+| `npm run lint`           | pass                                                                                                                                                                                                    |
+| `npm run format:check`   | pass                                                                                                                                                                                                    |
+| `npm run build:web`      | pass, also with `ORBIT_SOURCE_REF` set (verified in the emitted pages)                                                                                                                                  |
+| `npm run build:services` | pass                                                                                                                                                                                                    |
+| Intermediate commits     | `4a6041b` re-checked in a clean worktree: typecheck + music suites pass                                                                                                                                 |
+| CI on `af45894`          | runs **40307973994** / **40307965434**: `verify` and `containers` both **success**; browser suite **59 passed / 4 skipped** (baseline 58/4 plus the new provider-select case); screenshot step 4 passed |
 
 **Not verified here**: live Discord login, a real Lavalink node, audible playback,
 provider behaviour against SoundCloud/YouTube/Bandcamp, and any dashboard pixels
