@@ -86,20 +86,20 @@ export function Overview() {
       {config.dashboard.showHero && (
         <div className="relative mb-5 flex h-[167px] overflow-hidden rounded-xl border border-[#e6def2] bg-gradient-to-r from-[#f0eafa] via-[#f0ebf8] to-[#f3edf9] dark:border-violet-500/20 dark:from-violet-500/10 dark:to-violet-500/5">
           <div className="relative z-10 flex flex-col justify-center py-5 pl-6 md:pl-7">
-            <span className="mb-2.5 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[1.5px] text-[#866d9f]">
+            <span className="mb-2.5 flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-[1.5px] text-violet-700 dark:text-violet-300">
               <span className="size-1 rounded-full bg-[#b39ad2]" />A good place
               to grow
             </span>
-            <h2 className="text-[24px] font-semibold leading-[1.2] tracking-[-.8px] text-[#574475] dark:text-violet-200">
+            <h2 className="text-[24px] font-semibold leading-[1.2] tracking-[-.8px] text-foreground dark:text-violet-200">
               A little less managing.
               <br />A lot more community.
             </h2>
-            <p className="mt-2 text-[11px] text-[#82718f] dark:text-violet-300/70">
+            <p className="mt-2 text-[11px] text-muted-foreground dark:text-violet-300/70">
               Your people. Your passions. All in good orbit.
             </p>
             <button
               onClick={() => navigate("settings")}
-              className="mt-3.5 flex w-fit items-center gap-2 text-[10px] font-semibold text-[#8661b7] hover:gap-3 dark:text-violet-300"
+              className="mt-3.5 flex w-fit items-center gap-2 text-[10px] font-semibold text-violet-700 dark:text-violet-300 hover:gap-3 dark:text-violet-300"
             >
               Make yourself at home <ArrowRight size={12} />
             </button>
@@ -142,14 +142,14 @@ export function Overview() {
           {
             icon: Command,
             bg: "bg-[#fdf3e7] dark:bg-amber-500/10",
-            color: "text-[#d8ad6c]",
+            color: "text-amber-700 dark:text-amber-300",
             change: "+18.6%",
             spark: [14, 17, 12, 25, 21, 26, 29, 33],
           },
           {
             icon: HeartPulse,
             bg: "bg-[#edf6f0] dark:bg-emerald-500/10",
-            color: "text-[#7bb69a]",
+            color: "text-emerald-700 dark:text-emerald-300",
             change: "All systems go",
             spark: [],
           },
@@ -177,7 +177,7 @@ export function Overview() {
                 <p className="mt-2 flex items-center gap-1 text-[9px] text-muted-foreground">
                   {i < 3 ? (
                     <>
-                      <span className="flex items-center text-[#6aa68a]">
+                      <span className="flex items-center text-emerald-700 dark:text-emerald-300">
                         {data.demo ? (
                           <>
                             <TrendingUp size={10} className="mr-0.5" />
@@ -339,8 +339,8 @@ function UpcomingDeliveries() {
                 className={cn(
                   "flex size-7 shrink-0 items-center justify-center rounded-lg",
                   r.kind === "deal"
-                    ? "bg-[#eaf6f2] text-[#7eaa9d]"
-                    : "bg-[#edf2fa] text-[#7f9bc3]"
+                    ? "bg-[#eaf6f2] text-emerald-700 dark:text-emerald-300"
+                    : "bg-[#edf2fa] text-sky-700 dark:text-sky-300"
                 )}
               >
                 {r.kind === "deal" ? <Tags size={13} /> : <Rss size={13} />}

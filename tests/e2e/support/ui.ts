@@ -37,9 +37,16 @@ export async function chooseComboboxOption(
   const trigger = page.getByRole("combobox", { name });
   await expect(trigger).toBeVisible();
   await trigger.click();
-  const search = page.getByPlaceholder("Search…");
+  // The search field is cmdk's own input; its placeholder differs per page
+  // ("Search…", "Search channels…"), so it is found structurally.
+  const search = page.locator("[cmdk-input]");
+  await expect(search).toBeVisible();
   await search.fill(option);
-  await page.getByRole("option", { name: option }).first().click();
+  await page
+    .locator("[cmdk-list]")
+    .getByRole("option", { name: option })
+    .first()
+    .click();
   await expect(page.getByRole("listbox")).toBeHidden();
 }
 

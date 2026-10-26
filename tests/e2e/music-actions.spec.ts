@@ -165,14 +165,17 @@ test("the play form sends the chosen provider and the server default otherwise",
   await openMusic(page);
   const provider = page.getByLabel("Search with");
   // The default is the server's configured source, not a guess by the dashboard.
-  await expect(provider).toHaveValue("");
-  await expect(provider.locator("option")).toHaveText([
+  await expect(provider).toContainText("Server default");
+  // Same option list as the shared provider table, read from the open listbox.
+  await provider.click();
+  await expect(page.getByRole("option")).toHaveText([
     "Server default",
     "SoundCloud",
     "YouTube",
     "YouTube Music",
     "Bandcamp",
   ]);
+  await page.keyboard.press("Escape");
   await chooseOption(page, "Search with", "Bandcamp");
   await page
     .getByRole("button", { name: "Add to the queue", exact: true })

@@ -114,11 +114,19 @@ test("the migrated selects are operable by keyboard and announce their value", a
   await page.keyboard.press("Enter");
   const listbox = page.getByRole("listbox");
   await expect(listbox).toBeVisible();
-  // Type-ahead moves the highlight, Enter chooses: no mouse required.
+  // Type-ahead moves the highlight, Enter chooses: no mouse required. The
+  // pressed letter decides *which* option is highlighted (Radix matches the
+  // first item starting with it), so the assertion reads the highlighted item
+  // and then checks that the same option is what the trigger now announces.
   await page.keyboard.press("m");
+  const activeId = await trigger.getAttribute("aria-activedescendant");
+  expect(activeId, "type-ahead must highlight an option").toBeTruthy();
+  const highlighted = page.locator(`[id="${activeId}"]`);
+  await expect(highlighted).toBeVisible();
+  const label = (await highlighted.innerText()).trim();
   await page.keyboard.press("Enter");
   await expect(listbox).toBeHidden();
-  await expect(trigger).toContainText("Music");
+  await expect(trigger).toContainText(label);
   await expect(trigger).toBeFocused();
 });
 
@@ -136,8 +144,11 @@ test("the channel combobox filters its options and restores focus", async ({
   const search = page.getByPlaceholder("Search channels…");
   await expect(search).toBeFocused();
   await search.fill("staff");
-  const options = page.getByRole("option");
+  // cmdk keeps non-matching items mounted but hidden, so the count that matters
+  // is the visible one.
+  const options = page.locator("[cmdk-list] [cmdk-item]:visible");
   await expect(options).toHaveCount(1);
+  await expect(options.first()).toContainText("staff");
   await options.first().click();
   await expect(trigger).toContainText("staff");
   await expect(trigger).toBeFocused();

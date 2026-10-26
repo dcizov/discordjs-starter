@@ -142,7 +142,7 @@ export function MusicPage() {
         className={cn(
           "mb-5 flex items-center gap-2 rounded-lg border px-4 py-3 text-[11px]",
           data.demo
-            ? "border-violet-200/50 bg-violet-50/70 text-violet-500 dark:border-violet-500/20 dark:bg-violet-500/10"
+            ? "border-violet-200/50 bg-violet-50/70 text-violet-700 dark:text-violet-300 dark:border-violet-500/20 dark:bg-violet-500/10"
             : "bg-card text-muted-foreground"
         )}
       >
@@ -466,7 +466,10 @@ export function MusicPage() {
           </Card>
           <Card className="p-5">
             <h2 className="flex items-center gap-2 text-xs font-semibold">
-              <Headphones size={15} className="text-[#c895a7]" />
+              <Headphones
+                size={15}
+                className="text-rose-700 dark:text-rose-300"
+              />
               Room for everyone’s favorites.
             </h2>
             <div className="mt-5 space-y-4 text-[11px]">

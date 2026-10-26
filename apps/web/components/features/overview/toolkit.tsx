@@ -29,7 +29,7 @@ const modules: {
     name: "Self roles",
     description: "Let your members find their people.",
     icon: UsersRound,
-    color: "text-violet-500",
+    color: "text-violet-600 dark:text-violet-300",
     bg: "bg-violet-50 dark:bg-violet-500/10",
   },
   {
@@ -37,7 +37,7 @@ const modules: {
     name: "Moderation",
     description: "A safer space, a lighter workload.",
     icon: ShieldCheck,
-    color: "text-[#d49a66]",
+    color: "text-orange-700 dark:text-orange-300",
     bg: "bg-[#fcf1e8] dark:bg-orange-500/10",
   },
   {
@@ -45,7 +45,7 @@ const modules: {
     name: "Economy",
     description: "Give a little. Grow a lot.",
     icon: Wallet,
-    color: "text-[#c5a150]",
+    color: "text-amber-700 dark:text-amber-300",
     bg: "bg-[#fbf5df] dark:bg-amber-500/10",
   },
   {
@@ -53,7 +53,7 @@ const modules: {
     name: "Music",
     description: "The soundtrack to your community.",
     icon: Music2,
-    color: "text-[#d88b9c]",
+    color: "text-rose-700 dark:text-rose-300",
     bg: "bg-[#fceef2] dark:bg-pink-500/10",
   },
   {
@@ -61,7 +61,7 @@ const modules: {
     name: "Game deals",
     description: "Good games. Even better prices.",
     icon: Tags,
-    color: "text-[#6bada0]",
+    color: "text-teal-700 dark:text-teal-300",
     bg: "bg-[#eaf6f2] dark:bg-emerald-500/10",
   },
   {
@@ -69,7 +69,7 @@ const modules: {
     name: "News & feeds",
     description: "Keep your corner in the know.",
     icon: Rss,
-    color: "text-[#7c9dce]",
+    color: "text-sky-700 dark:text-sky-300",
     bg: "bg-[#edf3fc] dark:bg-blue-500/10",
   },
   {
@@ -77,7 +77,7 @@ const modules: {
     name: "Native polls",
     description: "A clear question, native Discord votes.",
     icon: UsersRound,
-    color: "text-violet-500",
+    color: "text-violet-600 dark:text-violet-300",
     bg: "bg-violet-50 dark:bg-violet-500/10",
   },
   {
@@ -179,7 +179,10 @@ export function OverviewToolkit() {
           <Card
             className={cn(
               "group px-4 py-4 transition hover:border-violet-200 dark:hover:border-violet-500/30",
-              !config.modules[m.key] && "opacity-70"
+              // A paused module keeps full contrast: dimming the whole card made
+              // its own status text fail 4.5:1 and said "disabled" with opacity
+              // alone.
+              !config.modules[m.key] && "border-dashed bg-muted/30"
             )}
             key={m.key}
             data-module-card={m.key}
@@ -195,7 +198,7 @@ export function OverviewToolkit() {
                 <m.icon size={17} strokeWidth={1.6} />
               </span>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] text-muted-foreground">
+                <span className="text-[10px] font-medium text-muted-foreground">
                   {config.modules[m.key] ? "Enabled" : "Paused"}
                 </span>
                 <Switch

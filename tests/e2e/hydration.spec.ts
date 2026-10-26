@@ -87,7 +87,7 @@ test("the dashboard overview hydrates icons, identity images and the activity ch
     ).toBeNull();
   }
   const chart = page.locator("[data-activity-reference]");
-  await expect(chart.locator("svg")).toHaveCount(1);
+  await expect(chart.locator("svg[data-activity-labels]")).toHaveCount(1);
   await expect(chart.locator("[data-activity-day]")).toHaveCount(7);
   // No icon or SVG in the app carries an extension's marker.
   expect(await page.locator("svg[data-darkreader-inline-fill]").count()).toBe(

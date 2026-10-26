@@ -238,7 +238,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex min-h-64 flex-col items-center justify-center px-6 py-12 text-center">
-      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-violet-100 bg-violet-50 text-violet-500 dark:border-violet-500/20 dark:bg-violet-500/10">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-violet-100 bg-violet-50 text-violet-700 dark:text-violet-300 dark:border-violet-500/20 dark:bg-violet-500/10">
         <Icon size={22} />
       </div>
       <h3 className="text-sm font-semibold">{title}</h3>

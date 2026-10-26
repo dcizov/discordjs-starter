@@ -132,7 +132,7 @@ export function EconomyPage() {
             value: number(total),
             detail: "Every little contribution adds up.",
             icon: Coins,
-            bg: "bg-[#fbf4e4] text-[#caa557]",
+            bg: "bg-[#fbf4e4] text-amber-700 dark:text-amber-300",
           },
           {
             label: "Community earners",
@@ -146,7 +146,7 @@ export function EconomyPage() {
             value: `${number(ec.dailyAmount)} ${ec.symbol}`,
             detail: "A reason to drop in and say hello.",
             icon: Gift,
-            bg: "bg-[#ecf5ef] text-[#83ad95]",
+            bg: "bg-[#ecf5ef] text-emerald-700 dark:text-emerald-300",
           },
         ].map((m) => (
           <Card className="p-5" key={m.label}>
@@ -245,7 +245,7 @@ export function EconomyPage() {
                     key: "balance",
                     label: "Balance",
                     render: (r) => (
-                      <span className="font-medium tabular-nums text-[#bc9c55]">
+                      <span className="font-medium tabular-nums text-amber-700 dark:text-amber-300">
                         {ec.symbol} {number(r.balance)}
                       </span>
                     ),
@@ -259,7 +259,7 @@ export function EconomyPage() {
               <Card className="relative overflow-hidden border-violet-200/50 bg-gradient-to-br from-[#f1eafa] via-card to-card p-6 dark:from-violet-500/10 dark:to-card">
                 <div className="absolute -right-9 -top-9 size-36 rounded-full border-[16px] border-violet-200/20" />
                 <div className="relative">
-                  <span className="flex items-center gap-2 text-[11px] font-medium text-[#9a7fc0]">
+                  <span className="flex items-center gap-2 text-[11px] font-medium text-violet-700 dark:text-violet-300">
                     <Sparkles size={14} />
                     Your little corner of the cosmos
                   </span>
@@ -267,7 +267,9 @@ export function EconomyPage() {
                     Your balance
                   </p>
                   <p className="mt-1 text-[34px] font-semibold tracking-[-1px]">
-                    <span className="mr-2 text-[#ba9a62]">{ec.symbol}</span>
+                    <span className="mr-2 text-amber-700 dark:text-amber-300">
+                      {ec.symbol}
+                    </span>
                     {number(me?.balance ?? 0)}
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -426,7 +428,7 @@ export function EconomyPage() {
                       </span>
                     </div>
                     <div className="mt-5 flex items-center justify-between border-t pt-4">
-                      <span className="text-sm font-semibold text-[#b89a5e]">
+                      <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
                         {ec.symbol} {number(item.data.price)}
                       </span>
                       <Button

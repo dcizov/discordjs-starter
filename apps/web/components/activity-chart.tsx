@@ -169,6 +169,10 @@ export function ActivityChart({ range }: { range: string }) {
                 r="3"
                 fill="#a48ad5"
                 tabIndex={0}
+                // A focusable point announces its own value; `role="img"` is
+                // what makes `aria-label` valid on an SVG shape (axe:
+                // aria-prohibited-attr otherwise).
+                role="img"
                 aria-label={`${buckets[index].label}: ${number(values[index])} ${metricName.toLowerCase()}`}
                 onFocus={() => setHover(index)}
                 onBlur={() => setHover(null)}

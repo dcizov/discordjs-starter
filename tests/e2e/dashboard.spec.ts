@@ -153,16 +153,16 @@ test("news sources can be tested, routed, and safely simulated", async ({
     .getByRole("button", { name: "Create news source", exact: true })
     .click();
   await expect(d).not.toBeVisible();
-  const card = page
-    .locator("div.rounded-xl")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "E2E · Community dispatch",
-        exact: true,
-      }),
-    })
-    .last();
-  await card.getByRole("button", { name: "Test source", exact: true }).click();
+  // Sources are rows now; the per-row actions live in the row menu.
+  const row = page.getByRole("row").filter({
+    hasText: "E2E · Community dispatch",
+  });
+  await row
+    .getByRole("button", { name: "Actions for E2E · Community dispatch" })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "Test source", exact: true })
+    .click();
   await expect(
     page.getByText("Your source is ready for a test flight")
   ).toBeVisible();

@@ -85,7 +85,9 @@ export function ConnectionStatus() {
                 <span
                   className={cn(
                     "flex items-center gap-1.5",
-                    h.status === "healthy" ? "text-[#77a68e]" : "text-amber-500"
+                    h.status === "healthy"
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : "text-amber-700 dark:text-amber-300"
                   )}
                 >
                   <span

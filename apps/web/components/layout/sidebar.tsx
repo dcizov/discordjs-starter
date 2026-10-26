@@ -142,7 +142,7 @@ export function Sidebar({
                       strokeWidth={1.7}
                       className={
                         section === n.id
-                          ? "text-violet-500"
+                          ? "text-violet-700 dark:text-violet-300"
                           : "text-muted-foreground/85"
                       }
                     />

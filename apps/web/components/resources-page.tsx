@@ -286,7 +286,7 @@ export function ResourcesPage({
                     ).length,
                     detail: "Looking out for your community",
                     icon: ShieldCheck,
-                    color: "text-[#d3a170] bg-[#fcf2e8]",
+                    color: "text-orange-700 dark:text-orange-300 bg-[#fcf2e8]",
                   },
                   {
                     label: "Moderation cases",
@@ -294,7 +294,7 @@ export function ResourcesPage({
                       .length,
                     detail: "A transparent record of every action",
                     icon: MessageSquare,
-                    color: "text-[#9d89cb] bg-violet-50",
+                    color: "text-violet-700 dark:text-violet-300 bg-violet-50",
                   },
                   {
                     label: "Members protected",
@@ -335,7 +335,7 @@ export function ResourcesPage({
                     ).length,
                     detail: "A quick setup goes a long way",
                     icon: FlaskConical,
-                    color: "text-[#d3a170] bg-[#fcf2e8]",
+                    color: "text-orange-700 dark:text-orange-300 bg-[#fcf2e8]",
                   },
                 ]
             ).map((stat) => (
@@ -393,7 +393,7 @@ export function ResourcesPage({
       {section === "deals" && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-5 py-4">
           <span className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-[#eaf6f2] text-[#7ba99c]">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-[#eaf6f2] text-teal-700 dark:text-teal-300">
               <Tags size={18} />
             </span>
             <span>
@@ -655,12 +655,12 @@ export function ResourcesPage({
                       className={cn(
                         "flex size-11 items-center justify-center rounded-xl",
                         r.data.adapter === "mojang"
-                          ? "bg-[#ecf3e8] text-[#89a47c]"
+                          ? "bg-[#ecf3e8] text-emerald-700 dark:text-emerald-300"
                           : r.data.adapter === "wowhead"
-                            ? "bg-[#fcf0df] text-[#cba666]"
+                            ? "bg-[#fcf0df] text-amber-700 dark:text-amber-300"
                             : r.data.adapter === "blizzard"
-                              ? "bg-[#eaf3fc] text-[#7ba6ca]"
-                              : "bg-[#eef0f7] text-[#8090ac]"
+                              ? "bg-[#eaf3fc] text-sky-700 dark:text-sky-300"
+                              : "bg-[#eef0f7] text-slate-700 dark:text-slate-300"
                       )}
                     >
                       <Icon size={23} strokeWidth={1.5} />
@@ -792,7 +792,7 @@ export function ResourcesPage({
                       sortValue: (r) => r.name,
                       render: (r) => (
                         <div className="flex items-center gap-3">
-                          <span className="flex size-8 items-center justify-center rounded-lg bg-[#fbf0e5] text-[#cba276]">
+                          <span className="flex size-8 items-center justify-center rounded-lg bg-[#fbf0e5] text-orange-700 dark:text-orange-300">
                             <ShieldCheck size={15} />
                           </span>
                           <div>
@@ -1296,7 +1296,7 @@ function PanelPreview({
         <div className="rounded-xl bg-[#313338] p-5 text-white">
           <div className="border-l-4 border-violet-400 bg-[#2b2d31] p-4">
             <h3 className="text-sm font-semibold">{r.name}</h3>
-            <p className="mt-2 text-xs leading-relaxed text-[#b5bac1]">
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               {r.data.description}
             </p>
           </div>

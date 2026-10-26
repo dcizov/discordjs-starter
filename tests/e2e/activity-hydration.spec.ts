@@ -43,12 +43,15 @@ for (const [zone, clientTime] of [
       expect(await chart.getAttribute("data-activity-timezone")).toBe(
         "Europe/Berlin"
       );
-      expect(
-        await chart.locator("svg").getAttribute("data-activity-labels")
-      ).toBe(serialized("data-activity-labels"));
-      expect(
-        await chart.locator("svg").getAttribute("data-activity-values")
-      ).toBe(serialized("data-activity-values"));
+      // The chart's own svg, not the metric select's chevron: the reference
+      // container now holds both, so the attribute is the stable selector.
+      const chartSvg = chart.locator("svg[data-activity-labels]");
+      expect(await chartSvg.getAttribute("data-activity-labels")).toBe(
+        serialized("data-activity-labels")
+      );
+      expect(await chartSvg.getAttribute("data-activity-values")).toBe(
+        serialized("data-activity-values")
+      );
       await expect(chart.locator("[data-activity-day]")).toHaveCount(7);
       await chart.locator("summary").click();
       await expect(chart.locator("tbody tr")).toHaveCount(7);

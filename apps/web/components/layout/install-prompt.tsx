@@ -8,7 +8,7 @@ export function InstallPrompt() {
   const { data, api } = useWorkspace();
   return (
     <div className="flex min-h-[70vh] flex-col items-center justify-center text-center">
-      <div className="mb-5 flex size-20 items-center justify-center rounded-3xl bg-violet-100 text-violet-500">
+      <div className="mb-5 flex size-20 items-center justify-center rounded-3xl bg-violet-100 text-violet-700 dark:text-violet-300">
         <Orbit size={42} />
       </div>
       <Badge tone="purple">A new orbit awaits</Badge>

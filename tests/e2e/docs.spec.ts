@@ -126,7 +126,7 @@ test("a guide marks the current page, offers previous/next and keeps code labell
   await expect(pages.getByRole("link", { name: /Previous/ })).toBeVisible();
   await expect(pages.getByRole("link", { name: /Next/ })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: /More in Building on Orbit/ })
+    page.getByRole("heading", { name: /More in Development/ })
   ).toBeVisible();
 });
 
