@@ -1387,3 +1387,17 @@ The real server-member list, the SponsorBlock guild UI, LavaSearch/lyrics,
 which names them but does not associate the visible text), and the
 mobile-overflow slug list. No PR was opened; everything stays on
 `arena/99c6cf65-discordjs-starter`.
+
+### Destructive confirmations became alert dialogs
+
+`ui/alert-dialog.tsx` was added with the other primitives but nothing used it, so
+both delete flows still went through a plain `Dialog` — which is dismissible by
+clicking the backdrop and puts initial focus on whichever control comes first.
+That is the wrong semantics for an irreversible action. `ConfirmDialog` (the
+single component behind "delete a shop item" and "delete a configuration") now
+renders an alert dialog: `role="alertdialog"`, initial focus on **keep**,
+backdrop clicks do nothing, and Escape is handled explicitly so it follows the
+same rule as every other dismissal route — ignored while the request is in
+flight, a normal close otherwise. The busy guard, the spinner, the disabled
+destructive button and the caller-owned error handling are unchanged, and no
+second dialog implementation was introduced.
