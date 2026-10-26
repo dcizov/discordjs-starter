@@ -5,6 +5,11 @@
 - [ ] Node 22.14+, PostgreSQL 17+, Redis 7+, and optional current Lavalink v4 are available **inside containers**, or installed for the non-Docker workflow. Docker hosts do not need Node/npm installed.
 - [ ] `DEMO_MODE=false` is explicit on all live services; demo mode is never used as authentication.
 - [ ] Discord application, OAuth callback, bot token, members/message-content intents, and command registration are configured.
+- [ ] `ORBIT_SOURCE_REF` (optional) is the commit id you deployed, so the docs
+      pages' "view the source" link points at the code that is actually running.
+      Pass it at build time (`docker build --build-arg ORBIT_SOURCE_REF=$(git rev
+      parse HEAD)`, or `ORBIT_SOURCE_REF=…` before `npm run build`); unset links
+      to `main`. It is a build-time value, never read from a request.
 - [ ] `APP_URL` is the actual HTTPS origin (no trailing slash), proxy forwards trusted headers, secure cookies are enabled, and `APP_SECRET` is at least 32 random characters.
 - [ ] Database/Redis/Lavalink credentials are strong and held in a secret manager or protected environment files. No `NEXT_PUBLIC_*` secret variables exist.
 - [ ] Database, Redis, and Lavalink are private. Worker and audio egress cannot reach metadata/private networks.

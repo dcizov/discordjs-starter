@@ -20,6 +20,10 @@ code:
   constraints and choices, the registration permission mask plus any runtime
   permission check, the module state for this server, and the documented setup
   limits. Subcommand paths work too (`/help command:deals search`).
+- Argument choices are serialized from the builder, so `/play` and `/search` show
+  the same approved `source` values (`soundcloud`, `youtube`, `youtube-music`,
+  `bandcamp`) that the runtime accepts — defined once in
+  `packages/core/src/music-sources.ts`.
 - Autocomplete offers only paths that exist in the catalog.
 - Documentation links point at the operator's own `/docs` pages when `APP_URL` is a
   public HTTPS origin, and at the public repository otherwise — a localhost link is

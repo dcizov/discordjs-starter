@@ -192,8 +192,28 @@ Skybot's OC ReMix adapter. All nine requested plugins, versions, exclusions,
 API responsibilities and licensing/integrity notes are documented in the
 [reviewed plugin profile](MUSIC-PLUGINS.md).
 
-- Choose **one** default `MUSIC_SEARCH_PREFIX`: `scsearch`, `bcsearch`,
-  `ytsearch` or `ytmsearch`. OC ReMix is URL-only. No automatic provider fallback.
+- `MUSIC_SEARCH_PREFIX` chooses the **default** text-search provider:
+  `scsearch` (SoundCloud), `ytsearch` (YouTube), `ytmsearch` (YouTube Music) or
+  `bcsearch` (Bandcamp). OC ReMix is URL-only. No automatic provider fallback.
+  Listeners do not have to accept that default: `/search` and `/play` take an
+  optional `source` option (`soundcloud`, `youtube`, `youtube-music`,
+  `bandcamp`) and the dashboard's play form has the same choice. Omitting it
+  means "this server's configured default".
+- **One provider table.** `packages/core/src/music-sources.ts` maps each
+  user-facing provider to its approved Lavalink prefix and to the source manager
+  that must be registered. The slash-command choices, `/help`, the dashboard
+  selector, the runtime resolver and the doctor all read that table, so an
+  option cannot be offered for something the runtime does not know. Raw Lavalink
+  prefixes/ids are never accepted from a user; unknown values are refused with
+  the list of real choices.
+- **YouTube and YouTube Music share one adapter** (`plugins.youtube`) but not one
+  catalogue; they stay two distinct choices. A provider whose manager is missing
+  from `/v4/info` is reported with the switch that enables it for this deployment
+  (`enableHint` above) instead of being quietly swapped for another provider.
+- **A `source` option never reroutes a link.** A pasted URL is routed by its
+  validated hostname. Passing `source` together with a link for a different
+  provider is refused with the reason; the matching provider (or omitting the
+  option) is accepted and the query stays a URL, never a search.
 - Update an **existing** `.env` host allowlist if you want YouTube/OC ReMix;
   changing `.env.example` does not overwrite your settings. The allowlist can
   restrict these supported providers, not add arbitrary/adult loaders.
@@ -224,6 +244,9 @@ npm run music:doctor
 npm run music:doctor -- --query "the same failing search text"
 npm run music:doctor -- --query "YOUR_PUBLIC_SUPPORTED_HTTPS_TRACK_URL"
 
+# Test one provider explicitly (soundcloud, youtube, youtube-music, bandcamp).
+npm run music:doctor -- --query "the same failing search text" --source youtube
+
 # Help works without credentials/services.
 npm run music:doctor -- --help
 ```
@@ -235,6 +258,14 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 ```
 
 For a compiled runtime container: `docker compose --profile live --profile music run --rm --no-deps bot node dist/music-doctor.js --query "the same failing search text"`. On the host use the published address (normally `localhost:2333`), not Compose's internal hostname. Keep the password in `.env`, never a command-line argument.
+
+The report lists **every supported provider** with its prefix, required source
+manager, whether that manager is registered, and whether it is the configured
+default. That table is the same one the runtime uses, so "the doctor is happy"
+and "`/search` offers this provider" cannot disagree. An unknown
+`MUSIC_SEARCH_PREFIX` is reported with the four valid values and is **not**
+switched for you; a reachable backend with no registered search adapter says so
+explicitly rather than looking healthy.
 
 Only `GET /v4/info` and, with a query, `GET /v4/loadtracks` are used. There is no gateway login, voice join, database/Redis access, queue mutation, playback, or fallback. The doctor shares the player's source/input policy. JSON goes to stdout and failures return exit status 1; use `npm run --silent music:doctor ...` for clean piping. Encoded tracks and signed source URLs are not printed. A successful lookup proves metadata loading, **not** stream decoding or voice.
 
@@ -389,7 +420,22 @@ five results with title, artist, source and duration. Each menu is:
   already queued or currently playing is not added again.
 
 Quick play is unchanged: `/play` resolves and queues the first match
-immediately.
+immediately, asking the backend for **one** result instead of fetching a list and
+discarding it. `/search` asks for the same bounded five it displays.
+
+The optional `source` option is available on both commands:
+
+| Choice          | Prefix      | Source manager to have registered | Enable it with                                            |
+| --------------- | ----------- | --------------------------------- | --------------------------------------------------------- |
+| `soundcloud`    | `scsearch`  | `soundcloud`                      | `plugins.soundy.enabled` (keep built-in SoundCloud off)   |
+| `youtube`       | `ytsearch`  | `youtube`                         | `plugins.youtube.enabled`                                 |
+| `youtube-music` | `ytmsearch` | `youtube`                         | `plugins.youtube.enabled` (same adapter, music catalogue) |
+| `bandcamp`      | `bcsearch`  | `bandcamp`                        | `lavalink.server.sources.bandcamp`                        |
+
+The provider that answered is named in the `/search` header (so a YouTube result
+and a YouTube Music result are never confused), and a missing adapter produces an
+actionable error naming that switch — playback is not attempted and no other
+provider is substituted.
 
 `/seek` takes seconds, requires a finite duration, clamps to one second before
 the end, and refuses live/unknown-length sources instead of pretending. It is
@@ -423,20 +469,32 @@ Orbit no longer leaves the channel the instant one track ends. That behaviour ma
 a normal queue finish, and every provider-side load failure, look like the bot
 dropping out of the call.
 
-| Situation                                                     | What Orbit does                                                                             |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Queue finished, nothing playing                               | Waits `music.idleDisconnectSeconds` (default **60**, `0` = leave at once), then disconnects |
-| A track failed to load or was skipped to the end of the queue | Same wait, same timer — one failed item is not treated as a reason to abandon the call      |
-| Nobody human is left in the voice channel                     | Waits **15 seconds**, then disconnects; a human returning cancels the pending leave         |
-| Someone queues something during the wait                      | The timer is cancelled and playback continues in the same session                           |
-| `/stop`, `/disconnect`, node loss, or a closed voice session  | Leaves immediately; any pending timer is cancelled                                          |
+| Situation                                                     | What Orbit does                                                                                                        |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Queue finished, nothing playing                               | Waits `music.idleDisconnectSeconds` (default **60**, `0` = leave at once), then disconnects                            |
+| A track failed to load or was skipped to the end of the queue | Same wait, same timer — one failed item is not treated as a reason to abandon the call                                 |
+| Nobody human is left in the voice channel                     | Waits **15 seconds**, then disconnects **even if audio is still playing**; a human returning cancels the pending leave |
+| Someone queues something during the wait                      | A queue-idle timer is cancelled and playback continues in the same session                                             |
+| Someone queues something in a still-empty channel             | The queue is kept, but the **empty-channel timer is not cancelled** — the bot still leaves after the grace period      |
+| Other bots are the only "listeners" left                      | Counted as empty: bots do not keep Orbit in a call                                                                     |
+| `/stop`, `/disconnect`, node loss, or a closed voice session  | Leaves immediately; any pending timer is cancelled                                                                     |
 
 Details that matter when reading logs:
 
 - One timer per guild, replaced rather than stacked, and every timer is `unref`ed so a
   pending leave never keeps the process alive.
-- The timer re-checks the live queue **inside the per-guild mutation lock** before
-  disconnecting, so a track queued while the timer was due keeps the player.
+- The timer's **reason** decides what is re-checked, always inside the per-guild
+  mutation lock: `queue-finished`/`track-failed` require no playback and no queued
+  tracks, while `alone` requires that no non-bot member is in Orbit's current
+  voice channel. Active playback therefore does not rescue an empty channel, and a
+  full queue does not rescue a finished one.
+- Leaving voice always resets the persisted snapshot for that guild, so an
+  `alone` departure **drops the queued tracks with it**. That is the existing
+  single-session policy, not a new queue-retention rule: nothing is replayed on
+  the next session. Leave a listener in the channel (or `/stop` first) if the
+  queue should be kept.
+- Removing Orbit from a guild cancels its timer, forgets its search menus and
+  leaves voice; shutdown clears every timer.
 - The wait is stored per guild (`music.idleDisconnectSeconds`, 0–1800) and editable on
   the Music page; the Discord-side behaviour is `/queue` for the current state.
 - Only the bot's own voice channel is watched. Orbit does not add the Presence intent,

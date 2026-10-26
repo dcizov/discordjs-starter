@@ -72,8 +72,19 @@ Never commit those values: they are credentials. Keep them in an ignored
 `application.yml` overlay or the container environment, restart Lavalink, and
 re-run `npm run music:doctor`. Orbit's audit summary names the failure category
 (`provider-login`, `no-streams`, `drm`, `rate-limit`, `auth`, `network`,
-`format`, `unknown`) so an operator can tell "provider wants a session" from
-"backend cannot reach the provider".
+`format`, `unknown`) so an operator can tell "the provider answered with an
+authentication/bot challenge" from "the backend cannot reach the provider".
+
+`provider-login` is a **classification of the evidence in the exception**, not a
+diagnosis of one universal cause: the message says the provider asked for a
+signed-in/verified session or rejected this backend's client (for example
+`requires login`, `Sign in to confirm you're not a bot`). It deliberately does
+not claim "this item is fully private", and it is kept distinct from a Discord
+voice-permission problem (Connect/Speak) and from backend connectivity, which are
+different failures with different diagnostics. Ordinary listeners get that
+concise explanation and nothing else — no tokens, cookies, signed URLs or stack
+traces; the full exception stays in the operator-only audit detail, and the
+doctor is the next step for whoever can read the backend logs.
 
 What was checked and ruled out for that report:
 
