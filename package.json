@@ -15,7 +15,6 @@
     "dev:bot": "tsx watch apps/bot/src/index.ts",
     "dev:worker": "tsx watch apps/worker/src/index.ts",
     "build": "npm run build:web && npm run build:services",
-    "prebuild": "node scripts/check-dependencies.mjs",
     "prebuild:web": "node scripts/check-dependencies.mjs",
     "build:web": "next build apps/web --webpack",
     "build:services": "tsup",

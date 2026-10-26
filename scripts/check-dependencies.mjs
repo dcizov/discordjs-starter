@@ -15,7 +15,7 @@
  * In both cases the only symptom is a deep build error
  * (`Module not found: Can't resolve 'marked'`, import trace
  * `lib/docs-content.ts → app/docs/layout.tsx`). This check runs in ~50 ms,
- * before `dev`/`build`/`build:web`/`start`, and prints the packages and the
+ * before `dev`/`build:web`/`start`, and prints the packages and the
  * remedy instead.
  *
  * What it is not: it installs nothing, never edits the lockfile, and is not a

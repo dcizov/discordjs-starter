@@ -108,9 +108,10 @@ Module not found: Can't resolve 'marked'
 Import trace: ./lib/docs-content.ts → ./app/docs/layout.tsx
 ```
 
-`scripts/check-dependencies.mjs` runs before `dev`, `build`, `build:web` and
-`start` (about 50 ms), names the missing packages and prints the remedy. It
-installs nothing and never edits the lockfile.
+`scripts/check-dependencies.mjs` runs before `dev`, `build:web` and `start`
+(about 50 ms), names the missing packages and prints the remedy. It installs
+nothing and never edits the lockfile, and it is not a package-manager
+replacement: `npm ci` remains the install command.
 
 #### The fix, in order
 
@@ -120,7 +121,7 @@ installs nothing and never edits the lockfile.
 npm ci
 ```
 
-**Docker Compose / Dev Container:** run the same command *inside* the running
+**Docker Compose / Dev Container:** run the same command _inside_ the running
 container:
 
 ```sh
@@ -132,7 +133,7 @@ This does repair the volume, and the reason is structural rather than
 incidental: Compose mounts `dev_node_modules` at **`/app/node_modules`**, which is
 exactly the directory `npm ci` installs into, and the bind-mounted checkout
 supplies the current `package-lock.json`. There is no separate hidden
-`node_modules` for the volume to mask; the volume *is* the install location.
+`node_modules` for the volume to mask; the volume _is_ the install location.
 (Rebuilding the image alone still does nothing to an existing volume — only the
 install command does.)
 
