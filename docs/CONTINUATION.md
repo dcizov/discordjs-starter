@@ -576,14 +576,15 @@ commits has not been observed.
 
 ## Pass 4 (2026-10-26): verified provisioning, shared UI primitives, honest visual status
 
-Start `9c1c98c` → end `7d33b70` (all on `arena/99c6cf65-discordjs-starter`,
+Start `9c1c98c` → end at this commit (all on `arena/99c6cf65-discordjs-starter`,
 pushed, no PR operations). Previous reports were treated as historical: the state
 was re-read (`git status`, `git log`, `git ls-remote`, `docs/`) before any edit.
 
 Commits: `5035f30` (dependency provisioning), `4c439ae` (shared tab bar, confirm
 dialog, checkbox, news caption, copy), `5502068` (domain boundary comments),
 `3c8c2ca` (screenshot evidence + table decision), `08cba2b` (e2e tab roles),
-`7d33b70` (screenshot output path).
+`7d33b70` (screenshot output path), `912fd62` (shared card header, heading sizes),
+`f72c4a9` (shared error block and table footer), then this documentation commit.
 
 ### Completion matrix (five-way, not aspirational)
 
@@ -736,6 +737,8 @@ Postgres/Redis deployment, and any review of the screenshot pixels.
 
 Unchanged from pass 3 (status inventory, facet counts, share action, bulk
 actions with defined page-vs-filtered semantics, oRPC), plus the items the matrix
-marks partially implemented: card/section header normalisation, the remaining long
-copy in `permission-setup.tsx` / `install-prompt.tsx` / `login`, and comment
-coverage for bootstrap, music lifecycle and dashboard shared infra.
+marks partially implemented: page-level toolbar/filter normalisation, `Badge` tone
+consistency across cards, the remaining long copy in `permission-setup.tsx`
+(deliberately kept: those lines are requirements, not prose) / `install-prompt.tsx`
+/ `login`, and comment coverage for bootstrap, music lifecycle and dashboard
+shared infra.
