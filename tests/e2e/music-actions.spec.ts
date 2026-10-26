@@ -168,7 +168,10 @@ test("the play form sends the chosen provider and the server default otherwise",
   await expect(provider).toContainText("Server default");
   // Same option list as the shared provider table, read from the open listbox.
   await provider.click();
-  await expect(page.getByRole("option")).toHaveText([
+  const labels = (
+    await page.locator('[role="option"]:visible').allInnerTexts()
+  ).map((text) => text.trim());
+  expect(labels).toEqual([
     "Server default",
     "SoundCloud",
     "YouTube",
@@ -176,6 +179,7 @@ test("the play form sends the chosen provider and the server default otherwise",
     "Bandcamp",
   ]);
   await page.keyboard.press("Escape");
+  await expect(page.locator('[role="listbox"]:visible')).toHaveCount(0);
   await chooseOption(page, "Search with", "Bandcamp");
   await page
     .getByRole("button", { name: "Add to the queue", exact: true })

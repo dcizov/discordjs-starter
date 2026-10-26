@@ -73,7 +73,7 @@ export function Input({
       aria-label={field?.label}
       aria-describedby={field?.hintId}
       className={cn(
-        "flex h-10 w-full rounded-lg border border-border bg-card px-3 text-xs transition placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-violet-400/40 disabled:opacity-60",
+        "flex h-10 w-full rounded-lg border border-border bg-card px-3 text-xs transition placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-400/40 disabled:opacity-60",
         className
       )}
       {...props}
@@ -180,7 +180,7 @@ export function Textarea({
       aria-label={field?.label}
       aria-describedby={field?.hintId}
       className={cn(
-        "min-h-24 w-full resize-y rounded-lg border border-border bg-card p-3 text-xs outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-violet-400/40",
+        "min-h-24 w-full resize-y rounded-lg border border-border bg-card p-3 text-xs outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-violet-400/40",
         className
       )}
       {...props}

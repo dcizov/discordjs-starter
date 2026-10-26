@@ -114,16 +114,15 @@ test("the migrated selects are operable by keyboard and announce their value", a
   await page.keyboard.press("Enter");
   const listbox = page.getByRole("listbox");
   await expect(listbox).toBeVisible();
-  // Type-ahead moves the highlight, Enter chooses: no mouse required. The
-  // pressed letter decides *which* option is highlighted (Radix matches the
-  // first item starting with it), so the assertion reads the highlighted item
-  // and then checks that the same option is what the trigger now announces.
-  await page.keyboard.press("m");
-  const activeId = await trigger.getAttribute("aria-activedescendant");
-  expect(activeId, "type-ahead must highlight an option").toBeTruthy();
-  const highlighted = page.locator(`[id="${activeId}"]`);
-  await expect(highlighted).toBeVisible();
-  const label = (await highlighted.innerText()).trim();
+  // Arrow keys move focus through the options and Enter chooses, so the whole
+  // flow works without a pointer. Radix keeps focus on the option element
+  // itself (rather than tracking an aria-activedescendant on the trigger), so
+  // the assertion reads the focused option.
+  await page.keyboard.press("ArrowDown");
+  const focused = page.locator('[role="option"]:focus');
+  await expect(focused).toBeVisible();
+  const label = (await focused.innerText()).trim();
+  expect(label.length).toBeGreaterThan(0);
   await page.keyboard.press("Enter");
   await expect(listbox).toBeHidden();
   await expect(trigger).toContainText(label);

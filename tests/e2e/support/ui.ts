@@ -11,6 +11,13 @@ import { expect, type Locator, type Page } from "@playwright/test";
  * `name` is the control's accessible name (its `Field` label or `aria-label`).
  * `option` is the visible option text.
  */
+/** Radix portals its popups to <body>, so popup lookups always start at the page. */
+function root(page: Page | Locator): Page {
+  return "page" in page && typeof page.page === "function"
+    ? page.page()
+    : (page as Page);
+}
+
 export async function chooseOption(
   page: Page | Locator,
   name: string,
@@ -20,7 +27,11 @@ export async function chooseOption(
   const trigger = page.getByLabel(name, { exact: options.exact ?? true });
   await expect(trigger).toBeVisible();
   await trigger.click();
-  const listbox = page.getByRole("listbox");
+  // Radix portals the listbox to <body>, so it is not a descendant of a dialog
+  // passed in as the scope. Only one select can be open, so the page-level
+  // lookup is unambiguous.
+  const view = root(page);
+  const listbox = view.getByRole("listbox");
   await expect(listbox).toBeVisible();
   await listbox
     .getByRole("option", { name: option, exact: options.exact ?? true })
@@ -39,15 +50,17 @@ export async function chooseComboboxOption(
   await trigger.click();
   // The search field is cmdk's own input; its placeholder differs per page
   // ("Search…", "Search channels…"), so it is found structurally.
-  const search = page.locator("[cmdk-input]");
+  const view = root(page);
+  // The popover is portalled too, so the field and list are found from the page.
+  const search = view.locator("[cmdk-input]");
   await expect(search).toBeVisible();
   await search.fill(option);
-  await page
+  await view
     .locator("[cmdk-list]")
     .getByRole("option", { name: option })
     .first()
     .click();
-  await expect(page.getByRole("listbox")).toBeHidden();
+  await expect(view.locator("[cmdk-list]")).toBeHidden();
 }
 
 /**

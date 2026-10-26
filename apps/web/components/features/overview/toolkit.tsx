@@ -217,7 +217,7 @@ export function OverviewToolkit() {
                 {m.name}
                 <ArrowUpRight
                   size={13}
-                  className="text-muted-foreground/60 transition group-hover:text-primary"
+                  className="text-muted-foreground transition group-hover:text-primary"
                 />
               </h3>
               <p className="mt-1.5 text-[11px] text-muted-foreground">
@@ -239,7 +239,7 @@ export function OverviewToolkit() {
               <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                 {setups[m.key].detail}
               </p>
-              <p className="mt-3 flex items-center gap-1.5 text-[9px] text-muted-foreground/85">
+              <p className="mt-3 flex items-center gap-1.5 text-[9px] text-muted-foreground">
                 <span
                   className={cn(
                     "size-1 rounded-full",

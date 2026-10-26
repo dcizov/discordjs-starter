@@ -78,7 +78,7 @@ export function DashboardHeader({
           </span>
           <ChevronRight
             size={12}
-            className="hidden text-muted-foreground/60 sm:block"
+            className="hidden text-muted-foreground sm:block"
           />
           <span className="text-[12px] font-medium">{current.label}</span>
         </div>

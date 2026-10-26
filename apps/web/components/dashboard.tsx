@@ -205,7 +205,7 @@ export function Dashboard({
                 )}
               </div>
             )}
-            <footer className="mt-8 flex items-center justify-between border-t border-border/80 pt-5 text-[10px] text-muted-foreground/75">
+            <footer className="mt-8 flex items-center justify-between border-t border-border/80 pt-5 text-[10px] text-muted-foreground">
               <span>Made for the people who bring people together.</span>
               <button
                 className="flex items-center gap-1.5 hover:text-primary"

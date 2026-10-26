@@ -143,7 +143,7 @@ export function Sidebar({
                       className={
                         section === n.id
                           ? "text-violet-700 dark:text-violet-300"
-                          : "text-muted-foreground/85"
+                          : "text-muted-foreground"
                       }
                     />
                     <span className="flex-1">{n.label}</span>
