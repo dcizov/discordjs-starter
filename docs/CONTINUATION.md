@@ -548,6 +548,13 @@ follow-up rather than silently assumed.
 | `npm run build:services`                                 | pass                                                                                                                                                                                                                                                                                                                             |
 | Demo server (`DEMO_MODE=true npm start`)                 | `/docs` and `/docs/music` render; `/api/guilds/<demo>/history?...&sort=actorName&dir=asc` returns sorted rows; an unknown history parameter returns `400 Unknown history parameter "bogus".`; `POST /api/guilds/<demo>/music {"action":"seek","position":42}` → `{"ok":true,"demo":true}` and a missing position → a clear error |
 
+CI (GitHub Actions, `Orbit CI` run `40247481151` for commit `d484da7`) is
+**green**: `verify` ran `npm ci`, lint, typecheck, the full vitest suite against
+PostgreSQL 17, `npm audit --omit=dev`, `npm run build` and `npm run test:e2e`
+(the browser suite reported 56 passing), and `containers` passed. That is where
+the browser-level behaviour of the news feed, tables and docs is verified — not
+in this sandbox.
+
 Not run, and therefore not claimed: a live Discord bot, Lavalink audio, a real
 PostgreSQL/Redis deployment, and browser screenshots. **This sandbox cannot
 install a Chromium build** (`npx playwright install chromium` fails to download),
