@@ -154,6 +154,22 @@ Two sources, in this order, and each is labelled:
    store artwork"). The card shows that label and the Discord footer appends
    `Store artwork`; it is never presented as a picture from the article.
 
+### Provider terms, stated plainly
+
+`steamcommunity.com/dev` lists `ISteamNews` among the Steam Web APIs and says all
+use of the Steam Web API requires a key and acceptance of the API Terms of Use;
+the documented call shape is
+`api.steampowered.com/<interface>/<method>/v<version>/?key=…&format=json`. The
+`appdetails` endpoint used for artwork is a **store** endpoint
+(`store.steampowered.com/api/appdetails`), not part of that key surface.
+
+Orbit's recorded captures were made **without** a key and returned normal JSON.
+Orbit therefore does not invent a key requirement it cannot verify, and it does
+not add a key path by assumption; if Steam starts enforcing keys, the adapter is
+one parameter away, and the dashboard would report the provider's status instead
+of pretending the source is broken. No scraping is involved either way: two
+documented endpoints, no HTML parsing of event pages.
+
 The lookup is cached per app id (6 h success, 10 min failure) and shared across
 every item in a poll, so ten announcements from one game cost one request; there
 is no per-item metadata call. `STEAM_APP_ARTWORK=false` disables it and leaves

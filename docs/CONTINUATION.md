@@ -507,6 +507,34 @@ documented pages. The existing music capability matrix in `docs/MUSIC.md` stays
 the single matrix; a second one was written and then deleted rather than left as
 a duplicate.
 
+### Copy before → after (evidence for the text pass)
+
+No screenshots: this sandbox cannot install Chromium (`npx playwright install
+chromium` fails to download), so layout is verified by the Playwright specs in
+CI, not by pixels here. The text changes are exact:
+
+| Where                         | Before                                                                                                                                                                                                                                        | After                                                                                                                                                   |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Module setup banner           | "Configuration + synced metadata only, not an authorization or live delivery/playback test."                                                                                                                                                  | "Configuration only — not a live delivery or playback test."                                                                                            |
+| Audit log intro               | "Names and avatars are recorded when an action happens. They are not refreshed afterwards, so an entry shows who acted at that moment — not necessarily someone's current Discord avatar. Missing or deleted pictures fall back to initials." | "Names and avatars are captured when the action happened and never refreshed, so an entry shows who acted then — not necessarily their current avatar." |
+| Permissions intro (hierarchy) | "Orbit never needs Administrator. Keep its role above the roles it manages, and give it access only to the channels it needs. Channel and role changes are managed in Discord and synced here."                                               | "Orbit never needs Administrator: keep its role above the roles it manages. Channel and role changes happen in Discord and are synced here."            |
+| Permissions checklist         | "Dashboard OAuth uses identify + guilds. Owner/Manage Server (or Administrator) authorizes the dashboard, not bot powers; writes re-check authorization."                                                                                     | "Dashboard sign-in uses identify + guilds. It grants no bot powers, and every write re-checks your permissions."                                        |
+| Music settings note           | "Lavalink connection settings and search-source prefixes are configured server-side. They never appear in the browser."                                                                                                                       | "Lavalink settings live on the server and never reach the browser."                                                                                     |
+| News test flight              | Always-visible paragraph about normalization/limits, plus a count line and a per-card notice list                                                                                                                                             | One collapsed "Preview details" per card (configured source vs provider feed) and one for the dialog (limits, counts, notices)                          |
+| News empty preview            | "The source is reachable but has no recent items. Incoming webhooks wait for your integration to send an event."                                                                                                                              | "No recent items yet. Webhook sources only post when your integration sends an event."                                                                  |
+
+Kept verbatim on purpose: the delete-configuration warning, the webhook-secret
+one-time display, "This stops playback, clears the queue, and disconnects Orbit
+from voice", the delivery "Do not resend" warning, and every provider/outage
+error message.
+
+Provider terms found while checking `steamcommunity.com/dev`: `ISteamNews` is
+listed among the Steam Web APIs, whose documented use requires a key and the API
+Terms of Use; `appdetails` is a store endpoint outside that surface. Orbit's
+recorded captures were made without a key and returned normal JSON, so no key
+requirement is invented — this is written down in `docs/NEWS-FORMATTING.md` as a
+follow-up rather than silently assumed.
+
 ### Checks actually run (fresh, this session)
 
 | Check                                                    | Result                                                                                                                                                                                                                                                                                                                           |
