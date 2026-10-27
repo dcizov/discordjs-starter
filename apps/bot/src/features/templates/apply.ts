@@ -1,6 +1,11 @@
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import {
+  CONFIG_STEP_KEY,
+  overwriteStepKey,
+  rebuildRunProgress,
+} from "@orbit/core/template-run-steps";
+import {
   buildTemplate,
   previewTemplate,
   templateChannelTypes,
@@ -11,6 +16,8 @@ import {
   getGuild,
   getTemplate,
   getTemplateRun,
+  listTemplateRunSteps,
+  recordTemplateRunStep,
   saveConfig,
   saveTemplate,
   updateTemplateRun,
@@ -273,7 +280,22 @@ export async function applyTemplateRun(
       message,
     };
   }
-  if (plan.fingerprint !== input.fingerprint) {
+  /**
+   * Steps this run already wrote, if it is being resumed.
+   *
+   * Read before the fingerprint check, because it decides what that check
+   * means. The fingerprint says "the target still looks like the plan the
+   * operator approved". A resumed run has already changed the target itself, so
+   * the fingerprint no longer matches even though nothing is stale — without
+   * this, every retry would be rejected for the work its own first attempt did.
+   * The guard still applies to a first attempt, where a changed server really
+   * does mean the plan is out of date; on a resume the recorded steps are the
+   * authority for what has been done, and the blockers above still stop the
+   * rest.
+   */
+  const previous = await listTemplateRunSteps(input.runId);
+  const resuming = previous.length > 0;
+  if (!resuming && plan.fingerprint !== input.fingerprint) {
     const message =
       "This server changed since the preview, so nothing was applied. Preview again to see the current plan.";
     await updateTemplateRun(input.runId, { state: "failed", error: message });
@@ -294,8 +316,45 @@ export async function applyTemplateRun(
   const channelIds = new Map<string, string>();
   const me = guild.members.me;
 
+  /**
+   * Steps this run already finished, written by an earlier attempt that was
+   * interrupted.
+   *
+   * Loading them is what makes a resume exact. Re-previewing the target would
+   * find the roles and channels again by name, but name matching is a guess: it
+   * breaks when a template carries two rows with the same name, or when
+   * anything was renamed after the first attempt created it. The recorded
+   * mapping names the exact Discord id, and it is the only record of the
+   * overwrites and configuration steps, which have no name to match on at all.
+   *
+   * They are seeded into the report too, so the final message describes the
+   * whole run rather than only the attempt that happened to finish it.
+   */
+  const resumed = rebuildRunProgress({
+    steps: previous,
+    present: {
+      roles: new Set(guild.roles.cache.keys()),
+      channels: new Set(guild.channels.cache.keys()),
+    },
+    nameForKey: (key) => {
+      const base = key.split("#")[0];
+      return (
+        template.data.structure?.roles.find((r) => r.key === base)?.name ??
+        template.data.structure?.channels.find((c) => c.key === base)?.name ??
+        key
+      );
+    },
+  });
+  const { finished } = resumed;
+  for (const [key, id] of resumed.roleIds) roleIds.set(key, id);
+  for (const [key, id] of resumed.channelIds) channelIds.set(key, id);
+  created.push(...resumed.created);
+  reused.push(...resumed.reused);
+
   for (const item of plan.items) {
     if (item.kind !== "role") continue;
+    // Already resolved by an earlier attempt of this run.
+    if (roleIds.has(item.key)) continue;
     if (item.action === "reuse" && item.targetId) {
       roleIds.set(item.key, item.targetId);
       reused.push({
@@ -308,6 +367,7 @@ export async function applyTemplateRun(
   }
   for (const item of plan.items) {
     if (item.kind !== "channel") continue;
+    if (channelIds.has(item.key)) continue;
     if (item.action === "reuse" && item.targetId) {
       channelIds.set(item.key, item.targetId);
       reused.push({
@@ -323,6 +383,8 @@ export async function applyTemplateRun(
   for (const role of template.data.structure?.roles ?? []) {
     const item = plan.items.find((i) => i.key === role.key);
     if (!item || item.action !== "create") continue;
+    // Already created and mapped by an earlier attempt of this run.
+    if (roleIds.has(role.key)) continue;
     // Last-moment re-check: a retry of this same run must not duplicate a role
     // that the previous attempt already created.
     const existing = guild.roles.cache.find(
@@ -356,15 +418,28 @@ export async function applyTemplateRun(
         id: createdRole.id,
         kind: "role",
       });
+      await recordTemplateRunStep({
+        runId: input.runId,
+        key: role.key,
+        kind: "role",
+        action: "create",
+        targetId: createdRole.id,
+        state: "done",
+      });
       await updateTemplateRun(input.runId, {
         state: "running",
         result: { created, reused, failed },
       });
     } catch (error) {
-      failed.push({
+      const diagnostic = errorDiagnostic(error);
+      failed.push({ key: role.key, name: role.name, error: diagnostic });
+      await recordTemplateRunStep({
+        runId: input.runId,
         key: role.key,
-        name: role.name,
-        error: errorDiagnostic(error),
+        kind: "role",
+        action: "create",
+        state: "failed",
+        error: diagnostic,
       });
     }
   }
@@ -378,6 +453,7 @@ export async function applyTemplateRun(
   for (const channel of ordered) {
     const item = plan.items.find((i) => i.key === channel.key);
     if (!item || item.action !== "create") continue;
+    if (channelIds.has(channel.key)) continue;
     const existing = guild.channels.cache.find(
       (c) =>
         !c.isThread() &&
@@ -420,9 +496,22 @@ export async function applyTemplateRun(
         id: made.id,
         kind: "channel",
       });
+      await recordTemplateRunStep({
+        runId: input.runId,
+        key: channel.key,
+        kind: "channel",
+        action: "create",
+        targetId: made.id,
+        state: "done",
+      });
       // Overwrites are applied after creation so a failure here does not leave a
       // half-configured channel that claims to be complete.
-      if (channel.overwrites.length) {
+      // Overwrites leave no resource to recognise later, so the recorded step is
+      // the only thing that says they were applied.
+      if (
+        channel.overwrites.length &&
+        !finished.has(overwriteStepKey(channel.key))
+      ) {
         // Applied as one edit with full bitfields, so a permission this code has
         // never heard of still travels with the template.
         const overwrites = channel.overwrites.flatMap((overwrite) => {
@@ -445,11 +534,28 @@ export async function applyTemplateRun(
               permissionOverwrites: overwrites,
               reason: `Orbit template “${template.name}”`,
             });
+            await recordTemplateRunStep({
+              runId: input.runId,
+              key: `${channel.key}#overwrites`,
+              kind: "overwrites",
+              action: "create",
+              targetId: made.id,
+              state: "done",
+            });
           } catch (error) {
+            const diagnostic = errorDiagnostic(error);
             failed.push({
               key: `${channel.key}#overwrites`,
               name: `Permission overwrites on ${channel.name}`,
-              error: errorDiagnostic(error),
+              error: diagnostic,
+            });
+            await recordTemplateRunStep({
+              runId: input.runId,
+              key: `${channel.key}#overwrites`,
+              kind: "overwrites",
+              action: "create",
+              state: "failed",
+              error: diagnostic,
             });
           }
         }
@@ -459,10 +565,15 @@ export async function applyTemplateRun(
         result: { created, reused, failed },
       });
     } catch (error) {
-      failed.push({
+      const diagnostic = errorDiagnostic(error);
+      failed.push({ key: channel.key, name: channel.name, error: diagnostic });
+      await recordTemplateRunStep({
+        runId: input.runId,
         key: channel.key,
-        name: channel.name,
-        error: errorDiagnostic(error),
+        kind: "channel",
+        action: "create",
+        state: "failed",
+        error: diagnostic,
       });
     }
   }
@@ -515,11 +626,25 @@ export async function applyTemplateRun(
           configured.push("notificationRoleId");
         }
       }
-      await saveConfig(guild.id, next, {
-        id: me?.id ?? guild.client.user.id,
-        name: `Orbit template “${template.name}”`,
-        avatar: guild.client.user.avatar,
-      });
+      // Configuration is one write with no Discord resource to recognise
+      // afterwards, so a resume resolves what it binds but skips the write:
+      // re-saving would duplicate the audit entry without changing anything.
+      // `configured` is still filled in, because the report must describe the
+      // whole run and not only the attempt that finished it.
+      if (!finished.has(CONFIG_STEP_KEY)) {
+        await saveConfig(guild.id, next, {
+          id: me?.id ?? guild.client.user.id,
+          name: `Orbit template “${template.name}”`,
+          avatar: guild.client.user.avatar,
+        });
+        await recordTemplateRunStep({
+          runId: input.runId,
+          key: CONFIG_STEP_KEY,
+          kind: "config",
+          action: "create",
+          state: "done",
+        });
+      }
       configured.push("modules", "economy");
     }
   }

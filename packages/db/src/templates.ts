@@ -4,6 +4,12 @@ import {
   parseTemplateDocument,
   type ServerTemplateDocument,
 } from "@orbit/core/templates";
+import type {
+  TemplateRunStep,
+  TemplateRunStepAction,
+  TemplateRunStepKind,
+  TemplateRunStepState,
+} from "@orbit/core/template-run-steps";
 import { database } from "./client";
 import { demoRead, demoTransaction } from "./demo";
 import * as s from "./schema";
@@ -355,4 +361,125 @@ export async function getTemplateRun(id: string): Promise<TemplateRun | null> {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   } as TemplateRun;
+}
+
+/**
+ * The step types live in `@orbit/core` because the rule for rebuilding a run
+ * from them is pure and tested there; the database only stores and returns
+ * them. Re-exported so callers keep importing from one place.
+ */
+export type {
+  TemplateRunStep,
+  TemplateRunStepAction,
+  TemplateRunStepKind,
+  TemplateRunStepState,
+} from "@orbit/core/template-run-steps";
+
+/** Demo mode keeps run steps in the same JSON store as everything else. */
+export type DemoTemplateRunStep = TemplateRunStep;
+
+const toRunStep = (row: any): TemplateRunStep => ({
+  ...row,
+  createdAt:
+    row.createdAt instanceof Date
+      ? row.createdAt.toISOString()
+      : String(row.createdAt),
+  updatedAt:
+    row.updatedAt instanceof Date
+      ? row.updatedAt.toISOString()
+      : String(row.updatedAt),
+});
+
+/**
+ * Record what one step of an apply run did.
+ *
+ * Upsert on (runId, key). A resumed run re-records the steps it redoes, and
+ * re-recording has to update the existing row rather than leave a second row
+ * claiming the same template key resolved to two different Discord ids.
+ *
+ * Called after each individual Discord call, not at the end of the run: the
+ * point of the table is that it survives a crash between two steps.
+ */
+export async function recordTemplateRunStep(input: {
+  runId: string;
+  key: string;
+  kind: TemplateRunStepKind;
+  action: TemplateRunStepAction;
+  targetId?: string | null;
+  state: TemplateRunStepState;
+  error?: string | null;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  if (isDemo()) {
+    await demoTransaction((store) => {
+      store.templateRunSteps ??= [];
+      const existing = store.templateRunSteps.find(
+        (step) => step.runId === input.runId && step.key === input.key
+      );
+      const next = {
+        runId: input.runId,
+        key: input.key,
+        kind: input.kind,
+        action: input.action,
+        targetId: input.targetId ?? null,
+        state: input.state,
+        error: input.error ?? null,
+        updatedAt: now,
+      };
+      if (existing) Object.assign(existing, next);
+      else
+        store.templateRunSteps.push({
+          id: crypto.randomUUID(),
+          createdAt: now,
+          ...next,
+        });
+      return null;
+    });
+    return;
+  }
+  await database()
+    .db.insert(s.templateRunSteps)
+    .values({
+      runId: input.runId,
+      key: input.key,
+      kind: input.kind,
+      action: input.action,
+      targetId: input.targetId ?? null,
+      state: input.state,
+      error: input.error ?? null,
+    })
+    .onConflictDoUpdate({
+      target: [s.templateRunSteps.runId, s.templateRunSteps.key],
+      set: {
+        kind: input.kind,
+        action: input.action,
+        targetId: input.targetId ?? null,
+        state: input.state,
+        error: input.error ?? null,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+/**
+ * Every step recorded for a run, oldest first.
+ *
+ * A resumed run reads this to rebuild the template-key → Discord-id mapping
+ * instead of rediscovering resources by name.
+ */
+export async function listTemplateRunSteps(
+  runId: string
+): Promise<TemplateRunStep[]> {
+  if (isDemo()) {
+    const d = await demoRead();
+    return (d.templateRunSteps ?? [])
+      .filter((step) => step.runId === runId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+  const rows = await database()
+    .db.select()
+    .from(s.templateRunSteps)
+    .where(eq(s.templateRunSteps.runId, runId))
+    .orderBy(s.templateRunSteps.createdAt);
+  return rows.map(toRunStep);
 }

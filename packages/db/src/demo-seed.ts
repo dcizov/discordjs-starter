@@ -31,6 +31,7 @@ export type DemoState = {
   rosterSync?: Record<string, RosterSync>;
   templates?: import("./templates").DemoTemplate[];
   templateRuns?: import("./templates").DemoTemplateRun[];
+  templateRunSteps?: import("./templates").DemoTemplateRunStep[];
   resources: Resource[];
   audit: AuditEntry[];
   accounts: Account[];

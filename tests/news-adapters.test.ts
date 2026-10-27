@@ -48,9 +48,15 @@ describe("migration 0009", () => {
     (await readdir("./drizzle")).filter((f) => f.endsWith(".sql")).sort();
   const read = (file: string) => readFile(`./drizzle/${file}`, "utf8");
 
-  it("is present and is the newest migration", async () => {
+  it("is present and sits directly after 0008", async () => {
     const files = await migrations();
-    expect(files.at(-1)).toBe("0009_drop_unimplemented_news_adapters.sql");
+    expect(files).toContain("0009_drop_unimplemented_news_adapters.sql");
+    // Migration files sort by index, so 0009 must still follow 0008. Being the
+    // newest is not asserted: a later migration appearing is expected, and this
+    // test is about 0009 keeping its place in the chain.
+    expect(files.indexOf("0009_drop_unimplemented_news_adapters.sql")).toBe(
+      files.indexOf("0008_account_identity_fields.sql") + 1
+    );
   });
 
   it("converts the removed adapters to rss and keeps every other field", async () => {

@@ -71,6 +71,13 @@
       "when": 1793103431466,
       "tag": "0009_drop_unimplemented_news_adapters",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793103432466,
+      "tag": "0010_template_run_steps",
+      "breakpoints": true
     }
   ]
 }

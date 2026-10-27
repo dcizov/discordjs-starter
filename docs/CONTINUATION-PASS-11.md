@@ -499,3 +499,88 @@ client-side; they are therefore absent from the server-rendered HTML by design.
 `npx eslint . --max-warnings=0` also flags `prettier.config.mjs` for an
 anonymous default export. That file is untouched by this work (tracked since the
 initial commit), so it was deliberately left alone.
+
+---
+
+## Slice 6a — durable run steps and crash recovery
+
+An apply run creates Discord resources one round trip at a time, and the
+process can die between any two of them. The run's `result` column was rewritten
+after every step, which shows progress but cannot resume: it is a flat list of
+names and ids with nothing saying which template key produced which Discord id,
+and nothing recording a step that failed.
+
+### What was added
+
+**`drizzle/0010_template_run_steps.sql`** plus journal entry and snapshot. One
+row per `(run_id, key)`, with a unique index so a re-recorded step updates
+instead of duplicating. `key` is the template's own addressing scheme
+(`role:moderator`, `channel:general`, `channel:general#overwrites`), never a
+Discord id, so the mapping stays meaningful when the template is applied to a
+different server.
+
+**`packages/core/src/template-run-steps.ts`** (new, pure). `rebuildRunProgress`
+turns recorded steps back into a role/channel id mapping, a `finished` set and a
+report of what the whole run did. Only `done` steps count — a `failed` step is
+exactly what a retry is for. A `done` step whose target has since vanished is
+dropped, because keeping it would point overwrites and configuration bindings at
+an id that no longer resolves.
+
+**`packages/db/src/templates.ts`** — `recordTemplateRunStep` (upsert on
+`(runId, key)`) and `listTemplateRunSteps` (oldest first), with demo branches.
+The step types now live in core and are re-exported, so there is one definition.
+
+**`apps/bot/src/features/templates/apply.ts`** — records a step after each
+Discord call, seeds the mapping from recorded steps on entry, skips what an
+earlier attempt finished, and reports the whole run rather than only the attempt
+that completed it. Configuration is resolved but not re-written on a resume,
+because re-saving would duplicate the audit entry without changing anything.
+
+### Resume had to change the fingerprint guard
+
+The fingerprint says "the target still looks like the plan the operator
+approved". A resumed run has _already changed the target itself_, so the
+fingerprint no longer matches even though nothing is stale — without a change,
+every retry would be rejected for the work its own first attempt did.
+
+The check is now skipped when the run has recorded steps, and kept for a first
+attempt, where a changed server really does mean the plan is out of date. The
+blockers check still runs in both cases.
+
+### Verified
+
+- `npm run typecheck` clean; `eslint --max-warnings=0` clean on all touched
+  files; `npm run format` applied; `npm run build:web` succeeds.
+- `npx vitest run`: **1057 passed** (1031 + 13 pure + 7 SQL + 6 recovery).
+- `tests/template-run-steps.test.ts` (13) — the rebuild rule, including that a
+  failed step is retried, a vanished resource is remade, and steps with no
+  resource of their own (overwrites, config) are remembered but not reported as
+  resources.
+- `tests/template-run-steps-db.test.ts` (7) — real SQL: the unique index
+  collapses a re-recorded step, steps do not leak between runs, and deleting a
+  run cascades.
+- `tests/template-apply-recovery.test.ts` (6) — end to end against a fake guild
+  with the database mocked. A crash is injected on a path with no `try` around
+  it, which is the real distinction: a failed _step_ is caught and the run
+  finishes `partial`, while a crash leaves it `running` with half its work done.
+  Proven: the resumed run does not recreate what it already made, overwrites
+  point at the id the first attempt produced, configuration is written once,
+  overwrites are not applied twice, a role deleted between the two attempts is
+  remade with the stale mapping replaced, and a genuinely stale first attempt is
+  still rejected.
+- Demo server: blueprint create → preview → apply returns `202` with a
+  `simulated` run and 2 reused items; no steps are recorded, which is correct
+  because demo mode must not pretend it created Discord resources.
+
+### Not verified
+
+No crash was reproduced against a real Discord server. The recovery proof is a
+fake guild with the database mocked, so it proves the engine's decisions, not
+Discord's behaviour under a real interruption.
+
+### One existing test updated
+
+`tests/news-adapters.test.ts` asserted migration 0009 was the newest file. That
+was true when written and is no longer meaningful. It now asserts 0009 is
+present and sits directly after 0008 — the substance of the original claim —
+rather than that nothing newer exists.

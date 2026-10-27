@@ -231,6 +231,41 @@ export const templateRuns = pgTable(
   },
   (t) => [index("template_runs_guild_date_idx").on(t.guildId, t.createdAt)]
 );
+/**
+ * What an apply run did, one row per template key.
+ *
+ * `templateRuns.result` is a flat list rewritten after every step, which is
+ * enough to show progress but not enough to resume: it never says which
+ * template key produced which Discord id. This table is that mapping, so an
+ * interrupted run can pick up where it stopped and reuse exactly the resources
+ * the first attempt created rather than guessing by name.
+ *
+ * `key` is the template's own addressing scheme (`role:moderator`,
+ * `channel:general`, `channel:general#overwrites`) and never a Discord id, so
+ * the mapping stays meaningful when the template is applied to another server.
+ */
+export const templateRunSteps = pgTable(
+  "template_run_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => templateRuns.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    kind: text("kind").notNull(),
+    action: text("action").notNull(),
+    targetId: text("target_id"),
+    state: text("state").notNull().default("pending"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("template_run_steps_run_key_idx").on(t.runId, t.key)]
+);
 export const economyOperations = pgTable(
   "economy_operations",
   {
