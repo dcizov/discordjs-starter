@@ -46,6 +46,17 @@ This matrix is derived from the installed Discord.js code and Orbit's actual han
 
 GuildMembers is requested by the current combined bot runtime for member/role behavior. Fetching one member by REST, a Portal privileged-intent setting, and a channel permission are not the same thing; do not infer one from another.
 
+The member directory (dashboard → **Members**) is the main consumer of
+GuildMembers: the bot reads the roster in bounded pages (`members.list`, at most
+20 × 1000 members per sweep) and stores it, so opening the page never asks Discord
+for a member list. Joins, updates and leaves arrive as gateway events. No
+**Presence** intent is requested, which is why the directory reports membership,
+join date, roles and identity — and never online status. Without the Portal's
+**Server Members** toggle the sweep fails and the page says so instead of showing
+an empty roster. Template **apply** additionally needs **Manage Roles** and
+**Manage Channels** in the target server; a preview reports the missing permission
+as a blocker and creates nothing.
+
 The new community modules are **disabled until explicitly enabled**, including configurations written before their keys existed. Grant Send Polls only to chosen poll destinations, not Administrator or a larger invite mask. No new privileged intent is needed. Poll votes remain native Discord data; Orbit stores aggregates only. Community setup, schedule cancellation/expiry, actor revalidation and data retention are detailed in [COMMUNITY.md](COMMUNITY.md).
 
 ## Practical setup in Discord

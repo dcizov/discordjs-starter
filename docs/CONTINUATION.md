@@ -1487,3 +1487,129 @@ music queue rows and the overview selectors now share the identity cell, but the
 queue itself is still a list rather than the table foundation — a deliberate
 choice (five controls per row, not five columns), not an oversight. No PR was
 opened; everything stays on `arena/99c6cf65-discordjs-starter`.
+
+## Pass 10 (2026-10-27): member directory, one identity policy, server templates
+
+Branch `arena/99c6cf65-discordjs-starter`, pass 9 tip `108b514`. Work is committed
+in focused commits on top of it; no PR was opened.
+
+### What was broken (reproduced from the five screenshots)
+
+| Screen          | Defect                                                         | Cause found in code                                                                                                         |
+| --------------- | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Leaderboard     | `no avatar captured` under a member who is in the server       | the row only knew the hash captured on a past economy interaction, and narrated its absence                                 |
+| Music requester | initials next to a name that other screens spell differently   | the queue payload's recorded name won, and the picture came only from an economy account                                    |
+| Audit → Columns | a checked menu item with no label                              | the trailing action column was `{ key: "open", label: "" }` with no `canHide: false`, so `DataTable` offered it as hideable |
+| Server switcher | a real server image next to fallback bubbles on other surfaces | guild icons were projected onto the switcher list only; member/account rows had no roster identity at all                   |
+| Navigation      | no member directory entry                                      | the page did not exist                                                                                                      |
+
+### Member directory (real roster, never a derived list)
+
+- **Storage.** `members` (PK `guild_id, user_id`) holds username, global name,
+  nickname, resolved display name, global and guild avatar hashes, bot flag, join
+  date, role ids, `present`, `departed_at`, `synced_at`. `roster_sync` (PK
+  `guild_id`) holds status, page count, synchronized count, Discord's own member
+  count and the last error. Migrations: `drizzle/0007_members_and_templates.sql`
+  and `drizzle/0008_account_identity_fields.sql`.
+- **Acquisition.** `apps/bot/src/infrastructure/roster-sync.ts` reads the roster
+  with `guild.members.list({ limit: 1000, after })` — pages, not per-member REST
+  calls — under the existing **GuildMembers** intent. A sweep is bounded to
+  `ROSTER_MAX_PAGES = 20` pages. It runs on `GuildCreate`, on `/members → Sync
+now` (queued as the `sync-roster` action), at startup and hourly for at most
+  `ROSTER_RECONCILE_BUDGET = 5` guilds whose copy is missing or older than six
+  hours. Joins, updates and leaves are applied from `GuildMemberAdd/Update/Remove`
+  without any extra request.
+- **Honesty.** `status = complete` only when Discord returned a short or empty
+  page. A partial sweep is `partial`; a failure is `failed` and keeps every row it
+  had. `present` is only cleared by a removal event or by a sweep that finished —
+  a failed refresh cannot look like a mass departure.
+- **Counts.** `GET /api/guilds/:id/members` returns four separate numbers
+  (`guildMemberCount`, `syncedMembers`, `economyAccounts`, `bots`/`departed`). The
+  page prints Discord's count and the stored row count side by side and never
+  calls an account count a roster.
+- **Page.** `apps/web/components/members-page.tsx`: server-side search over
+  display name, username and nickname; filters for people, bots and departed;
+  server sorting and paging through the shared table foundation; avatars with the
+  shared precedence; a bot badge; join date in the guild timezone; the first roles
+  with a count; a detail dialog (id, join date, present/departed, roles, capture
+  time) and no moderation controls. A sync banner states the sync status,
+  freshness, page count and any error.
+
+### One identity policy
+
+`packages/core/src/identity.ts` is the only place that decides a name:
+`nickname → global name → handle` inside a guild, `global name → handle` outside
+one, with the handle printed as a secondary line only when it differs
+(case-insensitively) from the name. `apps/web/lib/person.ts` is the client wrapper;
+`IdentityCell` uses it, so the leaderboard, ledger/counterparties, music queue,
+member directory, resource tables and the account menu cannot drift apart.
+
+Pictures come from `apps/web/lib/discord-images.ts`: guild avatar → global avatar →
+`null`, with hash/id validation so an unusable value never becomes a 404 URL, and
+animated hashes supported. `loadDashboard` reads the roster once per response
+(`getMemberIdentities`, one batched query) and projects current names and pictures
+onto economy accounts and the signed-in user; the audit log keeps the identity
+recorded with the action and the detail dialog shows the present profile in a
+separate, labelled block. The demo seed lost the fixed "684 / 1,293 / 99.98%"
+overview figures in favour of values derived from the same response.
+
+### Dropdown and column-menu contract
+
+`DataTable` now offers only columns that have a name _and_ have not declared
+`canHide: false`, so an action-only column can never appear as an unnamed
+checkbox. The audit, role, moderation, deal and news tables mark their trailing
+action columns explicitly.
+
+### Server templates
+
+An Orbit-owned blueprint of roles, channels and Orbit settings — not Discord's
+native template format, which cannot carry Orbit configuration and is never
+described as if it could.
+
+- **Document** (`packages/core/src/templates.ts`): `version: 1`, `kind`
+  `structure | configuration | both`, logical keys (`role:member`,
+  `channel:general`, `role:everyone`) and a durable `omitted` list. Limits: 100
+  roles, 200 channels, 50 overwrites per channel, 100-character names, 256 KB
+  document. Managed roles, `Administrator`, member/integration overwrites and
+  unsupported channel types are dropped and recorded; no Discord id is written
+  into a document.
+- **Never copied:** members and identities, messages, audit history, moderation
+  cases, balances/ledger/inventory, tokens, OAuth secrets, sessions, webhook URLs
+  and delivery credentials.
+- **Preview** is additive: `create`, `reuse` (explicit mapping, else same
+  name+type), `skip` with a reason. Blockers name missing Manage Roles/Manage
+  Channels and Discord's 250-role/500-channel limits; warnings cover a low bot
+  role position. `fingerprint` hashes the decision set.
+- **Apply** (bot, queued as `apply-template`): revalidates against the live guild,
+  refuses a changed plan as _stale_, creates roles before channels and categories
+  before children, applies overwrites after creation, strips `Administrator`
+  again, writes Orbit configuration only when nothing failed, records each step on
+  the run row and never deletes anything. Retries reuse by name, so they do not
+  duplicate resources, and the result says exactly what was created, reused and
+  failed.
+- **Authorization:** a template is listed and resolved only through guilds the
+  session may manage. The template id alone grants nothing, and the target must be
+  an installed guild the user manages. Demo mode records the plan and states that
+  nothing was created in Discord.
+
+### Checks run this pass
+
+`npx tsc --noEmit` and `npx tsc --noEmit -p apps/web/tsconfig.json`, `npx eslint`
+(with `--max-warnings=0` on every touched path), `npm run format:check`, and
+`npx vitest run` — **76 files, 953 tests, all passing**, including four new files
+(`identity-policy`, `roster-sync`, `member-directory`, `templates`) and updated
+demo, dashboard-identity and bot-maintenance suites. `npm run build:web` was run
+before the final commit series.
+
+### Not verified (stated, not implied)
+
+- No live Discord server was touched. Roster sync is exercised against a mocked
+  gateway page loop; template apply against the pure planner and store, not a live
+  guild. Applying a template to a real server remains an operator action on a
+  disposable server.
+- No pixels were reviewed — there is still no browser in this sandbox; the CI
+  screenshot artifact cannot be downloaded here. New browser specs assert
+  structure, copy and keyboard behaviour for the members page, its column menu,
+  the member detail dialog and the demo template flow.
+- Live behaviour of Discord's per-route rate limits during a large sweep is
+  bounded by page size and page cap, not measured.
