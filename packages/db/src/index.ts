@@ -4,6 +4,8 @@ export * from "./outbox";
 export * as schema from "./schema";
 export * from "./store";
 export * from "./history";
+export * from "./members";
+export * from "./templates";
 
 export { activityCounts } from "./activity";
 

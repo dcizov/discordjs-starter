@@ -111,16 +111,98 @@ export type LedgerEntry = {
   note: string;
   createdAt: string;
 };
+/**
+ * A Discord guild member as the bot last synchronized them.
+ *
+ * Deliberately separate from `Account` (an Orbit economy record) and from
+ * anything derived from activity: a member who has never earned anything is
+ * still a member, and an account whose member left is still an account. The
+ * dashboard must never present one dataset as the other.
+ */
+export type Member = {
+  guildId: string;
+  userId: string;
+  /** Unique Discord handle. */
+  username: string | null;
+  /** Discord global display name. */
+  globalName: string | null;
+  /** Guild nickname, when this member has one in this guild. */
+  nickname: string | null;
+  /** Resolved guild display name, stored at sync time (policy: @orbit/core/identity). */
+  displayName: string;
+  /** Global avatar hash. */
+  avatar: string | null;
+  /** Guild-specific avatar hash; preferred over the global one when present. */
+  guildAvatar: string | null;
+  /** Server-derived display URL: guild avatar, else global avatar, else null. */
+  avatarUrl?: string | null;
+  bot: boolean;
+  joinedAt: string | null;
+  /** Role ids held in this guild at the last sync. */
+  roles: string[];
+  /** False once a *complete* sweep (or a removal event) confirmed the departure. */
+  present: boolean;
+  departedAt?: string | null;
+  syncedAt: string;
+};
+export type RosterSyncStatus =
+  "never" | "running" | "complete" | "partial" | "failed";
+/**
+ * What the bot knows about its own copy of the roster.
+ *
+ * `expectedCount` is Discord's `guild.memberCount`, `syncedCount` is how many
+ * rows this guild actually holds. They are reported side by side and never
+ * merged: a partial sync must not be able to claim it is the whole guild.
+ */
+export type RosterSync = {
+  guildId: string;
+  status: RosterSyncStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  lastAttemptAt: string | null;
+  pagesFetched: number;
+  syncedCount: number;
+  expectedCount: number;
+  lastError: string | null;
+};
+export type MembersPage = {
+  rows: Member[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sync: RosterSync;
+  counts: {
+    /** Discord's own number for the guild, as last reported to the bot. */
+    guildMemberCount: number;
+    /** Rows this guild holds in Orbit's database. */
+    syncedMembers: number;
+    /** Members with an Orbit economy record — a subset, never the roster. */
+    economyAccounts: number;
+    bots: number;
+    departed: number;
+  };
+};
 export type Account = {
   guildId: string;
   userId: string;
   name: string;
+  /** Unique handle and global name, when the roster knows them. */
+  username?: string | null;
+  globalName?: string | null;
   /**
    * Avatar hash as last captured by the bot when this member earned, spent or
    * received something. Current-ish identity from an already-authorized
    * interaction, not historical evidence and not a per-row API lookup.
    */
   avatar: string | null;
+  /** Guild avatar hash, preferred over `avatar` when the roster has one. */
+  guildAvatar?: string | null;
+  /**
+   * Best current guild identity from the synchronized roster, when one exists.
+   * The name to display is resolved in the UI by `@orbit/core/identity`, so no
+   * surface re-implements the precedence.
+   */
+  nickname?: string | null;
   /** Server-derived display URL for that hash; null when none was captured. */
   avatarUrl?: string | null;
   balance: number;
@@ -201,6 +283,12 @@ export type DashboardData = {
     name: string;
     avatar: string | null;
     avatarUrl?: string | null;
+    /** Roster identity, when the bot has synchronized this account's member. */
+    username?: string | null;
+    globalName?: string | null;
+    nickname?: string | null;
+    /** The handle, when it differs from `name`. Resolved by @orbit/core/identity. */
+    secondaryName?: string | null;
   };
   guilds: {
     id: string;

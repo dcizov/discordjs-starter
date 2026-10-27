@@ -90,6 +90,11 @@ export const accounts = pgTable(
       hand — never fetched per row by the dashboard.
     */
     avatar: text("avatar"),
+    /*  Guild-specific avatar hash, preferred over `avatar` when present. */
+    guildAvatar: text("guild_avatar"),
+    /*  Unique handle and Discord global name, refreshed from the roster. */
+    username: text("username"),
+    globalName: text("global_name"),
     balance: bigint("balance", { mode: "number" }).notNull().default(0),
     lastDaily: timestamp("last_daily", { withTimezone: true }),
     lastActivity: timestamp("last_activity", { withTimezone: true }),
@@ -101,6 +106,130 @@ export const accounts = pgTable(
       sql`${t.balance} >= 0 AND ${t.balance} <= 9000000000000`
     ),
   ]
+);
+/**
+ * The guild roster, as the bot last synchronized it.
+ *
+ * One row per (guild, member). This is the only dataset that may be presented as
+ * "the members of this server": economy accounts, audit actors, song requesters
+ * and voice participants are all different, smaller things.
+ *
+ * `present` is the honest flag. It only becomes false when a removal event says
+ * so, or when a *complete* paginated sweep finished without seeing the member —
+ * never because an attempt failed halfway. A partial roster is therefore
+ * representable, and `rosterSync.status` says which one it is.
+ */
+export const members = pgTable(
+  "members",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    username: text("username"),
+    globalName: text("global_name"),
+    nickname: text("nickname"),
+    /** Resolved with one policy (`@orbit/core/identity`), stored for sorting. */
+    displayName: text("display_name").notNull(),
+    avatar: text("avatar"),
+    guildAvatar: text("guild_avatar"),
+    bot: boolean("bot").notNull().default(false),
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
+    roles: jsonb("roles").$type<string[]>().notNull().default([]),
+    present: boolean("present").notNull().default(true),
+    departedAt: timestamp("departed_at", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.guildId, t.userId] }),
+    index("members_guild_name_idx").on(t.guildId, t.displayName),
+    index("members_guild_joined_idx").on(t.guildId, t.joinedAt),
+    index("members_guild_present_idx").on(t.guildId, t.present),
+  ]
+);
+/**
+ * Progress and honesty for one guild's roster copy.
+ *
+ * Kept in its own row so the dashboard can say "3 of 2,846 members synchronized,
+ * last attempt failed" instead of implying an empty guild.
+ */
+export const rosterSync = pgTable("roster_sync", {
+  guildId: text("guild_id")
+    .primaryKey()
+    .references(() => guilds.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("never"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  pagesFetched: integer("pages_fetched").notNull().default(0),
+  syncedCount: integer("synced_count").notNull().default(0),
+  expectedCount: integer("expected_count").notNull().default(0),
+  lastError: text("last_error"),
+});
+/**
+ * A reusable, portable blueprint of server structure and/or Orbit configuration.
+ *
+ * Owned by the guild it was captured from. Applying it to another guild is an
+ * explicit, previewed, additive operation (see `packages/core/src/templates.ts`);
+ * knowing the id of a template never grants access to the guild it came from,
+ * because every read is filtered by the authorized target's own source guild.
+ */
+export const serverTemplates = pgTable(
+  "server_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Guild the blueprint was captured from. */
+    sourceGuildId: text("source_guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    kind: text("kind").notNull().default("both"),
+    /** Schema version of the portable document. */
+    version: integer("version").notNull().default(1),
+    data: jsonb("data").$type<Record<string, any>>().notNull(),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("server_templates_source_idx").on(t.sourceGuildId, t.createdAt)]
+);
+/**
+ * One apply attempt against one target guild.
+ *
+ * Discord mutations are not a database transaction, so the run row is the
+ * record of what actually happened: the validated plan, what was created, what
+ * was reused and what failed. It is append-only evidence, not a rollback log.
+ */
+export const templateRuns = pgTable(
+  "template_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    templateId: uuid("template_id")
+      .notNull()
+      .references(() => serverTemplates.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").notNull(),
+    state: text("state").notNull().default("queued"),
+    plan: jsonb("plan").$type<Record<string, any>>().notNull(),
+    result: jsonb("result").$type<Record<string, any>>(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("template_runs_guild_date_idx").on(t.guildId, t.createdAt)]
 );
 export const economyOperations = pgTable(
   "economy_operations",
