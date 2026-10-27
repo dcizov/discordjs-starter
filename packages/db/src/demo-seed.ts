@@ -40,6 +40,50 @@ export type DemoState = {
   music: Record<string, MusicState>;
   operations: Record<string, { payload: string; result: any }>;
   inventory: Record<string, number>;
+  /**
+   * Leveling state, shaped like the SQL tables so the demo branch and the real
+   * one can be read by the same code. `events` is keyed for idempotency
+   * exactly as `xp_events` is.
+   */
+  xp?: {
+    totals: Record<
+      string,
+      {
+        guildId: string;
+        userId: string;
+        total: number;
+        messageXp: number;
+        voiceXp: number;
+        adjustedXp: number;
+        lastMessageAt: string | null;
+        updatedAt: string;
+      }
+    >;
+    events: Record<string, { amount: number; kind: string; at: string }>;
+    voiceSessions?: Record<
+      string,
+      {
+        guildId: string;
+        userId: string;
+        channelId: string;
+        startedAt: string;
+        lastIntervalAt: string | null;
+        intervalsAwarded: number;
+        brokenAt: string | null;
+      }
+    >;
+    rewardGrants?: Record<
+      string,
+      {
+        guildId: string;
+        userId: string;
+        level: number;
+        roleId: string;
+        grantedAt: string | null;
+        error: string | null;
+      }
+    >;
+  };
 };
 /** Demo-only persona illustrations; "Orbit" has no user avatar by design. */
 const DEMO_PERSONA_AVATARS: Record<string, string> = {

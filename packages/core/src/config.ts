@@ -32,6 +32,7 @@ export const configSchema = z
         news: z.boolean(),
         polls: z.boolean().default(false),
         announcements: z.boolean().default(false),
+        xp: z.boolean().default(false),
       })
       .default({
         roles: true,
@@ -42,6 +43,7 @@ export const configSchema = z
         news: true,
         polls: false,
         announcements: false,
+        xp: false,
       }),
     economy: z
       .object({
@@ -90,6 +92,75 @@ export const configSchema = z
         exemptRoleIds: [],
         escalationThreshold: 3,
         escalationMinutes: 10,
+      }),
+    xp: z
+      .object({
+        messageEnabled: z.boolean(),
+        /** Bounded: an unbounded award is a currency bug waiting to happen. */
+        messageMin: z.number().int().min(1).max(500),
+        messageMax: z.number().int().min(1).max(500),
+        messageCooldownSeconds: z.number().int().min(5).max(3600),
+        voiceEnabled: z.boolean(),
+        voiceMin: z.number().int().min(1).max(500),
+        voiceMax: z.number().int().min(1).max(500),
+        voiceIntervalSeconds: z.number().int().min(30).max(3600),
+        /** Humans required in a voice channel before anyone earns. */
+        voiceMinParticipants: z.number().int().min(1).max(50),
+        /** Self-muted members are listening, not absent, so they still earn. */
+        voiceAllowSelfMute: z.boolean(),
+        voiceAllowSelfDeaf: z.boolean(),
+        voiceAllowServerMute: z.boolean(),
+        voiceAllowServerDeaf: z.boolean(),
+        /** 0 means no cap. Without one, voice XP is the cheapest thing to farm. */
+        voiceSessionCapMinutes: z.number().int().min(0).max(1440),
+        ignoreBots: z.boolean(),
+        ignoreWebhooks: z.boolean(),
+        excludedChannelIds: z.array(snowflake).max(200),
+        excludedRoleIds: z.array(snowflake).max(200),
+        announceEnabled: z.boolean(),
+        announceChannelId: optionalId,
+        /** `{member}`, `{level}` and `{role}` are replaced; nothing else. */
+        announceMessage: z.string().max(500),
+        /**
+         * Role rewards. `stack` decides whether reaching a higher level keeps
+         * the earlier reward roles or replaces them with the highest one.
+         */
+        rewards: z
+          .array(
+            z.object({
+              level: z.number().int().min(1).max(1000),
+              roleId: snowflake,
+            })
+          )
+          .max(100),
+        rewardStack: z.boolean(),
+      })
+      .default({
+        messageEnabled: true,
+        // The 15-25 range MEE6, Carl-bot and most others default to, so a
+        // member's intuition about how fast levels come is roughly right.
+        messageMin: 15,
+        messageMax: 25,
+        messageCooldownSeconds: 60,
+        voiceEnabled: true,
+        voiceMin: 5,
+        voiceMax: 10,
+        voiceIntervalSeconds: 60,
+        voiceMinParticipants: 2,
+        voiceAllowSelfMute: true,
+        voiceAllowSelfDeaf: false,
+        voiceAllowServerMute: false,
+        voiceAllowServerDeaf: false,
+        voiceSessionCapMinutes: 240,
+        ignoreBots: true,
+        ignoreWebhooks: true,
+        excludedChannelIds: [],
+        excludedRoleIds: [],
+        announceEnabled: true,
+        announceChannelId: "",
+        announceMessage: "{member} just reached level {level}. Nicely done.",
+        rewards: [],
+        rewardStack: true,
       }),
     dashboard: z
       .object({

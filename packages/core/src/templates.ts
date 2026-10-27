@@ -107,6 +107,7 @@ const partialConfig = {
       news: z.boolean().optional(),
       polls: z.boolean().optional(),
       announcements: z.boolean().optional(),
+      xp: z.boolean().optional(),
     })
     .strict()
     .optional(),
@@ -402,10 +403,18 @@ export function buildTemplate(input: {
   } else if (wantsConfig) {
     config = templateConfigSchema.parse({});
   }
-  if (wantsConfig)
+  if (wantsConfig) {
     omitted.push(
       "Anything Discord already copies natively: channel topics are included, message history is not"
     );
+    // The XP module travels as an on/off switch only. Its settings point at
+    // channels and roles by id, and carrying them across would either produce
+    // dangling references or silently reward levels against the wrong roles.
+    // Saying so beats shipping a template that half-applies.
+    omitted.push(
+      "Leveling settings: the XP module travels as on/off only, without its rates, exclusions or role rewards"
+    );
+  }
   if (!wantsStructure)
     omitted.push("Server structure (not selected for this template)");
   if (!wantsConfig)

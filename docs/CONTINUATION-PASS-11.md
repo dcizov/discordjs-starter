@@ -840,7 +840,7 @@ It refuses, before anything is sent to Discord:
 
 - **`@everyone`** in either direction — it is the guild itself.
 - **Managed roles** — they belong to an integration and Discord rejects them.
-- **Roles at or above the effective ceiling.** A role sitting *at* the
+- **Roles at or above the effective ceiling.** A role sitting _at_ the
   caller's own top position is out of reach, not just one above it: that is
   Discord's rule, not a conservative reading.
 - **Anything outside `min(actor, bot)`.** A dashboard user must not be able to
@@ -869,7 +869,7 @@ It refuses, before anything is sent to Discord:
 6. Refuses the server owner and Orbit itself.
 
 Per-role results on partial failure come from applying each direction as one
-call and, if it throws, retrying role by role so the operator is told *which*
+call and, if it throws, retrying role by role so the operator is told _which_
 role failed rather than the whole change looking broken.
 
 ### Wiring
@@ -880,7 +880,7 @@ cannot race itself; an offer is always fresh, because it must reflect the
 hierarchy right now.
 
 The `member-roles` action is exempted from the consumer's blanket Manage
-*Server* gate. That gate is broader than Discord's own rule and would have
+_Server_ gate. That gate is broader than Discord's own rule and would have
 blocked people Discord would happily allow; this action does its own, more
 precise check instead.
 
@@ -913,7 +913,7 @@ otherwise would be the worst kind of demo.
 
 **Left alone, deliberately:**
 
-- `template-builder.tsx` is a role *editor* (name and colour fields), not a
+- `template-builder.tsx` is a role _editor_ (name and colour fields), not a
   badge.
 - `templates-page.tsx` maps roles through a native `<select>`; `<option>`
   cannot contain a node, and the comment there records why it stays a select.
@@ -933,3 +933,134 @@ Discord server was available either, so the mutation path has **not** been
 exercised against the real API — the rules are tested exhaustively, but
 Discord's own response to a real role change is unproven here. That is the
 first thing to check on a disposable server.
+
+---
+
+## Slice 13a — the leveling curve, the schema and the award path
+
+Section 2, first slice. This one is the foundation: the curve every level,
+reward and leaderboard reads, plus the storage that has to make awards exactly
+once.
+
+### Research (checked 2026-10-27)
+
+**MEE6** documents the per-level cost as `5 * lvl^2 + 50 * lvl + 100`, where
+`lvl` is the *current* level, and publishes a table whose first row is "level
+0, 100 needed, 0 total". Source: `github.com/Mee6/Mee6-documentation`,
+`docs/levels_xp.md`. Message XP is a random 15–25, once per 60 seconds.
+
+**Carl-bot** documents the same per-level cost, the same 15–25 default range,
+and a cumulative closed form of `(5/3)n^3 + (55/2)n^2 + (755/6)n + 100`.
+Source: `github.com/botlabs-gg/carlbot-docs`, `docs/levels.md`.
+
+**The two cumulative formulas are not the same polynomial, and that matters.**
+Carl-bot's `n` is one behind MEE6's level: `carl(n)` returns what MEE6 calls
+the total for level `n + 1`. Both sources describe the same curve; they index
+it differently. Copying either formula without noticing this produces a
+leveling system that is exactly one level out. `totalXpForLevel` is indexed the
+way MEE6's table is, and a test asserts the two readings agree under that
+shift.
+
+The closed form actually used is `(5/3)L^3 + (45/2)L^2 + (455/6)L`, verified
+against the brute-force sum of per-level costs for every level from 0 to 1000.
+
+**Dyno** was researched but its curve could not be verified: the search
+returned only third-party comparisons and a documentation landing page, with
+no published formula. Dyno's curve is therefore *not* a source for this
+implementation, and that is recorded rather than papered over.
+
+**Voice XP**, from maintained implementations (Atlas, Wabbit, DraftBot,
+PeakBot, and the `ironclad1/xp` reference bot):
+
+- Awarded for **whole intervals only** — joining, leaving, moving or changing
+  mute/deafen part-way earns nothing for that interval. Every maintained
+  implementation does this, and any partial rule can be gamed at the boundary.
+- The **AFK channel is excluded**, because Discord moves people into it
+  automatically when they go idle.
+- A **minimum number of humans** is required (two, in every implementation
+  checked). Bots never count.
+- **Voice States only**, never Presence — Discord deprecated using presence for
+  this, and it cannot express mute.
+- **Deafen excludes; self-mute usually does not.** This is the one place the
+  sources genuinely disagree, so it is configurable, defaulting to allowing
+  self-mute (a self-muted member is listening, not absent) and excluding
+  deafen.
+- Session caps exist in several implementations, because voice XP is otherwise
+  the cheapest thing in the system to farm by leaving a client connected
+  overnight.
+
+### What was built
+
+- `packages/core/src/leveling.ts` — the curve, its inverse, progress, seeded
+  award rolls, and the voice eligibility and whole-interval rules. Pure, no
+  Discord, no database.
+- `packages/core/src/config.ts` — an `xp` module flag and an `xp` settings
+  section, every field bounded.
+- `packages/db/src/schema.ts` + `drizzle/0011_leveling_xp.sql` — four tables:
+  totals, events (idempotency), voice sessions, and reward grants.
+- `packages/db/src/leveling.ts` — the award path.
+
+### Two properties that matter
+
+**Awards are idempotent.** The unique index on `(guild, user, key)` is the
+guarantee, not a check in application code. A redelivered gateway event, a
+retried job or a restart mid-interval all collide and lose.
+
+**Awards are atomic.** The total is incremented in SQL
+(`total = total + amount`), never read into the application, added to, and
+written back. A test fires three awards concurrently and asserts all three
+land; a read-modify-write would silently drop two of them.
+
+Neither is decorative — both are covered by tests that would fail if the
+property were lost.
+
+### A migration journal defect, found and repaired
+
+`npm run db:generate` was failing before any of this work:
+
+```
+[drizzle/meta/0008_snapshot.json, drizzle/meta/0009_snapshot.json]
+are pointing to a parent snapshot — a collision
+```
+
+Migrations 0008 and 0009 shared the **same snapshot `id`**
+(`3b6592ae-87ce-426d-8c45-63c68450ef0e`), and 0009 pointed at 0007 as its
+parent, skipping 0008. Migration 0009 is a data-only `UPDATE` that changes no
+schema, so its snapshot was evidently written by copying 0008's file — `id`
+included — rather than by drizzle-kit.
+
+Repaired by giving 0009 its own id and re-linking the chain 0008 → 0009 →
+0010. **No SQL changed, and the journal's tags and timestamps are untouched**,
+so the runtime migrator (which tracks by journal tag) is unaffected; only
+drizzle-kit's snapshot chain was broken. The snapshot files are metadata for
+the generator, not something a database reads.
+
+### A template schema coupling
+
+Adding a module to the guild config broke two template tests: templates capture
+configuration through a `.strict()` schema, so a new module key is an
+"unrecognized key". Two changes:
+
+- `xp` added to the template `modules` schema.
+- An entry in the template's `omitted` list, because the XP *settings* point at
+  channels and roles by id and carrying them across would produce dangling
+  references or reward levels against the wrong roles. The module travels as an
+  on/off switch; the settings do not. Saying so beats shipping a template that
+  half-applies.
+
+Worth remembering: adding a config module means touching the template schema
+too. The two are coupled by `.strict()`.
+
+### Verification
+
+Typecheck clean. `eslint --max-warnings=0` clean on every touched file.
+`format:check` clean. `npm test`: **1155 passed / 89 files** (was 1116 / 87),
++39 across the two new suites. `tests/database.test.ts` applies all eleven
+migrations from an empty PGlite database, so 0011 is proven to apply from
+scratch.
+
+### Not verified
+
+No live Discord server, so no message or voice XP has been earned for real.
+The rules and the storage are tested; the gateway event handlers that call them
+do not exist yet.

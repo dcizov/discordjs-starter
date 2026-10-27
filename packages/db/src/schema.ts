@@ -305,6 +305,134 @@ export const ledger = pgTable(
     index("ledger_owner_date_idx").on(t.guildId, t.userId, t.createdAt),
   ]
 );
+/**
+ * Per-member XP totals, guild-scoped and wholly separate from economy
+ * currency. A level is a statement about participation; a balance is a
+ * statement about a ledger, and the two must never be spendable for each
+ * other.
+ */
+export const xpTotals = pgTable(
+  "xp_totals",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    /** Sum of everything ever earned, including admin adjustments. */
+    total: bigint("total", { mode: "number" }).notNull().default(0),
+    /** How much of `total` came from messages, for the detail view. */
+    messageXp: bigint("message_xp", { mode: "number" }).notNull().default(0),
+    /** How much of `total` came from voice. */
+    voiceXp: bigint("voice_xp", { mode: "number" }).notNull().default(0),
+    /** How much came from an operator's adjustment, so it can be told apart. */
+    adjustedXp: bigint("adjusted_xp", { mode: "number" }).notNull().default(0),
+    /** Last time a message award landed, for the cooldown. */
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.guildId, t.userId] }),
+    // The leaderboard reads this in order on every page load.
+    index("xp_totals_board_idx").on(t.guildId, t.total),
+  ]
+);
+/**
+ * One row per awarded event, keyed so the same event can never be counted
+ * twice.
+ *
+ * This is what makes awards idempotent: a redelivered gateway event, a retried
+ * job or a bot that restarts mid-interval all collide on the same key and lose
+ * instead of paying out twice. The unique index is the guarantee, not a check
+ * in application code.
+ */
+export const xpEvents = pgTable(
+  "xp_events",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    /** `message:<id>` or `voice:<channelId>:<intervalStart>` or `adjust:<uuid>`. */
+    key: text("key").notNull(),
+    kind: text("kind").notNull(),
+    amount: bigint("amount", { mode: "number" }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("xp_event_idempotency").on(t.guildId, t.userId, t.key),
+    index("xp_events_member_idx").on(t.guildId, t.userId, t.createdAt),
+  ]
+);
+/**
+ * Open voice sessions, written so a restart does not lose or invent time.
+ *
+ * A session is one continuous stay in one channel. Moving channel ends it and
+ * starts another, which is what makes "eligible for the whole interval"
+ * answerable. `lastIntervalAt` is the start of the interval already paid, so a
+ * restart that skipped a minute cannot pay it retroactively — the bot simply
+ * resumes from the next whole interval and never credits offline time.
+ */
+export const xpVoiceSessions = pgTable(
+  "xp_voice_sessions",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /** Start of the most recent interval already awarded. */
+    lastIntervalAt: timestamp("last_interval_at", { withTimezone: true }),
+    /** Since `startedAt`, for the session cap. */
+    intervalsAwarded: bigint("intervals_awarded", { mode: "number" })
+      .notNull()
+      .default(0),
+    /**
+     * Set when the member stopped being eligible at some sample. Cleared when
+     * they become eligible again, so a whole-interval rule can be applied
+     * without keeping a per-sample history.
+     */
+    brokenAt: timestamp("broken_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.guildId, t.userId] })]
+);
+/**
+ * Role rewards already granted.
+ *
+ * Kept separately from the configuration so a reward is not announced or
+ * re-applied twice when an award is retried, and so a reward that failed on
+ * permissions can be retried later without losing the fact that it was owed.
+ */
+export const xpRewardGrants = pgTable(
+  "xp_reward_grants",
+  {
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    level: bigint("level", { mode: "number" }).notNull(),
+    roleId: text("role_id").notNull(),
+    /** Null when Discord refused; the row still records that it was owed. */
+    grantedAt: timestamp("granted_at", { withTimezone: true }),
+    error: text("error"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.guildId, t.userId, t.level, t.roleId] }),
+    index("xp_reward_grants_guild_idx").on(t.guildId, t.userId),
+  ]
+);
 export const inventory = pgTable(
   "inventory",
   {
