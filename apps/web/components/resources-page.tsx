@@ -95,6 +95,16 @@ const settings = {
     icon: Rss,
   },
 };
+/** Region names read as the list a reader sees, not as a singular type. */
+const KIND_LISTS: Record<ResourceKind, string> = {
+  panel: "Role panels",
+  rule: "Automod rules",
+  shop: "Shop items",
+  deal: "Deal subscriptions",
+  source: "News sources",
+  route: "Routing rules",
+  case: "Moderation cases",
+};
 export function ResourcesPage({
   section,
 }: {
@@ -859,7 +869,7 @@ export function ResourcesPage({
         <Card>
           <DataTable
             rows={rows}
-            label={`${kindNames[kind]} records`}
+            label={KIND_LISTS[kind]}
             emptyTitle={
               query || filter !== "all"
                 ? "Nothing quite matches"

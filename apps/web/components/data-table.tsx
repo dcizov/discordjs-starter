@@ -319,6 +319,10 @@ export function DataTable<T extends { id: string }>({
     features,
     data: rows,
     columns: columnDefs,
+    // Rows are keyed by their own id, not their position. An index key makes a
+    // re-ordered or refetched list reuse a `<tr>` for a different record, which
+    // closes an open row menu and drops focus.
+    getRowId: (row) => row.id,
     state: {
       sorting,
       pagination: paginationState,

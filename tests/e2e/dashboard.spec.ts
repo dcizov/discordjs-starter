@@ -103,12 +103,16 @@ test("role panels have working create, preview, publish, edit, and delete flows"
 test("moderation rules validate, persist, filter, and delete", async ({
   page,
 }) => {
+  // A name of its own. Playwright retries a failed test in a database that the
+  // first attempt already wrote to, and a fixed name then produces two rows
+  // that only make the retry fail with an ambiguous-locator error.
+  const name = `E2E · Kind conversations ${Date.now().toString(36)}`;
   await visit(page, `${root}/moderation`);
   await page
     .getByRole("button", { name: "Create automod rule", exact: true })
     .click();
   const d = page.getByRole("dialog");
-  await d.getByLabel("Name", { exact: true }).fill("E2E · Kind conversations");
+  await d.getByLabel("Name", { exact: true }).fill(name);
   await chooseOption(d, "What should Orbit watch for?", "Blocked terms");
   await d
     .getByLabel("Blocked terms", { exact: true })
@@ -117,28 +121,26 @@ test("moderation rules validate, persist, filter, and delete", async ({
     .getByRole("button", { name: "Create automod rule", exact: true })
     .click();
   await expect(d).not.toBeVisible();
-  await page
-    .getByPlaceholder("Search automod rules…")
-    .fill("Kind conversations");
+  await page.getByPlaceholder("Search automod rules…").fill(name);
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await page.getByRole("switch", { name: `Toggle ${name}` }).click();
   await expect(
-    page.getByText("E2E · Kind conversations", { exact: true })
-  ).toBeVisible();
-  await page
-    .getByRole("switch", { name: "Toggle E2E · Kind conversations" })
-    .click();
-  await expect(
-    page.getByRole("switch", { name: "Toggle E2E · Kind conversations" })
+    page.getByRole("switch", { name: `Toggle ${name}` })
   ).not.toBeChecked();
-  await page
-    .getByRole("button", { name: "Actions for E2E · Kind conversations" })
-    .click();
+  // The switch persists through a refresh, and the row menu is opened on a
+  // table that is not still re-rendering the response.
+  await visit(page, `${root}/moderation`);
+  await page.getByPlaceholder("Search automod rules…").fill(name);
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: `Toggle ${name}` })
+  ).not.toBeChecked();
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
   await page.getByRole("menuitem", { name: "Delete automod rule" }).click();
   await page
     .getByRole("button", { name: "Delete configuration", exact: true })
     .click();
-  await expect(
-    page.getByText("E2E · Kind conversations", { exact: true })
-  ).not.toBeVisible();
+  await expect(page.getByText(name, { exact: true })).not.toBeVisible();
 });
 test("news sources can be tested, routed, and safely simulated", async ({
   page,
