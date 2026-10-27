@@ -4,7 +4,7 @@ import { useWorkspace } from "./workspace";
 import { historyQueryString } from "@orbit/core/history-query";
 import { DataTable, type Column } from "./data-table";
 import type { FacetFilter } from "./table-facet";
-import { Skeleton } from "./ui/primitives";
+import { ErrorState, Skeleton } from "./ui/primitives";
 export function HistoryTable<T extends { id: string }>({
   kind,
   query = "",
@@ -100,6 +100,11 @@ export function HistoryTable<T extends { id: string }>({
     };
   }, [api, kind, page, pageSize, query, filter, sort, token, retry]);
   const retryRequest = () => setRetry((v) => v + 1);
+  // A first request that failed must not look like a request still in flight:
+  // an endless skeleton is the one state a reader cannot act on. The failure is
+  // reported with the same retry the table uses once rows have arrived.
+  if (error && !result)
+    return <ErrorState detail={error} onRetry={retryRequest} />;
   if (!result)
     return (
       <div className="space-y-4 p-5" aria-label="Loading records">
