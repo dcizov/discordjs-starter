@@ -4,20 +4,23 @@ import {
   type MemberFilter,
 } from "@orbit/core/members-query";
 import type { GuildRole, Member, MembersPage, RosterSync } from "@orbit/core";
+import type { PresentableRole } from "@orbit/core/roles";
 import {
   AlertTriangle,
   CircleCheck,
   RefreshCw,
   Users,
   UserCog,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { DataTable, type Column } from "./data-table";
 import { PageHeader } from "./page-header";
 import type { FacetFilter } from "./table-facet";
 import { useWorkspace } from "./workspace";
 import { IdentityCell } from "./identity/identity-cell";
-import { RoleList } from "./role-badge";
+import { RoleBadge, RoleList } from "./role-badge";
 import { Button } from "./ui/button";
 import {
   Badge,
@@ -55,6 +58,29 @@ export function MembersPage() {
   const [pageSize, setPageSize] = useState(25);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<MemberFilter>("all");
+  /**
+   * Narrow the roster to the members holding one role.
+   *
+   * Set by clicking a role anywhere on this page, which is the role → members
+   * direction of the connected views. It is a filter alongside the existing
+   * ones rather than a separate mode, so sorting and paging keep working and
+   * the operator does not lose their place.
+   */
+  const [roleId, setRoleId] = useState("");
+  /**
+   * Seed the role filter from the URL.
+   *
+   * The roles view links here with `?roleId=…`, so arriving from a role lands
+   * on that role's holders. Mount-only: after that the filter is this page's
+   * own state, and changing it must not fight the address bar or push history
+   * on every keystroke.
+   */
+  const searchParams = useSearchParams();
+  const urlRoleId = searchParams.get("roleId") ?? "";
+  useEffect(() => {
+    if (urlRoleId) setRoleId(urlRoleId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [sort, setSort] = useState<{
     field: "displayName" | "joinedAt" | "username";
     dir: "asc" | "desc";
@@ -68,7 +94,7 @@ export function MembersPage() {
   const [detail, setDetail] = useState<Member | null>(null);
 
   // A new search, filter or ordering means page 1 of the new result set.
-  useEffect(() => setPage(1), [query, filter, pageSize]);
+  useEffect(() => setPage(1), [query, filter, pageSize, roleId]);
 
   useEffect(() => {
     let active = true;
@@ -81,6 +107,7 @@ export function MembersPage() {
         filter,
         sort: sort.field,
         dir: sort.dir,
+        roleId,
       })}`
     )
       .then((next) => {
@@ -97,9 +124,13 @@ export function MembersPage() {
     return () => {
       active = false;
     };
-  }, [api, page, pageSize, query, filter, sort, retry]);
+  }, [api, page, pageSize, query, filter, sort, roleId, retry]);
 
   const sync = result?.sync ?? null;
+  /** The role the directory is narrowed to, if it still exists. */
+  const activeRole = roleId
+    ? (data.guild.roles.find((role) => role.id === roleId) ?? null)
+    : null;
   const counts = result?.counts;
   const retryRequest = () => setRetry((v) => v + 1);
 
@@ -270,6 +301,29 @@ export function MembersPage() {
             ) : null
           }
         />
+        {roleId && (
+          <div className="flex flex-wrap items-center gap-2 px-5 pt-4">
+            <span className="text-[11px] text-muted-foreground">
+              Holding the role
+            </span>
+            {activeRole ? (
+              <RoleBadge role={activeRole} />
+            ) : (
+              <span className="text-[11px] text-muted-foreground">
+                a role this server no longer has
+              </span>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRoleId("")}
+              aria-label="Clear the role filter"
+            >
+              <X size={12} aria-hidden />
+              Clear
+            </Button>
+          </div>
+        )}
         {error && !result ? (
           <ErrorState
             title="The member directory couldn’t load."
@@ -357,6 +411,10 @@ export function MembersPage() {
       <MemberDetail
         member={detail}
         roles={roles}
+        onRoleSelect={(role) => {
+          setRoleId(role.id);
+          setDetail(null);
+        }}
         timezone={data.guild.config.timezone}
         onClose={() => setDetail(null)}
       />
@@ -495,11 +553,20 @@ function MemberDetail({
   roles,
   timezone,
   onClose,
+  onRoleSelect,
 }: {
   member: Member | null;
   roles: Map<string, GuildRole>;
   timezone: string;
   onClose: () => void;
+  /**
+   * Jump to everyone else holding this role.
+   *
+   * Typed as the shared presentable role, not `GuildRole`: the callback only
+   * needs what the badge can supply, and widening it here keeps the shared
+   * component usable from surfaces that hold less than a full guild role.
+   */
+  onRoleSelect?: (role: PresentableRole) => void;
 }) {
   /** Ids held by this member, resolved to roles that still exist. */
   const held = (member?.roles ?? [])
@@ -560,7 +627,7 @@ function MemberDetail({
               </dd>
               <dt className="text-muted-foreground">Roles</dt>
               <dd>
-                <RoleList roles={held} max={8} />
+                <RoleList roles={held} max={8} onRoleSelect={onRoleSelect} />
               </dd>
               <dt className="text-muted-foreground">Identity captured</dt>
               <dd>

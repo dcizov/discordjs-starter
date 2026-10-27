@@ -33,17 +33,42 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 export function RoleBadge({
   role,
   className,
+  onSelect,
 }: {
   role: PresentableRole;
   className?: string;
+  /**
+   * Makes the badge a button. Passed when the surface can act on the role —
+   * for example jumping to the members who hold it. Without it the badge stays
+   * a plain span, so a badge in a table cell is not a focus stop.
+   */
+  onSelect?: (role: PresentableRole) => void;
 }) {
   const swatch = roleSwatch(role.color);
+  const label = role.managed
+    ? `${role.name}, managed by an integration`
+    : role.name;
   return (
     <span
       className={cn(
         "inline-flex max-w-full items-center gap-1.5 whitespace-nowrap rounded-md bg-muted px-2 py-1 text-[11px] font-medium leading-none text-slate-700 dark:text-muted-foreground",
+        onSelect && "transition hover:bg-muted-foreground/20",
         className
       )}
+      {...(onSelect
+        ? {
+            role: "button" as const,
+            tabIndex: 0,
+            "aria-label": label,
+            onClick: () => onSelect(role),
+            onKeyDown: (event: React.KeyboardEvent) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect(role);
+              }
+            },
+          }
+        : {})}
     >
       {/*
         The dot carries the colour. The inset ring is what keeps a near-white
@@ -57,10 +82,7 @@ export function RoleBadge({
       />
       <span className="truncate">{role.name}</span>
       {role.managed && (
-        <>
-          <Bot size={11} aria-hidden className="shrink-0 opacity-70" />
-          <span className="sr-only">Managed by an integration</span>
-        </>
+        <Bot size={11} aria-hidden className="shrink-0 opacity-70" />
       )}
     </span>
   );
@@ -78,12 +100,14 @@ export function RoleList({
   max = 3,
   emptyLabel = "No roles",
   className,
+  onRoleSelect,
 }: {
   roles: readonly PresentableRole[];
   /** How many roles to draw before collapsing the rest. */
   max?: number;
   emptyLabel?: string;
   className?: string;
+  onRoleSelect?: (role: PresentableRole) => void;
 }) {
   if (!roles.length)
     return (
@@ -96,7 +120,7 @@ export function RoleList({
   return (
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
       {visible.map((role) => (
-        <RoleBadge key={role.id} role={role} />
+        <RoleBadge key={role.id} role={role} onSelect={onRoleSelect} />
       ))}
       {overflow.length > 0 && (
         <Tooltip>

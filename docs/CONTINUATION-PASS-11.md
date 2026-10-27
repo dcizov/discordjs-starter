@@ -711,3 +711,114 @@ simulation less faithful, not more consistent.
 No browser is available in this session, so none of these surfaces were looked
 at. The components compile and the suite passes; their rendered appearance is
 unproven.
+
+---
+
+## Slice 12b — connected views: members by role, roles to members
+
+Section 1 asked for views that link into each other. Slice 12a made roles look
+the same everywhere; this slice makes them *reachable* from one another, so a
+reader can move from a role to the people holding it and back without losing
+their place.
+
+### What was added
+
+**A `roleId` parameter threaded through the whole stack.** One parameter, added
+in one place per layer rather than special-cased per surface:
+
+- `packages/core/src/members-query.ts` — `roleId` joins `membersQuerySchema`
+  (still `.strict()`, so an unknown parameter is a 400 rather than a silent
+  no-op), `parseMembersQuery`, and `membersQueryString`. The serializer emits it
+  **only when it is non-empty**, so the common case keeps short URLs instead of
+  advertising a narrowing that is not happening.
+- `packages/db/src/members.ts` — `listMembers` narrows in **both** branches: the
+  demo branch with `m.roles.includes(...)`, the Postgres branch with a jsonb
+  containment test (`roles @> '["…"]'::jsonb`).
+- `apps/web/app/api/[...path]/route.ts` — needed **no change**; it already
+  forwards the whole parsed query, which is the payoff of having one schema.
+
+**A real role → members link.** The roles table in `server-pages.tsx` gained a
+*Members* column with a per-role "View" button that navigates to the directory
+with `roleId` set. `@everyone` is the exception and says *Everyone* instead of
+linking: it is the guild itself, not something anyone is "holding", so a link
+that returns the entire roster would be a misleading narrowing.
+
+**A real members → role link.** `RoleBadge` and `RoleList` take an optional
+`onSelect`. Clicking a role in the members table or in the member detail dialog
+filters the directory to that role and closes the dialog. When no `onSelect` is
+passed the badge stays a plain `span` — the component is used in places where
+clicking means nothing, and a stray focus stop in a table row would be worse
+than no link.
+
+**The filter is visible and clearable.** The directory shows a *"Holding the
+role"* chip with the same badge the rest of the app uses, plus a Clear control.
+If the role has since been deleted the chip says the server no longer has it
+rather than rendering an empty badge. Changing the role resets to page 1,
+because it is a new result set and page 3 of the old one is meaningless.
+
+**`navigate` learned to carry state.** `Workspace.navigate(section, query?)`
+builds search params, so any surface can hand another a starting point without
+the two knowing about each other's internals. The directory seeds `roleId` from
+the URL on mount only — making it follow the address bar continuously would push
+history on every change and fight the page's own state.
+
+### A bug this slice found
+
+`listMembers` rebuilt its query from individual fields
+(`membersQuerySchema.parse({ page, pageSize, … })`) and simply did not list
+`roleId`, so the parameter defaulted to empty and **the filter silently did
+nothing**. The first version of the test passed the filter and got the whole
+roster back. Fixed by adding `roleId: input.roleId ?? ""` to the parse call.
+Worth remembering: a schema field is not honoured by a repository until the
+repository actually passes it through.
+
+### Tests
+
+- `tests/member-directory.test.ts` — four contract cases (round-trip, omission
+  when empty, combination with the other filters, rejection of malformed ids)
+  and three directory cases (narrowing, guild isolation, no-role means
+  everyone).
+- `tests/member-role-filter-db.test.ts` — **new**, six PGlite cases against real
+  SQL, because the demo branch and the SQL branch are two implementations of the
+  same directory. These cover the ways jsonb containment could quietly go wrong:
+  matching a strict **prefix** of a role id, leaking a role across **guilds**,
+  returning nobody for an unheld role, and composition with the presence filters.
+
+### Corrected expectations (stated, not hidden)
+
+Two assertions were updated rather than worked around:
+
+1. The pre-existing `toEqual` on the parsed query in
+   `tests/member-directory.test.ts` listed every field exactly, so adding
+   `roleId` broke it. It now names `roleId: ""` alongside the existing values.
+   The same values are still asserted; the contract genuinely gained a field.
+2. My own snowflake test wrongly expected a 19-digit and then a 20-digit id to
+   be rejected. Discord's range is 17–20 digits, so both are valid. It now uses
+   a 21-digit id for the too-long case.
+3. My first composition test assumed `filter: "all"` excludes departed members.
+   It does not — "all" is genuinely all. The test now asserts the real
+   composition across `all` / `humans` / `departed`.
+
+### What was deliberately not built
+
+Two of section 1's linked views are **not reachable yet** and were not faked:
+
+- **Channel → permission overwrites.** The synced `GuildChannel` does not carry
+  permission overwrites; only `channel-export.ts` reads them, and only for
+  templates. There is no stored data to link to.
+- **Member → moderation cases.** There is no moderation case surface in the
+  dashboard at all, so there is nothing to link from a member to.
+
+Building either would mean inventing data that does not exist.
+
+### Verification
+
+Typecheck clean. `eslint --max-warnings=0` clean on every touched file.
+`npm run format:check` clean. `npm run build:web` succeeds. `npm test`: **1096
+passed / 86 files** (was 1083 / 85).
+
+### Not verified
+
+No browser is available in this session, so no changed UI surface was looked at.
+The new column, the chip and the click-through compile and their logic is
+covered by tests, but their rendered appearance is unproven.

@@ -18,6 +18,7 @@ import {
   parseMembersQuery,
 } from "@orbit/core/members-query";
 import {
+  getGuild,
   getMemberIdentities,
   getRosterSync,
   listMembers,
@@ -68,6 +69,9 @@ describe("member query contract", () => {
       filter: "bots",
       sort: "joinedAt",
       dir: "desc",
+      // Gained when the directory learned to narrow by role; it defaults to
+      // "nothing narrowed", which is what a URL without it means.
+      roleId: "",
     });
     expect(parseMembersQuery(new URLSearchParams())).toMatchObject({
       page: 1,
@@ -96,6 +100,60 @@ describe("member query contract", () => {
   });
 });
 
+describe("member query contract: the role filter", () => {
+  it("round-trips a role id through the URL and back", () => {
+    const parsed = parseMembersQuery(
+      new URLSearchParams(membersQueryString({ roleId: "120000000000000201" }))
+    );
+    expect(parsed.roleId).toBe("120000000000000201");
+  });
+
+  it("leaves the role out of the URL when nothing is narrowed", () => {
+    // An empty filter is the default; putting it in every URL would just make
+    // them longer and imply a narrowing that is not happening.
+    const qs = membersQueryString({ page: 1, roleId: "" });
+    expect(qs).not.toContain("roleId");
+    expect(parseMembersQuery(new URLSearchParams(qs)).roleId).toBe("");
+  });
+
+  it("combines with the other filters rather than replacing them", () => {
+    const parsed = parseMembersQuery(
+      new URLSearchParams(
+        membersQueryString({
+          filter: "bots",
+          sort: "joinedAt",
+          dir: "desc",
+          roleId: "120000000000000201",
+        })
+      )
+    );
+    expect(parsed).toMatchObject({
+      filter: "bots",
+      sort: "joinedAt",
+      dir: "desc",
+      roleId: "120000000000000201",
+    });
+  });
+
+  it("rejects a role id that is not a snowflake", () => {
+    // 17 to 20 digits is Discord's range, so a 19-digit id is valid and must
+    // be accepted; only genuinely malformed ids are refused.
+    for (const bad of [
+      "abc",
+      "123",
+      "1200000000000002",
+      "120000000000000201011",
+      "12000000000000020a",
+      "-120000000000000201",
+    ]) {
+      expect(() => membersQuerySchema.parse({ roleId: bad }), bad).toThrow();
+    }
+    expect(
+      membersQuerySchema.parse({ roleId: "120000000000000201" }).roleId
+    ).toBe("120000000000000201");
+  });
+});
+
 describe("member directory", () => {
   it("pages and searches the synchronized roster", async () => {
     const first = await listMembers(DEMO_GUILD_ID, { page: 1, pageSize: 5 });
@@ -115,6 +173,46 @@ describe("member directory", () => {
     expect(
       (await listMembers(DEMO_GUILD_ID, { query: "sophie.l" })).total
     ).toBe(1);
+  });
+
+  it("narrows to the members holding one role", async () => {
+    // The role → members direction of the connected views: the roles view links
+    // here with ?roleId=… and the directory must land already narrowed.
+    const guild = (await getGuild(DEMO_GUILD_ID))!;
+    const [first, second] = guild.roles;
+
+    const withFirst = await listMembers(DEMO_GUILD_ID, { roleId: first.id });
+    const withSecond = await listMembers(DEMO_GUILD_ID, { roleId: second.id });
+
+    expect(withFirst.total).toBeGreaterThan(0);
+    expect(withSecond.total).toBeGreaterThan(0);
+    // Every returned row really holds the role; this is the assertion that
+    // would catch a filter that narrows on the wrong field.
+    expect(withFirst.rows.every((m) => m.roles.includes(first.id))).toBe(true);
+    expect(withSecond.rows.every((m) => m.roles.includes(second.id))).toBe(
+      true
+    );
+    // Two different roles, two different sets — otherwise the filter is a no-op.
+    expect(withFirst.rows.map((m) => m.userId)).not.toEqual(
+      withSecond.rows.map((m) => m.userId)
+    );
+  });
+
+  it("keeps the role filter inside its own guild", async () => {
+    // Guild isolation: a role id from one server must not select members here.
+    const other = (await getGuild(otherGuild))!;
+    const foreignRole = other.roles[0]?.id;
+    const all = await listMembers(DEMO_GUILD_ID, {});
+    const narrowed = await listMembers(DEMO_GUILD_ID, {
+      roleId: foreignRole,
+    });
+    expect(narrowed.total).toBeLessThan(all.total);
+  });
+
+  it("returns everyone when no role is named", async () => {
+    const all = await listMembers(DEMO_GUILD_ID, {});
+    const emptyRole = await listMembers(DEMO_GUILD_ID, { roleId: "" });
+    expect(emptyRole.total).toBe(all.total);
   });
 
   it("keeps bots, people and departed members apart", async () => {

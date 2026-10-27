@@ -21,6 +21,18 @@ export const membersQuerySchema = z
     filter: z.enum(memberFilters).default("all"),
     sort: z.enum(MEMBER_SORTS).default("displayName"),
     dir: z.enum(["asc", "desc"]).default("asc"),
+    /**
+     * Show only members holding this role.
+     *
+     * Empty means "no role filter". It is a separate parameter rather than an
+     * extension of `filter` because a role narrows the set *in addition to*
+     * humans/bots/departed, and because it arrives from a link that names a
+     * role and should not have to know what the other controls are set to.
+     */
+    roleId: z
+      .string()
+      .regex(/^(\d{17,20})?$/)
+      .default(""),
   })
   .strict();
 
@@ -40,6 +52,7 @@ export function parseMembersQuery(params: URLSearchParams): MembersQuery {
     filter: params.get("filter") ?? "all",
     sort: params.get("sort") ?? "displayName",
     dir: params.get("dir") ?? "asc",
+    roleId: params.get("roleId") ?? "",
   });
 }
 
@@ -51,6 +64,7 @@ export function membersQueryString(input: Partial<MembersQuery>): string {
     filter: input.filter ?? "all",
     sort: input.sort ?? "displayName",
     dir: input.dir ?? "asc",
+    roleId: input.roleId ?? "",
   });
   const params = new URLSearchParams({
     page: String(parsed.page),
@@ -60,5 +74,8 @@ export function membersQueryString(input: Partial<MembersQuery>): string {
     sort: parsed.sort,
     dir: parsed.dir,
   });
+  // Only when it narrows: an empty role filter is the default and would just
+  // make every URL longer.
+  if (parsed.roleId) params.set("roleId", parsed.roleId);
   return params.toString();
 }

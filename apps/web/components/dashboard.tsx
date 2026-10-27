@@ -101,8 +101,13 @@ export function Dashboard({
     setData(d);
   }, [api, section, data.user.id, data.guild.id, router]);
   const navigate = useCallback(
-    (s: string) => {
-      router.push(`/dashboard/${data.guild.id}/${s}`);
+    (s: string, query?: Record<string, string>) => {
+      const search = query
+        ? `?${new URLSearchParams(
+            Object.entries(query).filter(([, v]) => v)
+          ).toString()}`
+        : "";
+      router.push(`/dashboard/${data.guild.id}/${s}${search}`);
       setMobile(false);
     },
     [router, data.guild.id]

@@ -64,7 +64,7 @@ import {
 import { Switch } from "./ui/switch";
 import { useWorkspace } from "./workspace";
 export function ChannelsPage() {
-  const { data } = useWorkspace();
+  const { data, navigate } = useWorkspace();
   const [tab, setTab] = useState("channels");
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
@@ -271,6 +271,32 @@ export function ChannelsPage() {
                         {r.position}
                       </span>
                     ),
+                  },
+                  {
+                    key: "holders",
+                    label: "Members",
+                    /**
+                     * `@everyone` is not a role anyone is *holding* — it is the
+                     * guild itself — so linking to a filtered directory would
+                     * just show the whole roster and imply something was
+                     * narrowed. It says so instead.
+                     */
+                    render: (r) =>
+                      r.id === data.guild.id ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          Everyone
+                        </span>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Show members holding ${r.name}`}
+                          onClick={() => navigate("members", { roleId: r.id })}
+                        >
+                          <UsersRound size={12} aria-hidden />
+                          View
+                        </Button>
+                      ),
                   },
                   {
                     key: "managed",

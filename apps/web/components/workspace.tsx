@@ -17,7 +17,15 @@ export type Workspace = {
     options?: { signal?: AbortSignal; awaitJob?: boolean }
   ) => Promise<T>;
   saveConfig: (config: GuildConfig, optimistic?: boolean) => Promise<void>;
-  navigate: (section: string) => void;
+  /**
+   * Move to another section, optionally carrying query state.
+   *
+   * The query exists so one surface can hand another a starting point — the
+   * roles view sends `roleId` to the member directory, which lands already
+   * narrowed to that role's holders. It is how the connected views keep the
+   * operator's place instead of dropping them on a fresh, empty page.
+   */
+  navigate: (section: string, query?: Record<string, string>) => void;
   setData: React.Dispatch<React.SetStateAction<DashboardData>>;
 };
 export const WorkspaceContext = createContext<Workspace | null>(null);

@@ -334,6 +334,7 @@ export async function listMembers(
     filter: input.filter ?? "all",
     sort: input.sort ?? "displayName",
     dir: input.dir ?? "asc",
+    roleId: input.roleId ?? "",
   });
   const offset = (query.page - 1) * query.pageSize;
   const sync = await getRosterSync(guildId);
@@ -348,6 +349,7 @@ export async function listMembers(
         if (query.filter === "departed") return !m.present;
         return true;
       })
+      .filter((m) => (query.roleId ? m.roles.includes(query.roleId) : true))
       .filter((m) => {
         const term = query.query.trim().toLowerCase();
         if (!term) return true;
@@ -390,6 +392,11 @@ export async function listMembers(
   const term = `%${query.query.replace(/[\\%_]/g, "\\$&")}%`;
   const conditions = [
     eq(s.members.guildId, guildId),
+    // `roles` is a jsonb array of role ids; containment is the indexed form
+    // and reads exactly as "this member holds this role".
+    query.roleId
+      ? (sql`${s.members.roles} @> ${JSON.stringify([query.roleId])}::jsonb` as never)
+      : undefined,
     filterClause(query.filter) as never,
     query.filter === "humans" ? eq(s.members.bot, false) : undefined,
     query.filter === "bots" ? eq(s.members.bot, true) : undefined,
