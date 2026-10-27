@@ -1401,3 +1401,85 @@ same rule as every other dismissal route — ignored while the request is in
 flight, a normal close otherwise. The busy guard, the spinner, the disabled
 destructive button and the caller-owned error handling are unchanged, and no
 second dialog implementation was introduced.
+
+## Pass 9 (2026-10-27): identity consistency and the real table experience
+
+The brief was blunt, and it was right: `npm ci` fixed the install, not the
+implementation. TanStack Table being in `package.json` proves nothing about what
+a reader sees. This pass rebuilt the visible composition of the leaderboard and
+the history screens, and traced every identity surface from the Discord payload
+to the pixel.
+
+### What actually changed
+
+- **Identity had five different causes, not one.** The audit table was built
+  from `/api/guilds/:id/history`, which never selected or projected
+  `actorAvatar`, so a recorded hash could not reach the browser at all. The
+  economy `accounts` row had no avatar column, so the leaderboard, ledger, music
+  queue and member picker had nothing to show. Transfers stored a counterparty
+  id with no name or picture. All three are now recorded and projected with one
+  server-side helper (`withAccountAvatar` / `withAuditAvatarUrl`,
+  `apps/web/lib/dashboard.ts`); no per-row Discord request, no extra scope, and
+  historical audit rows are never refreshed with a current profile.
+- **One identity layer.** `components/identity/{actor-avatar,identity-cell}.tsx`
+  is used by the leaderboard, ledger, audit rows and detail dialog, moderation
+  cases, the music queue, the member picker and the account menu. A row with a
+  valid URL always renders the picture; initials only appear when that row has
+  nothing usable, and the row says so ("no avatar captured" / "no avatar
+  recorded"). A system actor gets the Orbit glyph rather than a 404.
+- **The table is the shared one, and it is composed.** Search, faceted filters
+  with honest counts, reset, column visibility, `aria-sort` headers, page size,
+  first/previous/next/last and one range sentence. TanStack owns sorting and
+  paging for complete client lists and runs in manual mode for server-owned
+  history, so a page of seven rows is never re-sorted in the browser and called
+  "sorted by date".
+- **Dead machinery removed.** The unused `selection` prop, the `__select` column
+  and the `SelectCheckbox` helper were deleted: no dataset has a safe multi-row
+  operation, so there is no checkbox to click that does nothing. `getRowId` now
+  keys rows by their own id.
+- **One region name per list** ("Automod rules", not "automod rule records").
+
+### Verification (pass 9, branch `arena/99c6cf65-discordjs-starter`)
+
+| Check                                   | Result                                                                                                                      |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`                        | **909 tests in 72 files pass**                                                                                              |
+| `npx tsc --noEmit` (root, `apps/web`)   | pass                                                                                                                        |
+| `npx eslint apps packages tests`        | pass                                                                                                                        |
+| `npm run format:check`                  | pass                                                                                                                        |
+| `npm run build:web`                     | pass, 25 documentation pages prerendered                                                                                    |
+| CI `verify` + `containers` on `76c1e9b` | **success on both the push run and the PR run** — `80 passed, 5 skipped`, ~2 min                                            |
+| Earlier CI in this pass                 | `3b983ea` 7 failed → `a79b2ab` 4 → `2418404` 2 → `dddf4b6` 1 → `9846539` 1 → `c68bcef` 1 (one shard only) → `76c1e9b` green |
+
+Each failing browser run was read through the Checks API annotations (the log
+and artifact downloads are not reachable from this sandbox) and fixed at the
+cause: a facet addressed by a role the command list does not expose, cells read
+while a server response was replacing them, an audit expectation that depended
+on which row happened to be on page 1 of a database other specs write to, a
+stubbed history endpoint that ignored the `query` parameter, and an automod test
+that collided with the row its own failed attempt left behind on retry. No
+assertion was weakened, no sleep or retry was added to hide a race.
+
+### What was not verified
+
+**No pixels were reviewed.** There is no browser in this sandbox
+(`npx playwright install chromium` fails, no display), the CI screenshot artifact
+cannot be downloaded here, and the screenshots in the brief could only inform the
+target composition. Every "verified" above means an assertion passed. The mobile
+check is a 390 px viewport assertion that the page does not scroll sideways and
+that the facet and the sortable header still work — not an eyeball review of
+spacing or colour in either theme.
+
+Deliberately not built: row selection and bulk actions, drag-and-drop ordering,
+task-specific columns from the shadcn tasks example, and the dashboard block's
+chart/drawer scaffolding (a different primitive family). The mapping table lives
+in `docs/DASHBOARD-WORKFLOWS.md`.
+
+### Still deferred after pass 9
+
+The real member list, the SponsorBlock guild UI, LavaSearch/lyrics, `<label for>`
+associations on the remaining switches, and the mobile-overflow slug list. The
+music queue rows and the overview selectors now share the identity cell, but the
+queue itself is still a list rather than the table foundation — a deliberate
+choice (five controls per row, not five columns), not an oversight. No PR was
+opened; everything stays on `arena/99c6cf65-discordjs-starter`.

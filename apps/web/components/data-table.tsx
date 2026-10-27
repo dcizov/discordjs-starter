@@ -39,7 +39,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { Checkbox } from "./ui/checkbox";
 import { EmptyState, ErrorState, FormSelect, Input } from "./ui/primitives";
 import { FacetFilterButton, type FacetFilter } from "./table-facet";
 import {
@@ -149,12 +148,6 @@ export type DataTableProps<T extends { id: string }> = {
   onRetry?: () => void;
   /** Accessible name for the scrollable region around the table. */
   label?: string;
-  /** Optional row-selection state, only for tables with a real bulk action. */
-  selection?: {
-    selected: string[];
-    onChange: (ids: string[]) => void;
-    label?: string;
-  };
   /** Per-row overflow menu rendered in a trailing cell. */
   rowActions?: {
     label: (row: T) => string;
@@ -183,7 +176,6 @@ export function DataTable<T extends { id: string }>({
   error = "",
   onRetry,
   label,
-  selection,
   rowActions,
   toolbar,
   footerNote,
@@ -256,48 +248,8 @@ export function DataTable<T extends { id: string }>({
         enableSorting: false,
       });
     }
-    if (selection) {
-      defs.unshift({
-        id: "__select",
-        header: () => (
-          <SelectCheckbox
-            label={selection.label ?? "Select every row on this page"}
-            checked={
-              rows.length > 0 &&
-              rows.every((row) => selection.selected.includes(row.id))
-            }
-            onChange={(checked) =>
-              selection.onChange(
-                checked
-                  ? Array.from(
-                      new Set([...selection.selected, ...rows.map((r) => r.id)])
-                    )
-                  : selection.selected.filter(
-                      (id) => !rows.some((r) => r.id === id)
-                    )
-              )
-            }
-          />
-        ),
-        cell: ({ row }) => (
-          <SelectCheckbox
-            label={`Select row ${row.original.id}`}
-            checked={selection.selected.includes(row.original.id)}
-            onChange={(checked) =>
-              selection.onChange(
-                checked
-                  ? [...selection.selected, row.original.id]
-                  : selection.selected.filter((id) => id !== row.original.id)
-              )
-            }
-          />
-        ),
-        enableHiding: false,
-        enableSorting: false,
-      });
-    }
     return defs;
-  }, [columns, rowActions, selection, rows, server]);
+  }, [columns, rowActions, server]);
 
   const totalItems = pagination?.total ?? rows.length;
   const pageIndex = server ? Math.max(0, pagination!.page - 1) : clientPage;
@@ -505,7 +457,6 @@ export function DataTable<T extends { id: string }>({
                               : undefined
                           }
                           className={cn(
-                            header.id === "__select" && "w-10 pr-0",
                             header.id === "__actions" && "w-10 text-right",
                             column?.align === "right" && "text-right",
                             column?.className
@@ -546,14 +497,7 @@ export function DataTable<T extends { id: string }>({
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    data-state={
-                      selection?.selected.includes(row.original.id)
-                        ? "selected"
-                        : undefined
-                    }
-                  >
+                  <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => {
                       const column = columns.find(
                         (c) => c.key === cell.column.id
@@ -562,7 +506,6 @@ export function DataTable<T extends { id: string }>({
                         <TableCell
                           key={cell.id}
                           className={cn(
-                            cell.column.id === "__select" && "w-10 pr-0",
                             cell.column.id === "__actions" && "text-right",
                             column?.align === "right" &&
                               "text-right tabular-nums",
@@ -609,24 +552,6 @@ export function DataTable<T extends { id: string }>({
         </div>
       )}
     </div>
-  );
-}
-
-function SelectCheckbox({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <Checkbox
-      aria-label={label}
-      checked={checked}
-      onCheckedChange={(value) => onChange(value === true)}
-    />
   );
 }
 

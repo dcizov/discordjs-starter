@@ -36,11 +36,11 @@ interacted themselves.
 
 **Policy.**
 
-- *Current identity* (leaderboard, transaction history, member picker, account
+- _Current identity_ (leaderboard, transaction history, member picker, account
   menu): whatever the bot last captured for that account. It is refreshed the
   next time the member earns, spends or receives something; no profile is
   fetched to decorate a list.
-- *Historical identity* (audit rows and their detail dialog): the hash recorded
+- _Historical identity_ (audit rows and their detail dialog): the hash recorded
   with the action, never overwritten by a later profile change. A row written
   before avatars were captured keeps initials and says so.
 - An unusable hash yields `null` rather than a URL that would 404, and demo
@@ -71,13 +71,79 @@ Every dataset table renders one shared foundation
 - **Column controls**: a "Columns" menu that cannot hide the row's identity
   column; numeric columns are right-aligned and tabular.
 
-Reference mapping (shadcn *tasks* table): search toolbar ✔, faceted filters ✔
+Reference mapping (shadcn _tasks_ table): search toolbar ✔, faceted filters ✔
 (counts only when known), column visibility ✔, sortable headers with `aria-sort`
 ✔, pagination + page size + disabled edge states ✔, row actions ✔, tabs with
 counts where a real count exists ✔. Deliberately absent: row selection and bulk
 actions (no dataset has a safe multi-row operation; audit rows are append-only
 evidence), drag-and-drop (no persisted ordering), and the task-specific
 priority/status/label columns (Orbit has no such fields).
+
+### Identity, surface by surface
+
+The pass started from the screenshots: the economy leaderboard drew a bare
+initial where the audit log already had real pictures. Tracing each surface from
+the Discord payload to the rendered pixel found five different causes, not one.
+
+| Surface                       | Identity before                                                            | Where the picture was lost                                                                                      | Now                                                                                                                                 |
+| ----------------------------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Account menu                  | Discord global avatar from the session, through the shared `IdentityImage` | Nothing lost                                                                                                    | Unchanged primitive; the server switcher keeps guild icons                                                                          |
+| Server switcher               | Guild icon                                                                 | Nothing lost                                                                                                    | Unchanged (a guild is not a person)                                                                                                 |
+| Dashboard activity feed       | Initials unless the audit snapshot stored a hash                           | Snapshot projection only                                                                                        | Recorded hash from the same row, through `ActorAvatar`                                                                              |
+| Audit log (paged `/history`)  | Initials always                                                            | The `/history` route never selected or projected `actorAvatar` — the URL could not exist even when the hash did | Route maps rows through `withAuditAvatarUrl`; the table renders `actorAvatarUrl`                                                    |
+| Audit event detail dialog     | Actor id as text                                                           | Same projection gap                                                                                             | Same identity cell as the row, plus the recorded hash in the detail text                                                            |
+| Economy leaderboard           | Initials always                                                            | `accounts` had no avatar column at all                                                                          | `accounts.avatar` hash captured on daily/activity/transfer/purchase; `loadDashboard()` derives `avatarUrl` server-side              |
+| Transaction history           | Initials always, and `"Unknown member"` for a counterparty not in the list | Ledger rows store ids only; the account lookup only covered the current page of accounts                        | Row identifies the account from the same authorized snapshot; a counterparty the snapshot does not hold says "not in this snapshot" |
+| Member picker (send currency) | Plain text options                                                         | The combobox primitive had no identity slot                                                                     | `Combobox` accepts `person` and renders the same `ActorAvatar`                                                                      |
+| Music requester / queue       | Initials always                                                            | Music state stores requester **ids**; the page looked them up in `data.accounts`, which had no avatar           | Same account snapshot + `IdentityCell`; missing capture stays missing, never a lookup                                               |
+| Moderation cases              | `targetId` mono text                                                       | A case stores who it was about, not their picture                                                               | Picture only when this guild's own account data already knows the member; otherwise the id, honestly                                |
+| Other bot/system actors       | Initials                                                                   | System actors have no avatar                                                                                    | The Orbit glyph; no URL that would 404                                                                                              |
+
+Cropping (`object-cover` inside a fixed square slot) was already correct in the
+shared primitive and was kept, not rewritten. What changed around it is the
+policy: a row with a valid recorded or captured URL always renders the picture,
+and initials appear only when that row has no usable source or its own request
+fails — never as a blanket style for a whole table.
+
+### What was verified, and what was not
+
+- **Assertions passed** (`npx vitest run`, 72 files / 909 tests; the browser
+  suite in CI at `76c1e9b`: `80 passed, 5 skipped` in the main run, plus a
+  five-test shard). Unit tests cover the
+  projection (`tests/dashboard-identity.test.ts`: recorded avatar, current
+  identity updated by a later interaction, absent avatar, unusable hash, animated
+  hash, demo persona, system actor).
+- **Pixels not reviewed.** No browser could be launched in this environment
+  (`npx playwright install chromium` fails, and the sandbox has no display), so
+  the screenshots supplied with the brief could only be used as a _description_
+  of the target composition, and the CI screenshot job produces artifacts that
+  could not be opened here either. Nothing in this document claims a visual
+  review; the word "verified" below always means "an assertion passed".
+- **Not measured:** frame timing of the hero animation, real Discord requests
+  (demo mode only), and a live-mode profile whose avatar changes between two
+  interactions.
+
+### Visible table changes, per dataset
+
+| Dataset                     | Before                                                                                                | After                                                                                                                                                                                                                                                                                                                        |
+| --------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Economy leaderboard         | Fixed-height card, medal column, "top contributors by balance" footer, no page-size control, initials | Content-height card; rank number first (medal only decorates the top three, rank is announced in words); real avatars; "You" marker; search; sortable name and balance; real page size; one footer range ("Showing 1–8 of 8"), with a "top 8 of N contributors" note only when the snapshot is smaller than the server total |
+| Transaction history         | Client-only sort of one server page; no type filter; "Unknown member"                                 | Server sort and paging; type facet; counterparty identity from the snapshot or an honest "not in this snapshot"; one footer count                                                                                                                                                                                            |
+| Audit log                   | Search only; identity always initials                                                                 | Action facet (canonical verbs plus any verb the log actually contains); recorded avatars; "no avatar recorded" where nothing was captured; expandable detail dialog; server sort and paging                                                                                                                                  |
+| Delivery history / cases    | Same shared table, no facet on deliveries                                                             | Status/action facets with counts where the caller can count them; no invented counts for server-owned lists                                                                                                                                                                                                                  |
+| Channels / roles            | Complete list rendered in full, page controls present, channel-type facet, sortable headers           | Same rendering; the page-size condition is now named `pagedClient` (readability only, no behavioural change). This pass added a 390 px check that the page itself never scrolls sideways                                                                                                                                     |
+| Resources (rules, sources…) | Region named "automod rule records"                                                                   | Region named after the list ("Automod rules"); rows keyed by their own id (`getRowId`) so a re-render maps the same record to the same row                                                                                                                                                                                   |
+
+### Features deliberately not built
+
+Row selection, bulk actions and checkboxes (no dataset has a safe multi-row
+operation, and audit rows are append-only evidence — the unused `selection` prop
+was deleted rather than left as a dead control); drag-and-drop ordering (no
+persisted order to drag); the tasks example's status/priority/label/assignee
+columns (Orbit has no such fields); "N of M rows selected" (nothing can be
+selected); a second "N records" line (the range sentence is the count);
+chart/drawer scaffolding from `dashboard-01` (different primitive family, and the
+responsive table already works at 390 px).
 
 ## Audit identity images
 
