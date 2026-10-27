@@ -11,6 +11,7 @@ export const commandModuleLabels: Record<CommandModule, string> = {
   news: "News & feeds",
   polls: "Native polls",
   announcements: "Announcements",
+  xp: "Leveling",
 };
 export type CommandArgument = {
   name: string;

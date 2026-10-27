@@ -9,6 +9,7 @@ import { logger } from "@orbit/core/logger";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { onInteraction } from "../interactions/dispatch";
 import { onMessage } from "../features/moderation/messages";
+import { awardMessageXp, noteVoiceState } from "../features/leveling/earn";
 import { handleReaction } from "../features/roles/panels";
 import type { MusicService } from "../features/music/service";
 import { removeGuild, syncGuild } from "../infrastructure/guild-sync";
@@ -53,6 +54,23 @@ export function attachGatewayEvents(
       logger.error(
         { guildId: message.guildId, error: errorDiagnostic(error) },
         "Message handling failed"
+      )
+    );
+    // XP runs alongside moderation rather than inside it: a message that trips
+    // a rule is still a message, and one handler failing must not stop the
+    // other from running.
+    void awardMessageXp(message).catch((error) =>
+      logger.warn(
+        { guildId: message.guildId, error: errorDiagnostic(error) },
+        "Message XP failed"
+      )
+    );
+  });
+  listen(Events.VoiceStateUpdate, (before, after) => {
+    void noteVoiceState(before, after).catch((error) =>
+      logger.warn(
+        { guildId: after.guild.id, error: errorDiagnostic(error) },
+        "Voice XP session update failed"
       )
     );
   });

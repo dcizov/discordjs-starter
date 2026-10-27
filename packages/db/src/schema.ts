@@ -328,6 +328,15 @@ export const xpTotals = pgTable(
     adjustedXp: bigint("adjusted_xp", { mode: "number" }).notNull().default(0),
     /** Last time a message award landed, for the cooldown. */
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+    /**
+     * Fingerprint of the last counted message, for repetition protection.
+     *
+     * A hash of the normalised content, never the content itself: the system
+     * has no need to keep what anyone said, and keeping it would make the XP
+     * tables the most sensitive data in the database. It only ever needs to
+     * answer "is this the same message as last time".
+     */
+    lastMessageHash: text("last_message_hash"),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -56,6 +56,7 @@ export type DemoState = {
         voiceXp: number;
         adjustedXp: number;
         lastMessageAt: string | null;
+        lastMessageHash: string | null;
         updatedAt: string;
       }
     >;

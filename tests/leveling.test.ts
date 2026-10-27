@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   cappedIntervals,
+  cooldownElapsed,
   defaultVoiceEligibility,
+  messageEarns,
+  normalizeForFingerprint,
   levelFromTotalXp,
   levelProgress,
   rollAward,
@@ -234,5 +237,116 @@ describe("voice channels and intervals", () => {
     // A 10-minute cap at 5-minute intervals is two intervals, not ten.
     expect(cappedIntervals(1, 10, 300).awarded).toBe(true);
     expect(cappedIntervals(2, 10, 300).awarded).toBe(false);
+  });
+});
+
+describe("message eligibility", () => {
+  const rules = {
+    ignoreBots: true,
+    ignoreWebhooks: true,
+    excludedChannelIds: ["555"],
+    excludedRoleIds: ["777"],
+  };
+  const message = (over: Partial<any> = {}) => ({
+    bot: false,
+    webhook: false,
+    channelId: "111",
+    content: "hello there",
+    roleIds: [] as string[],
+    ...over,
+  });
+
+  it("counts an ordinary message", () => {
+    expect(messageEarns(message(), rules).earns).toBe(true);
+  });
+
+  it("skips bots when configured to", () => {
+    expect(messageEarns(message({ bot: true }), rules).earns).toBe(false);
+    expect(
+      messageEarns(message({ bot: true }), { ...rules, ignoreBots: false })
+        .earns
+    ).toBe(true);
+  });
+
+  it("skips webhooks when configured to", () => {
+    expect(messageEarns(message({ webhook: true }), rules).earns).toBe(false);
+    expect(
+      messageEarns(message({ webhook: true }), {
+        ...rules,
+        ignoreWebhooks: false,
+      }).earns
+    ).toBe(true);
+  });
+
+  it("skips excluded channels and roles", () => {
+    expect(messageEarns(message({ channelId: "555" }), rules).earns).toBe(
+      false
+    );
+    expect(messageEarns(message({ roleIds: ["777"] }), rules).earns).toBe(
+      false
+    );
+  });
+
+  it("skips very short messages", () => {
+    // A single emoji or a reaction-as-message is not participation.
+    expect(messageEarns(message({ content: "hi" }), rules).earns).toBe(false);
+    expect(messageEarns(message({ content: "👍" }), rules).earns).toBe(false);
+    expect(messageEarns(message({ content: "     " }), rules).earns).toBe(
+      false
+    );
+    // Whitespace does not pad a message into counting.
+    expect(messageEarns(message({ content: "  hi  " }), rules).earns).toBe(
+      false
+    );
+    expect(messageEarns(message({ content: "hello" }), rules).earns).toBe(true);
+  });
+
+  it("explains itself", () => {
+    const result = messageEarns(message({ bot: true }), rules);
+    expect(result.earns).toBe(false);
+    if (!result.earns) expect(result.reason).toMatch(/Bots do not earn/);
+  });
+});
+
+describe("the message cooldown", () => {
+  const now = new Date("2026-10-27T12:00:00Z");
+
+  it("always counts the first message", () => {
+    expect(cooldownElapsed(null, 60, now)).toBe(true);
+  });
+
+  it("blocks a message inside the window", () => {
+    const last = new Date("2026-10-27T11:59:30Z");
+    expect(cooldownElapsed(last, 60, now)).toBe(false);
+  });
+
+  it("allows a message once the window has passed", () => {
+    const last = new Date("2026-10-27T11:59:00Z");
+    expect(cooldownElapsed(last, 60, now)).toBe(true);
+  });
+
+  it("treats a clock that ran backwards as elapsed", () => {
+    // A restored backup or an NTP step must not lock a member out of XP
+    // forever.
+    const future = new Date("2027-01-01T00:00:00Z");
+    expect(cooldownElapsed(future, 60, now)).toBe(true);
+  });
+
+  it("survives an unparseable timestamp", () => {
+    expect(cooldownElapsed("not a date", 60, now)).toBe(true);
+  });
+});
+
+describe("the repetition fingerprint", () => {
+  it("matches messages that differ only in case and spacing", () => {
+    expect(normalizeForFingerprint("Hello   There")).toBe(
+      normalizeForFingerprint("  hello there ")
+    );
+  });
+
+  it("distinguishes different messages", () => {
+    expect(normalizeForFingerprint("hello there")).not.toBe(
+      normalizeForFingerprint("hello them")
+    );
   });
 });

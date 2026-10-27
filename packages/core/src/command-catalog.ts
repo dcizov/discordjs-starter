@@ -42,6 +42,12 @@ const moduleRoots: Record<CommandModule, readonly string[]> = {
   deals: ["deals"],
   news: ["news"],
   polls: ["poll"],
+  /**
+   * `top` is the XP leaderboard and is deliberately not called `leaderboard`:
+   * that root already belongs to the economy, and two modules shipping the
+   * same root would make the help catalog and autocomplete ambiguous.
+   */
+  xp: ["rank", "top", "xp"],
   announcements: ["announce"],
 };
 function moduleFor(root: string): CommandModule {

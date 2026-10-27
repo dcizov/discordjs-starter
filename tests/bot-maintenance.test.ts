@@ -51,8 +51,10 @@ describe("owned bot maintenance", () => {
     expect(f.state).toHaveBeenCalledOnce();
     // One sweep at startup, after the guild list is known.
     expect(f.roster).toHaveBeenCalledOnce();
-    // Heartbeat, guild snapshot and roster reconciliation.
-    expect(vi.getTimerCount()).toBe(3);
+    // Heartbeat, guild snapshot, roster reconciliation and the voice XP tick.
+    // The fourth arrived with leveling, and it is owned here like the others
+    // so a shutdown clears it rather than leaving it running.
+    expect(vi.getTimerCount()).toBe(4);
     await vi.advanceTimersByTimeAsync(30000);
     expect(f.beat).toHaveBeenCalledTimes(2);
     // The hourly sweep is not the 30-second beat: nothing extra yet.

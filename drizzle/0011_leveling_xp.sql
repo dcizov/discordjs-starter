@@ -26,6 +26,7 @@ CREATE TABLE "xp_totals" (
 	"voice_xp" bigint DEFAULT 0 NOT NULL,
 	"adjusted_xp" bigint DEFAULT 0 NOT NULL,
 	"last_message_at" timestamp with time zone,
+	"last_message_hash" text,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "xp_totals_guild_id_user_id_pk" PRIMARY KEY("guild_id","user_id")
 );

@@ -259,3 +259,96 @@ export function cappedIntervals(
     return { awarded: true, exhausted: false };
   return { awarded: false, exhausted: true };
 }
+
+// ---------------------------------------------------------------------------
+// Message eligibility
+// ---------------------------------------------------------------------------
+
+/**
+ * Shortest message that counts.
+ *
+ * Below this, "participation" is a single emoji or a reaction-as-message, and
+ * counting it makes the leaderboard measure keystrokes.
+ */
+export const MIN_MESSAGE_CHARS = 5;
+
+export type MessageEligibilityInput = {
+  bot: boolean;
+  webhook: boolean;
+  channelId: string;
+  content: string;
+  /** The member's role ids, for exclusions. */
+  roleIds: readonly string[];
+};
+
+export type MessageEligibilityRules = {
+  ignoreBots: boolean;
+  ignoreWebhooks: boolean;
+  excludedChannelIds: readonly string[];
+  excludedRoleIds: readonly string[];
+};
+
+export type MessageEligibility =
+  { earns: true } | { earns: false; reason: string };
+
+/**
+ * Whether a message is worth an award at all, before any XP is involved.
+ *
+ * Every branch is a reason to do nothing. Returning a reason rather than a
+ * bare boolean means a member can be told why a message did not count, and
+ * means a future "why did I not level?" command has something to say.
+ */
+export function messageEarns(
+  input: MessageEligibilityInput,
+  rules: MessageEligibilityRules
+): MessageEligibility {
+  if (input.bot && rules.ignoreBots)
+    return { earns: false, reason: "Bots do not earn experience." };
+  if (input.webhook && rules.ignoreWebhooks)
+    return { earns: false, reason: "Webhook messages do not earn experience." };
+  if (rules.excludedChannelIds.includes(input.channelId))
+    return { earns: false, reason: "This channel is excluded from XP." };
+  if (input.roleIds.some((id) => rules.excludedRoleIds.includes(id)))
+    return {
+      earns: false,
+      reason: "A role this member holds is excluded from XP.",
+    };
+  const content = (input.content ?? "").replace(/\s+/g, " ").trim();
+  if (content.length < MIN_MESSAGE_CHARS)
+    return {
+      earns: false,
+      reason: `A message must be at least ${MIN_MESSAGE_CHARS} characters.`,
+    };
+  return { earns: true };
+}
+
+/** Normalised content, for the repetition fingerprint. Never stored. */
+export function normalizeForFingerprint(content: string): string {
+  return (content ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/**
+ * Whether enough time has passed since the last counted message.
+ *
+ * `lastMessageAt` of null means never, so the first message always counts.
+ * A clock that ran backwards (a restored backup, an NTP step) is treated as
+ * "enough time" rather than locking the member out.
+ */
+export function cooldownElapsed(
+  lastMessageAt: string | Date | null,
+  cooldownSeconds: number,
+  now: Date = new Date()
+): boolean {
+  if (!lastMessageAt) return true;
+  const last =
+    lastMessageAt instanceof Date
+      ? lastMessageAt.getTime()
+      : new Date(lastMessageAt).getTime();
+  if (!Number.isFinite(last)) return true;
+  const elapsed = now.getTime() - last;
+  // A negative elapsed means the clock moved backwards — a restored backup or
+  // an NTP step. Blocking the member until the clock catches up would lock
+  // them out of XP for however long the skew lasts, so it counts as elapsed.
+  if (elapsed < 0) return true;
+  return elapsed >= cooldownSeconds * 1000;
+}

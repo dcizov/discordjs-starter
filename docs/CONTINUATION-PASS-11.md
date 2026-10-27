@@ -945,7 +945,7 @@ once.
 ### Research (checked 2026-10-27)
 
 **MEE6** documents the per-level cost as `5 * lvl^2 + 50 * lvl + 100`, where
-`lvl` is the *current* level, and publishes a table whose first row is "level
+`lvl` is the _current_ level, and publishes a table whose first row is "level
 0, 100 needed, 0 total". Source: `github.com/Mee6/Mee6-documentation`,
 `docs/levels_xp.md`. Message XP is a random 15–25, once per 60 seconds.
 
@@ -966,7 +966,7 @@ against the brute-force sum of per-level costs for every level from 0 to 1000.
 
 **Dyno** was researched but its curve could not be verified: the search
 returned only third-party comparisons and a documentation landing page, with
-no published formula. Dyno's curve is therefore *not* a source for this
+no published formula. Dyno's curve is therefore _not_ a source for this
 implementation, and that is recorded rather than papered over.
 
 **Voice XP**, from maintained implementations (Atlas, Wabbit, DraftBot,
@@ -1029,8 +1029,7 @@ parent, skipping 0008. Migration 0009 is a data-only `UPDATE` that changes no
 schema, so its snapshot was evidently written by copying 0008's file — `id`
 included — rather than by drizzle-kit.
 
-Repaired by giving 0009 its own id and re-linking the chain 0008 → 0009 →
-0010. **No SQL changed, and the journal's tags and timestamps are untouched**,
+Repaired by giving 0009 its own id and re-linking the chain 0008 → 0009 → 0010. **No SQL changed, and the journal's tags and timestamps are untouched**,
 so the runtime migrator (which tracks by journal tag) is unaffected; only
 drizzle-kit's snapshot chain was broken. The snapshot files are metadata for
 the generator, not something a database reads.
@@ -1042,7 +1041,7 @@ configuration through a `.strict()` schema, so a new module key is an
 "unrecognized key". Two changes:
 
 - `xp` added to the template `modules` schema.
-- An entry in the template's `omitted` list, because the XP *settings* point at
+- An entry in the template's `omitted` list, because the XP _settings_ point at
   channels and roles by id and carrying them across would produce dangling
   references or reward levels against the wrong roles. The module travels as an
   on/off switch; the settings do not. Saying so beats shipping a template that
@@ -1064,3 +1063,103 @@ scratch.
 No live Discord server, so no message or voice XP has been earned for real.
 The rules and the storage are tested; the gateway event handlers that call them
 do not exist yet.
+
+---
+
+## Slice 13b — earning XP from messages and voice
+
+### Message XP
+
+`awardMessageXp` runs alongside moderation on `MessageCreate`, not inside it:
+a message that trips a rule is still a message, and one handler throwing must
+not stop the other.
+
+The decision itself lives in `@orbit/core/leveling` as `messageEarns`, taking
+plain data rather than a Discord `Message`, so every branch is testable. It
+skips bots and webhooks per configuration, excluded channels and roles, and
+anything under five characters — below that, "participation" is a single emoji
+and the leaderboard starts measuring keystrokes.
+
+The idempotency key is the message id. An **edit fires `MessageUpdate`, not
+`MessageCreate`**, so an edit cannot earn twice, and a redelivered event
+collides and loses.
+
+**Deletion does not claw XP back.** Reversing an award would make a member's
+level oscillate on someone else's delete, and would let a member farm and then
+scrub their way to a clean history. The award stands — and since XP cannot be
+spent, a clawback would only ever be cosmetic anyway.
+
+Repetition protection keeps a **fingerprint of the normalised content, never
+the content**. The XP tables were at risk of becoming the most sensitive data
+in the database; they now only ever answer "is this the same message as last
+time".
+
+### Voice XP
+
+`VoiceStateUpdate` opens, closes and reopens sessions — a channel move is a
+leave and a join, which is what makes "in one channel for the whole interval"
+a meaningful question. A 30-second ticker pays out.
+
+The award key is derived from the session's own start and interval length
+rather than from "now", so a restart or a duplicate tick cannot invent a new
+key for the same interval and pay twice.
+
+**The restart rule is the important one.** On startup every open session is
+marked broken, because nothing that happened while the process was down can be
+vouched for. Without this the bot would wake up, see a session that began six
+hours ago, and credit offline time. The next award waits for a whole interval
+that was actually observed.
+
+The AFK channel never earns, but its session stays open so moving back to a
+real channel resumes cleanly. A session cap is enforced before the award, and
+the interval is still recorded so the window advances rather than leaving the
+member stuck on one interval forever.
+
+`GuildVoiceStates` and `MessageContent` were both already in the gateway intent
+list, so no intent change was needed.
+
+### Command module root
+
+`xp` registered in `CommandModule`, `moduleRoots` and `commandModuleLabels`.
+
+The XP leaderboard is called **`top`, deliberately not `leaderboard`** — that
+root already belongs to the economy, and two modules shipping the same root
+would make the help catalog and autocomplete ambiguous. Planned roots: `rank`,
+`top`, `xp`.
+
+### Two couplings worth knowing about
+
+`GuildConfig` in `packages/core/src/types.ts` is maintained **by hand** next to
+the zod schema in `config.ts`. Adding a module means editing both, and the
+compiler only catches it indirectly. The same is true of
+`CommandModule`, which is derived from `ModuleKey` — adding a module
+immediately breaks the command catalog, the help docs map and the overview
+toolkit, which is a useful forcing function but a noisy one.
+
+### Corrected expectations
+
+`tests/bot-maintenance.test.ts` asserted the maintenance loop creates exactly
+three timers. It now creates four, because the voice ticker is owned there like
+the others so a shutdown clears it. Updated to 4 with a comment rather than
+worked around — the test's intent (every timer is cleared on abort) is
+unchanged, and the final assertion that zero remain after abort still holds.
+
+A test also caught the implementation disagreeing with its own documented
+intent: `cooldownElapsed` returned false for a negative elapsed time, which
+would lock a member out of XP for as long as a clock skew lasted after a
+restored backup or an NTP step. The implementation now matches the comment.
+
+### Verification
+
+Typecheck clean. `eslint --max-warnings=0` clean on every touched file.
+`format:check` clean. `build:web` succeeds. `npm test`: **1168 passed / 89
+files** (was 1155 / 89), +13 for the message eligibility, cooldown and
+fingerprint rules.
+
+### Not verified
+
+No live Discord server, so no message or voice XP has been earned for real.
+The rules are tested and the gateway handlers are wired, but Discord's actual
+event stream is unproven here. The commands (`rank`, `top`, `xp`) are
+registered in the catalog but **not yet implemented**, and the dashboard has no
+leveling surface yet.

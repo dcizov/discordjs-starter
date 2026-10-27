@@ -4,12 +4,13 @@ import type { ModuleKey } from "@orbit/core";
 import { moduleSetup } from "@orbit/core/module-setup";
 import {
   ArrowUpRight,
-  UsersRound,
-  ShieldCheck,
-  Wallet,
   Music2,
-  Tags,
   Rss,
+  ShieldCheck,
+  Sparkles,
+  Tags,
+  UsersRound,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn, number } from "@/lib/utils";
@@ -88,6 +89,14 @@ const modules: {
     color: "text-blue-500",
     bg: "bg-blue-50 dark:bg-blue-500/10",
   },
+  {
+    key: "xp",
+    name: "Leveling",
+    description: "XP and levels, kept apart from currency.",
+    icon: Sparkles,
+    color: "text-amber-600 dark:text-amber-300",
+    bg: "bg-amber-50 dark:bg-amber-500/10",
+  },
 ];
 export function OverviewToolkit() {
   const { data, navigate, saveConfig } = useWorkspace();
@@ -117,6 +126,9 @@ export function OverviewToolkit() {
         : setups.music.label,
     deals: `${data.resources.filter((r) => r.kind === "deal" && r.enabled).length} active subscriptions`,
     news: `${data.resources.filter((r) => r.kind === "source").length} sources, one home for updates`,
+    xp: config.xp.rewards.length
+      ? `${config.xp.rewards.length} level ${config.xp.rewards.length === 1 ? "reward" : "rewards"} configured`
+      : "Levels earned, no rewards set yet",
   };
   async function toggleModule(key: ModuleKey, value: boolean) {
     setToggling(key);

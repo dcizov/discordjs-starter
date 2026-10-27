@@ -3,6 +3,11 @@ import { emptyMusic, putMusicState, setHealth } from "@orbit/db";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import type { MusicService } from "../features/music/service";
+import {
+  breakSessionsAfterRestart,
+  tickVoiceXp,
+  VOICE_TICK_MS,
+} from "../features/leveling/earn";
 import { syncGuild } from "./guild-sync";
 import { reconcileRosters } from "./roster-sync";
 
@@ -72,6 +77,30 @@ export async function startMaintenance(
         )
     );
   track(reconcile(), "Roster reconciliation failed");
+  /*
+    Voice XP has to be restarted honestly. Every open session is marked broken
+    before the first tick, because nothing that happened while the process was
+    down can be vouched for — paying it out would credit offline hours. The
+    next award then waits for a whole interval that was actually observed.
+  */
+  track(
+    breakSessionsAfterRestart(client).then((broken) => {
+      if (broken)
+        logger.info(
+          { broken },
+          "Voice XP sessions marked unobserved after start"
+        );
+    }),
+    "Voice XP restart reconciliation failed"
+  );
+  const voiceTimer = setInterval(
+    () =>
+      track(
+        tickVoiceXp(client).then(() => undefined),
+        "Voice XP tick failed"
+      ),
+    VOICE_TICK_MS
+  );
   const rosterTimer = setInterval(
     () => track(reconcile(), "Roster reconciliation failed"),
     3600000
@@ -80,6 +109,7 @@ export async function startMaintenance(
     clearInterval(heartbeat);
     clearInterval(syncTimer);
     clearInterval(rosterTimer);
+    clearInterval(voiceTimer);
   }
   signal.addEventListener("abort", clear, { once: true });
   return async () => {

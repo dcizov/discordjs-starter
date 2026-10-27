@@ -8,7 +8,8 @@ export type ModuleKey =
   | "deals"
   | "news"
   | "polls"
-  | "announcements";
+  | "announcements"
+  | "xp";
 export type ResourceKind =
   "panel" | "rule" | "case" | "shop" | "deal" | "source" | "route";
 export type Resource = {
@@ -68,6 +69,36 @@ export type GuildConfig = {
     exemptRoleIds: string[];
     escalationThreshold: number;
     escalationMinutes: number;
+  };
+  /**
+   * Leveling. Kept in step with the `xp` section of the config schema by hand,
+   * which is a duplication worth knowing about: adding a field means editing
+   * both this type and `configSchema`.
+   */
+  xp: {
+    messageEnabled: boolean;
+    messageMin: number;
+    messageMax: number;
+    messageCooldownSeconds: number;
+    voiceEnabled: boolean;
+    voiceMin: number;
+    voiceMax: number;
+    voiceIntervalSeconds: number;
+    voiceMinParticipants: number;
+    voiceAllowSelfMute: boolean;
+    voiceAllowSelfDeaf: boolean;
+    voiceAllowServerMute: boolean;
+    voiceAllowServerDeaf: boolean;
+    voiceSessionCapMinutes: number;
+    ignoreBots: boolean;
+    ignoreWebhooks: boolean;
+    excludedChannelIds: string[];
+    excludedRoleIds: string[];
+    announceEnabled: boolean;
+    announceChannelId: string;
+    announceMessage: string;
+    rewards: { level: number; roleId: string }[];
+    rewardStack: boolean;
   };
   dashboard: { showHero: boolean; showActivity: boolean; showToolkit: boolean };
 };

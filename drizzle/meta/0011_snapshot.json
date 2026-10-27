@@ -1,5 +1,5 @@
 {
-  "id": "ba317a8c-2b0b-43df-b6e6-0f04f459fdb8",
+  "id": "04c7646f-d13e-455f-b9a4-f0661f3b0b5d",
   "prevId": "4786b1cc-52b2-4ea3-a8a5-9af8b729f367",
   "version": "7",
   "dialect": "postgresql",
@@ -2227,6 +2227,12 @@
         "last_message_at": {
           "name": "last_message_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_message_hash": {
+          "name": "last_message_hash",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

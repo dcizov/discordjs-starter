@@ -29,6 +29,7 @@ export type XpTotal = {
   voiceXp: number;
   adjustedXp: number;
   lastMessageAt: string | null;
+  lastMessageHash: string | null;
   updatedAt: string;
 };
 
@@ -39,6 +40,11 @@ export type XpAward = {
   /** May be negative for an admin correction. */
   amount: number;
   at?: Date;
+  /**
+   * Fingerprint of the message, when the award is for one. Used only to spot
+   * the same message being repeated; never the content itself.
+   */
+  fingerprint?: string | null;
 };
 
 export type XpAwardResult = {
@@ -60,6 +66,7 @@ const empty: XpTotal = {
   voiceXp: 0,
   adjustedXp: 0,
   lastMessageAt: null,
+  lastMessageHash: null,
   updatedAt: new Date(0).toISOString(),
 };
 
@@ -100,6 +107,7 @@ export async function getXpTotal(
     voiceXp: row.voiceXp,
     adjustedXp: row.adjustedXp,
     lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
+    lastMessageHash: row.lastMessageHash,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -124,6 +132,7 @@ export async function awardXp(
   award: XpAward
 ): Promise<XpAwardResult> {
   const amount = clamp(award.amount);
+  const hash = award.fingerprint ?? null;
   const before = await getXpTotal(guildId, userId);
   const previousLevel = levelFromTotalXp(before.total);
 
@@ -157,6 +166,10 @@ export async function awardXp(
         userId,
         updatedAt: new Date().toISOString(),
       };
+      const fingerprint =
+        award.kind === "message"
+          ? (hash ?? existing.lastMessageHash)
+          : existing.lastMessageHash;
       const next: XpTotal = {
         ...existing,
         total: Math.max(0, existing.total + amount),
@@ -174,6 +187,7 @@ export async function awardXp(
           award.kind === "message"
             ? (award.at ?? new Date()).toISOString()
             : existing.lastMessageAt,
+        lastMessageHash: fingerprint,
         updatedAt: new Date().toISOString(),
       };
       state.xp.totals[k] = next;
@@ -318,6 +332,7 @@ export async function listXpLeaderboard(
         const p = levelProgress(row.total);
         return {
           ...row,
+          lastMessageHash: row.lastMessageHash ?? null,
           level: p.level,
           into: p.into,
           needed: p.needed,
@@ -353,6 +368,7 @@ export async function listXpLeaderboard(
         voiceXp: row.voiceXp,
         adjustedXp: row.adjustedXp,
         lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
+        lastMessageHash: row.lastMessageHash,
         updatedAt: row.updatedAt.toISOString(),
         level: p.level,
         into: p.into,
