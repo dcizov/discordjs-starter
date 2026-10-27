@@ -1595,11 +1595,28 @@ described as if it could.
 ### Checks run this pass
 
 `npx tsc --noEmit` and `npx tsc --noEmit -p apps/web/tsconfig.json`, `npx eslint`
-(with `--max-warnings=0` on every touched path), `npm run format:check`, and
-`npx vitest run` — **76 files, 953 tests, all passing**, including four new files
-(`identity-policy`, `roster-sync`, `member-directory`, `templates`) and updated
-demo, dashboard-identity and bot-maintenance suites. `npm run build:web` was run
-before the final commit series.
+(with `--max-warnings=0`), `npm run format:check`, `npx vitest run` — **76 files,
+953 tests, all passing** — and `npm run build:web`. Four new suites
+(`identity-policy`, `roster-sync`, `member-directory`, `templates`) plus updates to
+the demo, dashboard-identity and bot-maintenance suites. CI on the final commit:
+`verify` **87 passed, 6 skipped** in the browser suite and the sharded job **6
+passed**; `containers` succeeded.
+
+The browser suite found four things static checks could not:
+
+1. the `Members` navigation entry had never been written, so the page existed
+   without a way to reach it;
+2. the demo server still advertised a decorative member total, so the overview
+   now reports the roster it can actually list;
+3. the demo's bot role could not manage channels, which made every template
+   preview a blocker — the preview was right, the demo data was not;
+4. a demo template apply returned no run id, so a successful request still ended
+   in an error message on the page.
+
+The first three were fixed in the product, not in the assertions. Two test
+expectations were updated because the product changed on purpose: the overview's
+member total is now compared with the members API instead of a hard-coded figure,
+and the account menu is addressed by the nickname the server shows.
 
 ### Not verified (stated, not implied)
 

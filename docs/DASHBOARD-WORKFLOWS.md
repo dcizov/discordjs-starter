@@ -88,6 +88,20 @@ multi-row action; audit rows are append-only evidence), drag-and-drop (no
 persisted ordering), task-specific status/priority columns, and chart
 scaffolding.
 
+## Members and templates (added in pass 10)
+
+| Surface       | Where the data comes from                                                                                                                                           | What it can do                                                                                                                         | What it deliberately cannot do                                                                                                                          |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Members**   | The bot's synchronized roster (`members`, `roster_sync`), read through the Guild Members intent. Never economy accounts, audit actors, song requesters or Presence. | Search name/nickname/handle, filter people/bots/departed, sort and page on the server, open a read-only detail dialog, request a sweep | Moderate, ban, or invite anyone from the dashboard; claim presence; show a partial roster as complete                                                   |
+| **Sync now**  | Queues the `sync-roster` action; the bot sweeps at most 20 × 1000 members and reports `complete`, `partial` or `failed`.                                            | Recover from a missed event or a restart                                                                                               | Bypass Discord's rate limits; mark anyone departed unless a sweep finished or Discord sent a removal event                                              |
+| **Templates** | `server_templates` documents with logical keys; previews computed from the target guild's stored snapshot; applies executed by the bot against the live guild.      | Capture structure/configuration, preview against a server you manage, resolve mappings, confirm, read the recorded result              | Copy members, messages, audit history, economy data, tokens, sessions or webhook URLs; delete or overwrite resources; grant Administrator automatically |
+
+The template apply is a queued job (`apply-template`) with a run row, so progress
+and a partial result survive the request. A preview and its apply are tied
+together by a fingerprint over the create/reuse/skip decisions; if the server
+changes in between, the apply refuses and asks for a new preview instead of
+acting on a stale plan.
+
 ## Styling and component base
 
 The reference is a shadcn dashboard. At revision
