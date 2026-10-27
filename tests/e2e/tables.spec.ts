@@ -116,6 +116,63 @@ test("the economy leaderboard ranks, sorts, pages and searches a complete list",
 test("the audit log filters by action and pages on the server", async ({
   page,
 }) => {
+  // Deterministic history. This database accumulates rows from other specs, so
+  // "which action lands on page 1" is not stable there; the two identity
+  // outcomes the audit log has to show (a recorded picture and the honest
+  // "no avatar recorded" fallback) are part of the fixture instead of being
+  // left to data order.
+  const entry = (
+    index: number,
+    action: string,
+    actorName: string,
+    actorAvatarUrl: string | null
+  ) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    guildId: "120000000000000001",
+    actorId: actorAvatarUrl ? "120000000000000099" : "system:orbit",
+    actorName,
+    actorAvatarUrl,
+    action,
+    target: "music",
+    detail: `${action} event ${index}`,
+    createdAt: new Date(Date.UTC(2026, 9, 20, 12, 0, index)).toISOString(),
+  });
+  const entries = [
+    ...Array.from({ length: 8 }, (_, i) =>
+      entry(
+        i + 1,
+        "moderated",
+        i === 7 ? "Orbit" : "Alex",
+        i === 7 ? null : "/demo/alex.svg"
+      )
+    ),
+    entry(9, "deleted", "Jamie", "/demo/jamie.svg"),
+    entry(10, "deleted", "Sophie", "/demo/sophie.svg"),
+  ];
+  // What the dashboard actually asked the server for.
+  const requests: URLSearchParams[] = [];
+  await page.route(
+    `**/api/guilds/120000000000000001/history?**`,
+    async (route) => {
+      const url = new URL(route.request().url());
+      requests.push(url.searchParams);
+      const filter = url.searchParams.get("filter") ?? "all";
+      const pageNumber = Number(url.searchParams.get("page") ?? "1");
+      const size = Number(url.searchParams.get("pageSize") ?? "7");
+      const direction = url.searchParams.get("dir") === "asc" ? 1 : -1;
+      const matching = entries
+        .filter((row) => filter === "all" || row.action === filter)
+        .sort((a, b) => direction * a.createdAt.localeCompare(b.createdAt));
+      const start = (pageNumber - 1) * size;
+      await route.fulfill({
+        json: {
+          rows: matching.slice(start, start + size),
+          total: matching.length,
+        },
+      });
+    }
+  );
+
   await page.goto(`${root}/audit`);
   await hydrated(page);
   const table = page.getByRole("region", { name: "Audit events" });
@@ -124,13 +181,14 @@ test("the audit log filters by action and pages on the server", async ({
   await expect(footer(table)).toHaveCount(1);
   // Server-owned data: the page controls are always rendered, and the table
   // knows the real total rather than the size of the page it holds.
-  await expect(table.getByText(/^Page 1 of \d+$/)).toBeVisible();
+  await expect(table.getByText(/^Page 1 of 2$/)).toBeVisible();
+  await expect(footer(table)).toContainText("Showing 1–7 of 10");
 
-  // Historical identity: the actor's recorded picture is rendered by the shared
-  // identity cell. (The "nothing was recorded" fallback is asserted
-  // deterministically in tests/dashboard-identity.test.ts — this database
-  // accumulates rows from other specs, so which actor lands on page 1 varies.)
+  // Historical identity: a recorded picture is rendered by the shared identity
+  // cell, and an action recorded without one says so instead of inventing a
+  // portrait.
   await expect(table.locator("tbody img")).not.toHaveCount(0);
+  await expect(table.locator("tbody")).toContainText("no avatar recorded");
 
   // Keyboard operation of the faceted filter: open with Enter, type to narrow,
   // commit with Enter. The trigger then states the active value.
@@ -146,16 +204,37 @@ test("the audit log filters by action and pages on the server", async ({
   await expect(
     page.getByRole("button", { name: "Filter audit action: Moderated" })
   ).toBeVisible();
-  await expect(rows.first()).toBeVisible();
-  const badges = await column(rows, 1);
-  expect(badges.length).toBeGreaterThan(0);
-  for (const badge of badges) expect(badge).toBe("Moderated");
+  // The filtered answer arrives after the click; wait for the re-rendered rows
+  // rather than reading the cells still on screen.
+  await expect
+    .poll(async () => [...new Set(await column(rows, 1))])
+    .toEqual(["Moderated"]);
+  await expect(rows).toHaveCount(7);
+  await expect(footer(table)).toContainText("Showing 1–7 of 8");
+  await expect(table.getByText(/^Page 1 of 2$/)).toBeVisible();
+  const filtered = requests.filter(
+    (params) => params.get("filter") === "moderated"
+  );
+  expect(filtered.length).toBeGreaterThan(0);
+
+  // Paging under a filter asks the server for the next slice of the same set.
+  await table.getByRole("button", { name: "Next page" }).click();
+  await expect(table.getByText(/^Page 2 of 2$/)).toBeVisible();
+  await expect(rows).toHaveCount(1);
+  await expect(footer(table)).toContainText("Showing 8–8 of 8");
+  expect(
+    requests.some(
+      (params) =>
+        params.get("filter") === "moderated" && params.get("page") === "2"
+    )
+  ).toBe(true);
 
   // Clearing brings the unfiltered history back in one click.
   await page.getByRole("button", { name: "Reset" }).click();
   await expect(
     page.getByRole("button", { name: "Filter audit action" })
   ).toBeVisible();
+  await expect(footer(table)).toContainText("of 10");
 
   // A search with no matches is not an empty audit log; the controls stay.
   const search = page.getByRole("searchbox", { name: "Search the audit log" });
