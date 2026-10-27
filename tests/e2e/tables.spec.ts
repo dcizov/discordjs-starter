@@ -320,3 +320,64 @@ test("the transaction history exposes type facets and server paging", async ({
   await expect(footer(table)).toHaveCount(1);
   await expect(rows.first()).toBeVisible();
 });
+
+test("a failed history request says so and retries instead of claiming an empty log", async ({
+  page,
+}) => {
+  // The table asks `/history` for audit rows. Every request fails until the test
+  // releases the stub, so the error state cannot be replaced by a late automatic
+  // refresh before the retry is clicked.
+  let calls = 0;
+  let failing = true;
+  await page.route(
+    `**/api/guilds/120000000000000001/history?**`,
+    async (route) => {
+      calls += 1;
+      if (failing) {
+        await route.fulfill({
+          status: 500,
+          json: { error: "The history service is unavailable." },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          rows: [
+            {
+              id: "00000000-0000-4000-8000-000000000401",
+              guildId: "120000000000000001",
+              actorId: "120000000000000099",
+              actorName: "Alex",
+              actorAvatarUrl: "/demo/alex.svg",
+              action: "updated",
+              target: "economy",
+              detail: "Changed the daily reward",
+              createdAt: "2026-10-24T12:00:00.000Z",
+            },
+          ],
+          total: 1,
+        },
+      });
+    }
+  );
+
+  await page.goto(`${root}/audit`);
+  await hydrated(page);
+  const alert = page.getByRole("alert");
+  await expect(alert).toBeVisible();
+  await expect(alert).toContainText("This section couldn’t load.");
+  // The failure is not an empty table, and the empty state is not shown at all.
+  await expect(page.getByRole("region", { name: "Audit events" })).toHaveCount(
+    0
+  );
+  await expect(page.getByText("No records match")).toHaveCount(0);
+
+  failing = false;
+  await alert.getByRole("button", { name: "Try again" }).click();
+  const table = page.getByRole("region", { name: "Audit events" });
+  await expect(table).toBeVisible();
+  await expect(table.locator("tbody tr")).toHaveCount(1);
+  await expect(table.locator("tbody tr img")).toHaveCount(1);
+  await expect(table.getByText("Showing 1–1 of 1")).toBeVisible();
+  expect(calls).toBeGreaterThan(1);
+});
