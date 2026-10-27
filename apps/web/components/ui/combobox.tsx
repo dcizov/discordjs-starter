@@ -46,6 +46,12 @@ export function Combobox({
      * picker does not fall back to a generic initial when an avatar exists.
      */
     person?: { id: string; name: string; src?: string | null };
+    /**
+     * A small node drawn before the label - a role dot, for pickers whose
+     * options are roles. Kept generic so this component does not need to know
+     * what a role is.
+     */
+    leading?: React.ReactNode;
   }[];
   placeholder?: string;
   searchPlaceholder?: string;
@@ -114,6 +120,7 @@ export function Combobox({
                     size={24}
                   />
                 )}
+                {option.leading}
                 <span className="min-w-0 flex-1 truncate">{option.label}</span>
                 {option.hint && (
                   <span className="shrink-0 text-[10px] text-muted-foreground">

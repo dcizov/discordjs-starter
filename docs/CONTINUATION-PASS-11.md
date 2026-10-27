@@ -717,7 +717,7 @@ unproven.
 ## Slice 12b — connected views: members by role, roles to members
 
 Section 1 asked for views that link into each other. Slice 12a made roles look
-the same everywhere; this slice makes them *reachable* from one another, so a
+the same everywhere; this slice makes them _reachable_ from one another, so a
 reader can move from a role to the people holding it and back without losing
 their place.
 
@@ -738,8 +738,8 @@ in one place per layer rather than special-cased per surface:
   forwards the whole parsed query, which is the payoff of having one schema.
 
 **A real role → members link.** The roles table in `server-pages.tsx` gained a
-*Members* column with a per-role "View" button that navigates to the directory
-with `roleId` set. `@everyone` is the exception and says *Everyone* instead of
+_Members_ column with a per-role "View" button that navigates to the directory
+with `roleId` set. `@everyone` is the exception and says _Everyone_ instead of
 linking: it is the guild itself, not something anyone is "holding", so a link
 that returns the entire roster would be a misleading narrowing.
 
@@ -750,8 +750,8 @@ passed the badge stays a plain `span` — the component is used in places where
 clicking means nothing, and a stray focus stop in a table row would be worse
 than no link.
 
-**The filter is visible and clearable.** The directory shows a *"Holding the
-role"* chip with the same badge the rest of the app uses, plus a Clear control.
+**The filter is visible and clearable.** The directory shows a _"Holding the
+role"_ chip with the same badge the rest of the app uses, plus a Clear control.
 If the role has since been deleted the chip says the server no longer has it
 rather than rendering an empty badge. Changing the role resets to page 1,
 because it is a new result set and page 3 of the old one is meaningless.
@@ -822,3 +822,114 @@ passed / 86 files** (was 1083 / 85).
 No browser is available in this session, so no changed UI surface was looked at.
 The new column, the chip and the click-through compile and their logic is
 covered by tests, but their rendered appearance is unproven.
+
+---
+
+## Slice 12c — editing a member's roles
+
+The last piece of section 1, and the one with the most ways to go wrong: it is
+the only surface that mutates Discord on behalf of an operator.
+
+### Where the rules live
+
+`packages/core/src/member-role-edit.ts`, pure and Discord-free, so every branch
+is reachable in a test. `planMemberRoleChanges` is the single decision point —
+a caller that skips it has no protection at all. 20 tests cover it.
+
+It refuses, before anything is sent to Discord:
+
+- **`@everyone`** in either direction — it is the guild itself.
+- **Managed roles** — they belong to an integration and Discord rejects them.
+- **Roles at or above the effective ceiling.** A role sitting *at* the
+  caller's own top position is out of reach, not just one above it: that is
+  Discord's rule, not a conservative reading.
+- **Anything outside `min(actor, bot)`.** A dashboard user must not be able to
+  borrow the bot's position, and the bot must not be able to exceed the user's.
+- **Escalation** — a role granting permissions the actor does not themselves
+  hold. An administrator already holds everything, so there is nothing to
+  exceed and the check is skipped for them.
+- **Unreadable permissions** — for either the actor or the role. A change made
+  on a guess is worse than no change.
+
+### What the bot does
+
+`apps/bot/src/features/roles/member-roles.ts`:
+
+1. Takes the existing per-member Redis lock, so two edits cannot interleave.
+2. Checks the **bot's** own `Manage Roles` and hierarchy first — without it
+   every later check is academic. This is the half of the check the brief
+   asked for that a purely server-side implementation would have missed.
+3. Re-reads the target from Discord with `force: true`, so the decision is made
+   from Discord's current roles rather than a possibly-stale stored row.
+4. Applies the plan, then **re-reads the member again** and writes that to the
+   roster. The dashboard's next view comes from Discord's answer, not from
+   what we hoped happened — no optimistic UI.
+5. Audits actor, target, and how many roles were added, removed, refused and
+   failed.
+6. Refuses the server owner and Orbit itself.
+
+Per-role results on partial failure come from applying each direction as one
+call and, if it throws, retrying role by role so the operator is told *which*
+role failed rather than the whole change looking broken.
+
+### Wiring
+
+POST `/api/guilds/:id/members/:userId/roles` with `mode: "offer"` or `"apply"`.
+An apply is deduplicated on an `Idempotency-Key` header, so a double submit
+cannot race itself; an offer is always fresh, because it must reflect the
+hierarchy right now.
+
+The `member-roles` action is exempted from the consumer's blanket Manage
+*Server* gate. That gate is broader than Discord's own rule and would have
+blocked people Discord would happily allow; this action does its own, more
+precise check instead.
+
+### The editor
+
+`apps/web/components/member-roles-editor.tsx`: a searchable picker seeded from
+what the bot says is assignable (only the bot knows the live hierarchy), a
+pending-change summary, a confirmation step once more than one role is
+involved, and per-role reporting of what was refused, what Discord refused,
+and what landed. On success it refreshes the roster rather than patching the
+row.
+
+Roles outside the offer are never shown as "being removed" — they are simply
+not ours to touch, and implying otherwise would promise a change that will not
+happen.
+
+### Honest demo behaviour
+
+In demo mode the endpoint returns `accepted: false` with an explanation rather
+than a fake success. There is no live hierarchy to check, and pretending
+otherwise would be the worst kind of demo.
+
+### Conversions to the shared badge
+
+- `music-page.tsx` — the "who's on the decks" summary now uses `RoleBadge`,
+  and the DJ role picker shows a role dot. `Combobox` gained a generic
+  `leading` node so pickers can draw a role without that component needing to
+  know what a role is.
+- `permission-setup.tsx` — the protected-roles list uses `RoleBadge`.
+
+**Left alone, deliberately:**
+
+- `template-builder.tsx` is a role *editor* (name and colour fields), not a
+  badge.
+- `templates-page.tsx` maps roles through a native `<select>`; `<option>`
+  cannot contain a node, and the comment there records why it stays a select.
+- `module-setup.tsx` turned out to have no role rendering at all — its only
+  match was a docs link. Nothing to convert.
+
+### Verification
+
+Typecheck clean. `eslint --max-warnings=0` clean on every touched file.
+`format:check` clean. `build:web` succeeds. `npm test`: **1116 passed / 87
+files** (was 1096 / 86), +20 from the new planning tests.
+
+### Not verified
+
+No browser is available, so the editor dialog has not been looked at. No live
+Discord server was available either, so the mutation path has **not** been
+exercised against the real API — the rules are tested exhaustively, but
+Discord's own response to a real role change is unproven here. That is the
+first thing to check on a disposable server.

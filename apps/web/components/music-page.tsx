@@ -49,6 +49,7 @@ import {
   FormSelect,
   Spinner,
 } from "./ui/primitives";
+import { RoleBadge, RoleDot } from "./role-badge";
 import { useWorkspace } from "./workspace";
 import { Combobox } from "./ui/combobox";
 const SOURCE_NAMES: Record<string, string> = {
@@ -498,11 +499,21 @@ export function MusicPage() {
                   Who’s on the decks
                 </span>
                 <span>
-                  {data.guild.config.music.djRoleId
-                    ? (data.guild.roles.find(
-                        (r) => r.id === data.guild.config.music.djRoleId
-                      )?.name ?? "DJ role")
-                    : "Everyone"}
+                  {data.guild.config.music.djRoleId ? (
+                    data.guild.roles.find(
+                      (r) => r.id === data.guild.config.music.djRoleId
+                    ) ? (
+                      <RoleBadge
+                        role={data.guild.roles.find(
+                          (r) => r.id === data.guild.config.music.djRoleId
+                        )!}
+                      />
+                    ) : (
+                      "DJ role"
+                    )
+                  ) : (
+                    "Everyone"
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -656,7 +667,11 @@ export function MusicPage() {
                   { value: "", label: "Everyone in the voice channel" },
                   ...data.guild.roles
                     .filter((r) => !r.managed)
-                    .map((r) => ({ value: r.id, label: r.name })),
+                    .map((r) => ({
+                      value: r.id,
+                      label: r.name,
+                      leading: <RoleDot role={r} />,
+                    })),
                 ]}
               />
             </Field>

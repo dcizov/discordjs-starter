@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   CircleCheck,
   RefreshCw,
+  Tags,
   Users,
   UserCog,
   X,
@@ -21,6 +22,7 @@ import type { FacetFilter } from "./table-facet";
 import { useWorkspace } from "./workspace";
 import { IdentityCell } from "./identity/identity-cell";
 import { RoleBadge, RoleList } from "./role-badge";
+import { MemberRolesEditor } from "./member-roles-editor";
 import { Button } from "./ui/button";
 import {
   Badge,
@@ -92,6 +94,14 @@ export function MembersPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState("");
   const [detail, setDetail] = useState<Member | null>(null);
+  /**
+   * The member whose roles are being edited.
+   *
+   * Opening the editor asks the bot what is assignable, because only the bot
+   * knows the live hierarchy. It is a separate dialog rather than a section of
+   * the detail view so the two can be closed independently.
+   */
+  const [editing, setEditing] = useState<Member | null>(null);
 
   // A new search, filter or ordering means page 1 of the new result set.
   useEffect(() => setPage(1), [query, filter, pageSize, roleId]);
@@ -379,6 +389,11 @@ export function MembersPage() {
                   icon: <UserCog size={13} aria-hidden />,
                   onSelect: () => setDetail(m),
                 },
+                {
+                  label: "Edit roles",
+                  icon: <Tags size={13} aria-hidden />,
+                  onSelect: () => setEditing(m),
+                },
               ],
             }}
             footerNote={
@@ -415,8 +430,20 @@ export function MembersPage() {
           setRoleId(role.id);
           setDetail(null);
         }}
+        onEditRoles={(m) => {
+          setDetail(null);
+          setEditing(m);
+        }}
         timezone={data.guild.config.timezone}
         onClose={() => setDetail(null)}
+      />
+      <MemberRolesEditor
+        member={editing}
+        onClose={() => setEditing(null)}
+        // The bot re-read the member from Discord and updated the roster, so
+        // the page reloads from that rather than patching in what we hoped
+        // had happened.
+        onChanged={() => setRetry((n) => n + 1)}
       />
     </>
   );
@@ -553,12 +580,15 @@ function MemberDetail({
   roles,
   timezone,
   onClose,
+  onEditRoles,
   onRoleSelect,
 }: {
   member: Member | null;
   roles: Map<string, GuildRole>;
   timezone: string;
   onClose: () => void;
+  /** Open the role editor for this member. */
+  onEditRoles?: (member: Member) => void;
   /**
    * Jump to everyone else holding this role.
    *
@@ -626,8 +656,18 @@ function MemberDetail({
                   : `Left${member.departedAt ? ` on ${new Date(member.departedAt).toLocaleDateString("en", { timeZone: timezone })}` : ""}`}
               </dd>
               <dt className="text-muted-foreground">Roles</dt>
-              <dd>
+              <dd className="space-y-2">
                 <RoleList roles={held} max={8} onRoleSelect={onRoleSelect} />
+                {onEditRoles && member.present && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onEditRoles(member)}
+                  >
+                    <Tags size={13} aria-hidden />
+                    Edit roles
+                  </Button>
+                )}
               </dd>
               <dt className="text-muted-foreground">Identity captured</dt>
               <dd>

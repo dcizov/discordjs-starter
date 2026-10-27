@@ -280,6 +280,55 @@ async function handle(req: Request, context: Context) {
             parseMembersQuery(new URL(req.url).searchParams)
           )
         );
+      // Editing one member's roles. `path[3]` is the target's user id.
+      if (path.length === 5 && path[4] === "roles" && req.method === "POST") {
+        const targetId = z
+          .string()
+          .regex(/^\d{17,20}$/)
+          .parse(path[3]);
+        const body = z
+          .object({
+            mode: z.enum(["offer", "apply"]),
+            roleIds: z
+              .array(z.string().regex(/^\d{17,20}$/))
+              .max(200)
+              .optional(),
+          })
+          .parse(await req.json());
+        if (isDemo())
+          return NextResponse.json({
+            demo: true,
+            accepted: false,
+            message:
+              "Demo mode has no live server to change. Role editing is only offered against a real guild, where the bot's own permissions and hierarchy can be checked.",
+            roles: [],
+            reason: "Role changes are not available in demo mode.",
+          });
+        // An apply is deduplicated so a double submit cannot race itself; the
+        // change is a set operation, so replaying it changes nothing anyway.
+        // An offer is always fresh — it must reflect the hierarchy right now.
+        const key =
+          body.mode === "apply"
+            ? `member-roles-apply-${targetId}-${z
+                .uuid()
+                .parse(req.headers.get("Idempotency-Key") ?? randomUUID())}`
+            : `member-roles-offer-${targetId}-${Date.now()}`;
+        const job = await enqueueAction(
+          guildId,
+          actor.id,
+          "member-roles",
+          {
+            targetId,
+            mode: body.mode,
+            roleIds: body.roleIds ?? [],
+          },
+          key
+        );
+        return NextResponse.json(
+          { accepted: true, jobId: job.id, demo: false },
+          { status: 202 }
+        );
+      }
       if (path[3] === "sync" && path.length === 4 && req.method === "POST") {
         if (isDemo())
           return NextResponse.json({

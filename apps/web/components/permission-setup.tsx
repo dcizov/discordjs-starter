@@ -9,6 +9,7 @@ import {
   type PermissionName,
 } from "@orbit/core/permissions";
 import { useState } from "react";
+import { RoleBadge } from "./role-badge";
 import { Badge, Card, Field } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
 import { Combobox } from "./ui/combobox";
@@ -189,11 +190,11 @@ export function PermissionSetup() {
             </summary>
             <ul className="mt-3 space-y-2 text-muted-foreground">
               {protectedRoles.map((role) => (
-                <li key={role.id}>
-                  <span className="font-medium text-foreground">
-                    {role.name}
-                  </span>{" "}
-                  —{" "}
+                <li
+                  key={role.id}
+                  className="flex flex-wrap items-center gap-x-2"
+                >
+                  <RoleBadge role={role} />—{" "}
                   {roleAssignmentIssue(
                     role,
                     data.guild.botRolePosition,

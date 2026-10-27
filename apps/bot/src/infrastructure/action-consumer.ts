@@ -13,6 +13,10 @@ import { redisConnection } from "@orbit/core/queue";
 import { audit, getGuild, getResource } from "@orbit/db";
 import { executeCommunity } from "../features/community";
 import type { MusicService } from "../features/music/service";
+import {
+  assignableRolesFor,
+  editMemberRoles,
+} from "../features/roles/member-roles";
 import { publishPanel } from "../features/roles/panels";
 import { claimShopRole } from "../features/roles/shop";
 import { applyTemplateRun, captureTemplate } from "../features/templates/apply";
@@ -41,10 +45,31 @@ export async function executeDashboardAction(
     if (
       job.name !== "music" &&
       job.name !== "claim-role" &&
+      // Role edits answer to Manage Roles plus a hierarchy and escalation
+      // check of their own, which is more precise than requiring Manage
+      // Server. Gating them here too would block people Discord would allow.
+      job.name !== "member-roles" &&
       !actor.permissions.has(PermissionFlagsBits.ManageGuild)
     )
       throw new Error("The requester no longer has Manage Server permission");
 
+    if (job.name === "member-roles") {
+      // The target's roles are re-read from Discord and the answer comes from
+      // that re-read, never from what the client claimed or what we hoped to
+      // apply. `offer` only reports what the editor may show.
+      const targetId = String(job.data.targetId ?? "");
+      if (!/^\d{17,20}$/.test(targetId))
+        throw new Error("That is not a member id");
+      if (job.data.mode === "offer")
+        return await assignableRolesFor(guild, actorId);
+      return await editMemberRoles(guild, {
+        actorId,
+        targetId,
+        desiredRoleIds: Array.isArray(job.data.roleIds)
+          ? job.data.roleIds.map(String)
+          : [],
+      });
+    }
     if (job.name === "publish-panel")
       return await publishPanel(client, guildId, job.data.panelId, actorId);
     if (job.name === "claim-role")
