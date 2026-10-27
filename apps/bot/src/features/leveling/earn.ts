@@ -21,6 +21,7 @@ import {
   type VoicePresence,
 } from "@orbit/core/leveling";
 import { getGuild } from "@orbit/db";
+import { reconcileAfterAward } from "./rewards";
 import type { GuildConfig } from "@orbit/core";
 import {
   awardXp,
@@ -117,12 +118,16 @@ export async function awardMessageXp(message: Message): Promise<void> {
     if (hash === current.lastMessageHash) return;
 
     const amount = rollAward(settings.messageMin, settings.messageMax);
-    await awardXp(message.guildId, message.author.id, {
+    const result = await awardXp(message.guildId, message.author.id, {
       key: `message:${message.id}`,
       kind: "message",
       amount,
       fingerprint: hash,
     });
+    // Rewards need the guild object, not just its id. The XP is already
+    // committed, so a missing guild only costs the reconciliation.
+    if (message.guild)
+      await reconcileAfterAward(message.guild, message.author.id, result);
   } catch (error) {
     logger.warn(
       { guildId: message.guildId, error: errorDiagnostic(error) },
@@ -313,6 +318,7 @@ async function tickGuild(guild: Guild): Promise<number> {
       kind: "voice",
       amount,
     });
+    await reconcileAfterAward(guild, session.userId, result);
     // Marked paid either way: a duplicate key means it was already paid, and
     // leaving the window where it is would retry forever.
     await markVoiceInterval(guild.id, session.userId, {

@@ -1198,8 +1198,8 @@ adjustment reversible in the audit trail and keeps `adjustedXp` meaningful.
 
 ### Showing both XP numbers
 
-`/rank` deliberately shows *"reaching level N has cost X in total"* alongside
-*"the next level costs Y"*. Conflating those two is the most common way to get
+`/rank` deliberately shows _"reaching level N has cost X in total"_ alongside
+_"the next level costs Y"_. Conflating those two is the most common way to get
 a leveling system wrong, and showing both is the cure — it is also the thing
 the two published sources index differently.
 
@@ -1227,3 +1227,76 @@ No live Discord server, so none of these commands have been run against the
 real API. The handlers are tested against mocked storage; Discord registration
 and the interaction round-trip are unproven. The dashboard still has no
 leveling surface.
+
+---
+
+## Slice 13d — level rewards (stack or replace, reconcile, announce)
+
+### Ordering is what satisfies the two requirements that pull against each other
+
+The brief wants *no duplicate rewards or announcements on retry* **and**
+*announcement failure never loses XP*. Those fight, and the order resolves them:
+
+1. XP is awarded and committed **before** reconciliation is attempted.
+2. Each grant is **recorded first**, then announced.
+
+So a crash between recording and announcing loses an announcement — never a
+reward. And a retry sees the recorded grant and does nothing, so nothing is
+announced twice. A refusal is recorded too, with its reason, so the dashboard
+can say why and a later reconcile can retry once the configuration is fixed.
+
+A failure anywhere in reconciliation is caught at the top and logged. It is a
+consequence of earning, not a condition of it.
+
+### Administrator has no override
+
+`rewardRoleIssue` refuses a role carrying Administrator, and there is no
+configuration that can ask for it. Reaching a level must never be a route to
+the server's highest permission — a leveling system is the wrong thing to
+control that, and it is exactly the kind of thing someone would configure
+without thinking.
+
+The same function refuses `@everyone`, integration-managed roles, roles at or
+above the bot's own, and a bot without Manage Roles.
+
+### Stack versus replace
+
+- **Stack** (default) — every reward up to and including the current level is
+  held. Members read a stack as a record of what they passed through.
+- **Replace** — only the highest tier reached is held; earlier ones are removed.
+
+Revocation only ever removes roles **this bot granted**. A role a member holds
+for any other reason must survive a reward configuration changing underneath
+them.
+
+### A deleted reward role is reported, not dropped
+
+A reward whose role has vanished from the server is returned in
+`missingRole` and logged, and is **not** recorded as a refusal. Recording it
+as refused would mask the real problem, which is a dangling configuration.
+
+### Multi-level jumps
+
+`owedRewards(level, rewards, stack)` is computed from the member's level, not
+from a delta, so a jump from nothing to level 20 grants all three rewards in
+one pass. Nothing depends on observing each level boundary as it is crossed.
+
+### Verification
+
+Typecheck clean. `eslint --max-warnings=0` clean. `format:check` clean.
+`build:web` succeeds. `npm test`: **1212 passed / 92 files** (was 1182 / 90):
++17 pure policy tests, +13 against a fake guild covering the multi-level jump,
+the already-granted case, deleted roles, Administrator, bot reach, missing
+Manage Roles, a refused role add, a failed announcement, and both stacking
+modes.
+
+One test was written against a hand-made level table that did not match the
+curve; it is now derived from `totalXpForLevel` so it cannot drift.
+
+### Not verified
+
+No live Discord server, so no reward role has actually been granted or
+announced through the API. `reconcileRewards` is tested against a fake guild;
+the shape of Discord's permission and hierarchy checks is modelled, not
+proven. The dashboard has no reward editor yet, so `rewardStack` and the
+announcement message can only be changed in the database.

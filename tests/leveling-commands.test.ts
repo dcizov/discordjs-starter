@@ -21,6 +21,10 @@ vi.mock("@orbit/db", async (importOriginal) => {
   };
 });
 
+vi.mock("../apps/bot/src/features/leveling/rewards", () => ({
+  reconcileAfterAward: vi.fn(async () => undefined),
+}));
+
 import { levelingCommand } from "../apps/bot/src/commands/leveling";
 import { defaultConfig } from "@orbit/core";
 

@@ -1,6 +1,7 @@
 import { PermissionFlagsBits } from "discord.js";
 import type { CommandContext } from "./context";
 import { safeText } from "@orbit/core";
+import { reconcileAfterAward } from "../features/leveling/rewards";
 import {
   levelProgress,
   totalXpForLevel,
@@ -137,6 +138,10 @@ export async function levelingCommand(context: CommandContext) {
         kind: "adjust",
         amount,
       });
+
+      // An operator's adjustment can drop someone below a reward level, so the
+      // same reconciliation runs; it is not only for earned XP.
+      await reconcileAfterAward(guild, target.id, result);
 
       await audit(
         guild.id,
