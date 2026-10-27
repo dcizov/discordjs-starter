@@ -25,6 +25,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "./data-table";
 import { IdentityCell } from "./identity/identity-cell";
+import { personFields } from "@/lib/person";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { ResourceEditor } from "./resource-editor";
@@ -278,12 +279,12 @@ export function EconomyPage() {
                         id={r.userId}
                         name={r.name}
                         src={r.avatarUrl}
+                        person={r}
                         badge={
                           r.userId === data.user.id ? (
                             <Badge tone="purple">You</Badge>
                           ) : null
                         }
-                        detail={r.avatarUrl ? undefined : "no avatar captured"}
                       />
                     ),
                   },
@@ -549,7 +550,7 @@ export function EconomyPage() {
                           id={r.userId}
                           name={account?.name ?? "Unknown member"}
                           src={account?.avatarUrl}
-                          detail={account ? undefined : "not in this snapshot"}
+                          person={account}
                         />
                       );
                     },
@@ -776,11 +777,16 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
                 searchPlaceholder="Search members…"
                 options={data.accounts
                   .filter((a) => a.userId !== data.user.id)
-                  .map((a) => ({
-                    value: a.userId,
-                    label: a.name,
-                    person: { id: a.userId, name: a.name, src: a.avatarUrl },
-                  }))}
+                  .map((a) => {
+                    // The picker, the row it fills and the leaderboard must all
+                    // print the same name for the same person.
+                    const label = personFields(a, a.name).name;
+                    return {
+                      value: a.userId,
+                      label,
+                      person: { id: a.userId, name: label, src: a.avatarUrl },
+                    };
+                  })}
               />
             ) : (
               <Input

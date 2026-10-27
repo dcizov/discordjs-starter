@@ -29,6 +29,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "./copy-button";
 import { IdentityCell } from "./identity/identity-cell";
+import { personFields } from "@/lib/person";
 import { ActorAvatar } from "./identity/actor-avatar";
 import {
   AUDIT_ACTIONS,
@@ -384,9 +385,10 @@ export function AuditPage() {
         badge="Append-only"
       />
       <p className="mb-4 text-[11px] leading-relaxed text-muted-foreground">
-        Names and avatars are captured when the action happened and never
-        refreshed, so an entry shows who acted then — not necessarily their
-        current avatar.
+        Names and avatars here are the ones recorded when the action happened
+        and are never refreshed, so an entry shows who acted then. Where this
+        server’s roster currently knows that person, their present profile is
+        shown separately in the detail view and labelled as current.
       </p>
       <Card>
         <HistoryTable<AuditEntry>
@@ -460,8 +462,12 @@ export function AuditPage() {
               ),
             },
             {
+              // A trailing action column, not a data column: it has no header
+              // text, so it must stay out of the Columns menu instead of
+              // appearing there as a nameless checkbox.
               key: "open",
               label: "",
+              canHide: false,
               render: (r) => (
                 <Button
                   variant="ghost"
@@ -568,11 +574,61 @@ export function AuditPage() {
               </div>
             ))}
           </dl>
+          {detail && (
+            <CurrentIdentity
+              actorId={detail.actorId}
+              recordedName={detail.actorName}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </>
   );
 }
+
+/**
+ * The actor as this server sees them *now*, next to the identity recorded with
+ * the action.
+ *
+ * The two are deliberately separate blocks with their own headings: a rename
+ * should never make an old audit row look like it was written under the new name,
+ * and a reader should never have to guess which one is evidence. The current
+ * profile comes from the roster the bot synchronized — no Discord request.
+ */
+function CurrentIdentity({
+  actorId,
+  recordedName,
+}: {
+  actorId: string;
+  recordedName: string;
+}) {
+  const { data } = useWorkspace();
+  const account = data.accounts.find((a) => a.userId === actorId);
+  if (!account) return null;
+  const current = personFields(account, account.name).name;
+  return (
+    <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Current profile in this server
+      </p>
+      <div className="mt-2 flex items-center gap-2 text-xs">
+        <IdentityCell
+          id={account.userId}
+          name={account.name}
+          src={account.avatarUrl}
+          person={account}
+        />
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        {current.toLowerCase() === recordedName.toLowerCase()
+          ? "The name matches what was recorded with this action."
+          : `Recorded then as “${recordedName}”. This is their name and picture today, not a change to the record.`}{" "}
+        Their roles and membership are not part of an audit entry.
+      </p>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { data, saveConfig } = useWorkspace();
   const [v, setV] = useState<GuildConfig>(structuredClone(data.guild.config));

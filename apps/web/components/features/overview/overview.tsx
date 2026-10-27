@@ -43,22 +43,22 @@ export function Overview() {
   const config = data.guild.config;
   const gateway = data.health.find((health) => health.name === "Discord API");
   const online = gateway?.status === "healthy";
-  const metricValues = data.demo
-    ? [number(data.guild.memberCount), "684", "1,293", "99.98%"]
-    : [
-        number(data.guild.memberCount),
-        number(data.stats?.accountCount ?? data.accounts.length),
-        number(data.audit.filter((a) => a.action === "moderated").length),
-        online ? "Online" : "Offline",
-      ];
-  const metricLabels = data.demo
-    ? ["Total members", "Active today", "Commands used", "Bot uptime"]
-    : [
-        "Total members",
-        "Economy members",
-        "Recent moderation actions",
-        "Bot connection",
-      ];
+  // Every number here is derived from this response. The demo used to print a
+  // fixed set of flattering figures (activity, command counts, uptime) that no
+  // data path produced; a sample workspace is still a workspace, and a metric a
+  // reader cannot check is worse than no metric.
+  const metricValues = [
+    number(data.guild.memberCount),
+    number(data.stats?.accountCount ?? data.accounts.length),
+    number(data.audit.filter((a) => a.action === "moderated").length),
+    online ? "Online" : "Offline",
+  ];
+  const metricLabels = [
+    "Total members",
+    "Economy members",
+    "Recent moderation actions",
+    "Bot connection",
+  ];
   return (
     <>
       <PageHeader

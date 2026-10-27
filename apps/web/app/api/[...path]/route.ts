@@ -29,10 +29,19 @@ import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { pollSourceDetailed, searchGames } from "@orbit/core/feeds";
 import { UpstreamError } from "@orbit/core/integration-http";
 import { HISTORY_KINDS, parseHistoryQuery } from "@orbit/core/history-query";
+import { parseMembersQuery } from "@orbit/core/members-query";
+import {
+  buildTemplate,
+  previewTemplate,
+  TEMPLATE_OMISSIONS,
+} from "@orbit/core/templates";
+import { applyTargetFromSnapshot, assertTargetAllowed } from "@/lib/templates";
+import { deleteTemplate } from "@orbit/db";
 import { newsCard } from "@orbit/core/news-presentation";
 import { createQueue, enqueueAction } from "@orbit/core/queue";
 import {
   audit,
+  createTemplateRun,
   database,
   deleteResource,
   economyTransaction,
@@ -40,11 +49,18 @@ import {
   getGuild,
   queryHistory,
   getResource,
+  getTemplate,
+  getTemplateRun,
+  listMembers,
+  listTemplates,
   putMusicState,
+  saveTemplate,
+  updateTemplateRun,
   reserveDelivery,
   saveConfig,
   saveResource,
   schema,
+  getRosterSync,
 } from "@orbit/db";
 import { demoTransaction } from "@orbit/db/src/demo";
 import { NextResponse } from "next/server";
@@ -244,6 +260,241 @@ async function handle(req: Request, context: Context) {
           { accepted: true, jobId: job.id, demo: false },
           { status: 202 }
         );
+      }
+      throw new HttpError(404, "Endpoint not found");
+    }
+    if (path[2] === "members") {
+      // The roster the bot synchronized, never a guess assembled from accounts.
+      if (path.length === 3 && req.method === "GET")
+        return NextResponse.json(
+          await listMembers(
+            guildId,
+            parseMembersQuery(new URL(req.url).searchParams)
+          )
+        );
+      if (path[3] === "sync" && path.length === 4 && req.method === "POST") {
+        if (isDemo())
+          return NextResponse.json({
+            demo: true,
+            message:
+              "Demo mode already holds a complete roster; a live sync would ask Discord. Nothing was requested.",
+            sync: await getRosterSync(guildId),
+          });
+        const job = await enqueueAction(
+          guildId,
+          actor.id,
+          "sync-roster",
+          {},
+          `roster-sync-${Date.now()}`
+        );
+        return NextResponse.json(
+          { accepted: true, jobId: job.id },
+          { status: 202 }
+        );
+      }
+      throw new HttpError(404, "Endpoint not found");
+    }
+    if (path[2] === "templates") {
+      // Templates are readable only through the guild they were captured from.
+      // `auth.guilds` is the list this user may manage, so an id alone never
+      // grants access to another community's blueprint.
+      const sources = auth.guilds.filter((g) => g.installed).map((g) => g.id);
+      if (path.length === 3 && req.method === "GET")
+        return NextResponse.json({
+          templates: await listTemplates(sources),
+          omissions: TEMPLATE_OMISSIONS,
+        });
+      if (path.length === 3 && req.method === "POST") {
+        const input = z
+          .object({
+            name: z.string().min(1).max(100),
+            description: z.string().max(500).default(""),
+            include: z
+              .object({
+                structure: z.boolean().default(true),
+                config: z.boolean().default(true),
+              })
+              .strict(),
+          })
+          .strict()
+          .parse(await body(req));
+        if (!input.include.structure && !input.include.config)
+          throw new HttpError(
+            400,
+            "Choose structure, Orbit configuration, or both."
+          );
+        const guild = await getGuild(guildId);
+        if (!guild) throw new HttpError(409, "This server is still syncing");
+        if (isDemo()) {
+          // The demo has no Discord session, so the captured document comes from
+          // the same demo snapshot the dashboard displays.
+          const document = buildTemplate({
+            name: input.name,
+            description: input.description,
+            include: input.include,
+            structure: {
+              roles: guild.roles.map((role) => ({
+                id: role.id,
+                name: role.name,
+                color: role.color,
+                position: role.position,
+                permissions: role.permissions,
+                managed: role.managed || !!role.assignedToBot,
+              })),
+              channels: guild.channels.map((channel) => ({
+                id: channel.id,
+                name: channel.name,
+                type: channel.type,
+                parentId: null,
+                overwrites: [],
+              })),
+            },
+            config: guild.config,
+          });
+          const saved = await saveTemplate({
+            sourceGuildId: guildId,
+            name: document.name,
+            description: document.description,
+            createdBy: actor.id,
+            document,
+          });
+          return NextResponse.json(
+            { ...saved, demo: true, note: "Captured from the demo snapshot." },
+            { status: 201 }
+          );
+        }
+        // Only the bot can read permission overwrites, so capturing is a job.
+        const job = await enqueueAction(
+          guildId,
+          actor.id,
+          "capture-template",
+          input,
+          `capture-template-${Date.now()}`
+        );
+        return NextResponse.json(
+          { accepted: true, jobId: job.id },
+          { status: 202 }
+        );
+      }
+      if (path[3] === "runs" && path[4] && req.method === "GET") {
+        const run = await getTemplateRun(path[4]);
+        if (!run || run.guildId !== guildId)
+          throw new HttpError(404, "Apply run not found");
+        return NextResponse.json(run);
+      }
+      const id = path[3] ? z.string().uuid().parse(path[3]) : null;
+      if (id) {
+        const template = await getTemplate(id, sources);
+        if (!template) throw new HttpError(404, "Template not found");
+        if (path.length === 4 && req.method === "GET")
+          return NextResponse.json(template);
+        if (path[4] === "preview" && req.method === "POST") {
+          const { targetGuildId, mapping } = z
+            .object({
+              targetGuildId: snowflake,
+              mapping: z.record(z.string(), z.string()).optional(),
+            })
+            .strict()
+            .parse(await body(req));
+          const target = assertTargetAllowed(
+            await getGuild(targetGuildId),
+            auth.guilds
+          );
+          return NextResponse.json({
+            template: { id: template.id, name: template.name },
+            target: { id: target.id, name: target.name },
+            plan: previewTemplate({
+              template: template.data,
+              target: applyTargetFromSnapshot(target),
+              mapping,
+            }),
+          });
+        }
+        if (path[4] === "apply" && req.method === "POST") {
+          const input = z
+            .object({
+              targetGuildId: snowflake,
+              fingerprint: z.string().min(3).max(80),
+              mapping: z.record(z.string(), z.string()).optional(),
+            })
+            .strict()
+            .parse(await body(req));
+          const target = assertTargetAllowed(
+            await getGuild(input.targetGuildId),
+            auth.guilds
+          );
+          const plan = previewTemplate({
+            template: template.data,
+            target: applyTargetFromSnapshot(target),
+            mapping: input.mapping,
+          });
+          if (plan.blockers.length)
+            throw new HttpError(409, plan.blockers[0].message);
+          if (plan.fingerprint !== input.fingerprint)
+            throw new HttpError(
+              409,
+              "This server changed since your preview. Preview again before applying."
+            );
+          if (isDemo()) {
+            // Demo mode must not pretend it created Discord resources.
+            const run = await createTemplateRun({
+              guildId: target.id,
+              templateId: template.id,
+              actorId: actor.id,
+              plan: {
+                ...plan,
+                sourceGuildId: template.sourceGuildId,
+                demo: true,
+              },
+            });
+            await updateTemplateRun(run.id, {
+              state: "simulated",
+              result: {
+                created: [],
+                reused: [],
+                failed: [],
+                configured: [],
+                message:
+                  "Demo mode: nothing was created in a Discord server. This is the plan that a live apply would execute.",
+              },
+            });
+            return NextResponse.json(
+              { ...(await getTemplateRun(run.id)), demo: true },
+              { status: 202 }
+            );
+          }
+          const run = await createTemplateRun({
+            guildId: target.id,
+            templateId: template.id,
+            actorId: actor.id,
+            plan: { ...plan, sourceGuildId: template.sourceGuildId },
+          });
+          const job = await enqueueAction(
+            target.id,
+            actor.id,
+            "apply-template",
+            {
+              templateId: template.id,
+              runId: run.id,
+              fingerprint: input.fingerprint,
+              mapping: input.mapping ?? {},
+            },
+            `apply-template-${run.id}`
+          );
+          return NextResponse.json(
+            { runId: run.id, jobId: job.id, accepted: true },
+            { status: 202 }
+          );
+        }
+        if (path.length === 4 && req.method === "DELETE") {
+          if (template.sourceGuildId !== guildId)
+            throw new HttpError(
+              403,
+              "Only the server this template was captured from can delete it."
+            );
+          await deleteTemplate(template.id, template.sourceGuildId);
+          return NextResponse.json({ ok: true });
+        }
       }
       throw new HttpError(404, "Endpoint not found");
     }

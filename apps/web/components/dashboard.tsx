@@ -10,6 +10,8 @@ import { CommandsPage } from "./commands-page";
 import { EconomyPage } from "./economy-page";
 import { MusicPage } from "./music-page";
 import { Overview } from "./features/overview/overview";
+import { MembersPage } from "./members-page";
+import { TemplatesPage } from "./templates-page";
 import { ResourcesPage } from "./resources-page";
 import { AuditPage, ChannelsPage, SettingsPage } from "./server-pages";
 import { WorkspaceContext } from "./workspace";
@@ -176,6 +178,8 @@ export function Dashboard({
               <div className="page-enter" key={section}>
                 {section === "overview" ? (
                   <Overview />
+                ) : section === "members" ? (
+                  <MembersPage />
                 ) : section === "economy" ? (
                   <EconomyPage />
                 ) : section === "music" ? (
@@ -188,6 +192,8 @@ export function Dashboard({
                   <CommandsPage />
                 ) : section === "channels" ? (
                   <ChannelsPage />
+                ) : section === "templates" ? (
+                  <TemplatesPage />
                 ) : section === "audit" ? (
                   <AuditPage />
                 ) : section === "settings" ? (

@@ -234,6 +234,9 @@ export function MusicPage() {
                     id={m.current.requestedById ?? ""}
                     name={m.current.requestedBy}
                     src={requester(m.current.requestedById)?.avatarUrl}
+                    // The queue payload records a name from request time; the
+                    // roster's current identity is what this server shows now.
+                    person={requester(m.current.requestedById)}
                     size={24}
                   />
                 </span>
@@ -586,6 +589,7 @@ export function MusicPage() {
                     id={t.requestedById ?? ""}
                     name={t.requestedBy}
                     src={requester(t.requestedById)?.avatarUrl}
+                    person={requester(t.requestedById)}
                     size={24}
                   />
                 </span>

@@ -501,6 +501,7 @@ export function ResourcesPage({
                       id={account.userId}
                       name={account.name}
                       src={account.avatarUrl}
+                      person={account}
                     />
                   ) : (
                     <span className="font-mono text-[10px] text-muted-foreground">
@@ -948,8 +949,10 @@ export function ResourcesPage({
                       ),
                     },
                     {
+                      // Action-only column: no header text, never hideable.
                       key: "actions",
                       label: "",
+                      canHide: false,
                       render: actions,
                       className: "w-12",
                     },
@@ -1021,7 +1024,13 @@ export function ResourcesPage({
                           />
                         ),
                       },
-                      { key: "actions", label: "", render: actions },
+                      {
+                        // Action-only column: no header text, never hideable.
+                        key: "actions",
+                        label: "",
+                        canHide: false,
+                        render: actions,
+                      },
                     ]
                   : [
                       {
@@ -1070,7 +1079,13 @@ export function ResourcesPage({
                           />
                         ),
                       },
-                      { key: "actions", label: "", render: actions },
+                      {
+                        // Action-only column: no header text, never hideable.
+                        key: "actions",
+                        label: "",
+                        canHide: false,
+                        render: actions,
+                      },
                     ]
             }
           />

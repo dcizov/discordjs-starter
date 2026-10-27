@@ -3,6 +3,7 @@ import {
   CalendarClock,
   Hash,
   Terminal,
+  Layers,
   LayoutGrid,
   Music2,
   Rss,
@@ -34,6 +35,7 @@ export const navigation = [
     group: "workspace",
   },
   { id: "channels", label: "Channels & roles", icon: Hash, group: "server" },
+  { id: "templates", label: "Templates", icon: Layers, group: "server" },
   { id: "commands", label: "Commands", icon: Terminal, group: "server" },
   { id: "audit", label: "Audit log", icon: ScrollText, group: "server" },
   {

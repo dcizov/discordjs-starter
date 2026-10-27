@@ -319,7 +319,12 @@ export function DataTable<T extends { id: string }>({
     if (!server && clientPage > pageCount - 1) setClientPage(pageCount - 1);
   }, [server, pagination, pageCount, clientPage]);
 
-  const hideable = columns.filter((c) => c.canHide !== false);
+  // Only columns with a real name are offered in the menu. An action-only
+  // column declares `canHide: false`; filtering on the label as well means a
+  // definition that forgets it can never produce an unnamed checkbox item.
+  const hideable = columns.filter(
+    (c) => c.canHide !== false && c.label.trim().length > 0
+  );
   const activeFilters = filters.filter(
     (facet) => facet.value !== facet.allValue
   );
