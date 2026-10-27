@@ -163,7 +163,8 @@ describe("code-derived least-privilege permissions and setup", () => {
   it("keeps supplied starter feeds setup-required and supports direct destinations OR routes", () => {
     const data = context();
     const starter = data.resources.find(
-      (item) => item.kind === "source" && item.data.adapter === "mojang"
+      (item) =>
+        item.kind === "source" && item.data.adapter === "rss" && !item.data.url
     )!;
     expect(sourceSetupIssue(starter)).toContain("verified RSS/Atom");
     expect(moduleSetup(data, "news")).toMatchObject({ state: "needs-setup" });

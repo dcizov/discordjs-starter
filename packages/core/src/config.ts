@@ -204,9 +204,17 @@ export const dealSchema = base.extend({
 });
 export const sourceSchema = base.extend({
   data: z.object({
-    adapter: z
-      .enum(["rss", "steam", "webhook", "blizzard", "wowhead", "mojang"])
-      .default("rss"),
+    /**
+     * Only adapters that actually fetch something belong here.
+     *
+     * `blizzard`, `wowhead` and `mojang` used to be listed as "bring your own
+     * feed" starters, but no fetch path ever existed for them: feeds.ts handles
+     * `webhook` and `steam` explicitly and everything else falls through to the
+     * RSS/Atom reader, so all three already behaved exactly like `rss`. The
+     * only thing the extra values did was imply a provider integration that
+     * was never built. Migration 0009 converts stored rows to `rss`.
+     */
+    adapter: z.enum(["rss", "steam", "webhook"]).default("rss"),
     url: z.string().url().or(z.literal("")).default(""),
     appId: z.number().int().positive().optional(),
     channelId: optionalId,

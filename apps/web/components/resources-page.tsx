@@ -5,11 +5,9 @@ import { cn, number, relativeTime } from "@/lib/utils";
 import type { Resource, ResourceKind, Delivery } from "@orbit/core";
 import {
   ArrowRight,
-  Blocks,
   Check,
   Clock3,
   Copy,
-  Flame,
   FlaskConical,
   Gamepad2,
   Hash,
@@ -23,7 +21,6 @@ import {
   Rss,
   Send,
   ShieldCheck,
-  Snowflake,
   Tags,
   Trash2,
   UsersRound,
@@ -691,15 +688,9 @@ export function ResourcesPage({
                 const Icon =
                   r.data.adapter === "steam"
                     ? Gamepad2
-                    : r.data.adapter === "blizzard"
-                      ? Snowflake
-                      : r.data.adapter === "wowhead"
-                        ? Flame
-                        : r.data.adapter === "mojang"
-                          ? Blocks
-                          : r.data.adapter === "webhook"
-                            ? Webhook
-                            : Rss;
+                    : r.data.adapter === "webhook"
+                      ? Webhook
+                      : Rss;
                 const setupIssue = sourceSetupIssue(r);
                 const healthy = !setupIssue && r.data.health === "healthy";
                 // Saved health is not evidence that a check ran recently.
@@ -714,13 +705,7 @@ export function ResourcesPage({
                         <span
                           className={cn(
                             "flex size-11 items-center justify-center rounded-xl",
-                            r.data.adapter === "mojang"
-                              ? "bg-[#ecf3e8] text-emerald-700 dark:text-emerald-300"
-                              : r.data.adapter === "wowhead"
-                                ? "bg-[#fcf0df] text-amber-700 dark:text-amber-300"
-                                : r.data.adapter === "blizzard"
-                                  ? "bg-[#eaf3fc] text-sky-700 dark:text-sky-300"
-                                  : "bg-[#eef0f7] text-slate-700 dark:text-slate-300"
+                            "bg-[#eef0f7] text-slate-700 dark:text-slate-300"
                           )}
                         >
                           <Icon size={23} strokeWidth={1.5} />

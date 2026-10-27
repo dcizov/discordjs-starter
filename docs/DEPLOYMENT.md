@@ -16,7 +16,7 @@ parse HEAD)`, or `ORBIT_SOURCE_REF=…` before `npm run build`); unset links
 - [ ] Migrations have been applied **before** routing live traffic. Backups and recovery have been tested.
 - [ ] Minimal posting invite (`19456`) and only needed feature grants are reviewed using [PERMISSIONS.md](PERMISSIONS.md); bot hierarchy, channel overwrites, notification-role mentionability, and moderator hierarchy are tested in a staging guild. No Administrator default.
 - [ ] `ITAD_API_KEY` is present if deals are enabled, quotas allow the chosen intervals, and region/currency/store mappings are verified.
-- [ ] Publisher URLs are verified and authorized. Blizzard/Wowhead/Mojang starters are either configured or left paused/setup-required.
+- [ ] Publisher URLs are verified and authorized. Sources are either configured or left paused/setup-required; the Blizzard/Wowhead/Mojang starters were removed and migrated to RSS/Atom by migration `0009`.
 - [ ] Music sources and the current voice protocol/encryption are verified against your installed Lavalink release and provider terms.
 - [ ] Apply additive `0002_community_posts.sql` before updated bot/web/worker services; do not reset/seed existing data. Polls/announcements default off, including legacy JSON. Register new command definitions in the intended scope, deliberately grant Send Polls only where needed, and keep the bot consumer plus worker running for scheduled execution/retention. Review [community privacy/recovery](COMMUNITY.md).
 - [ ] `npm run lint`, `npm run typecheck`, `npm test`, `npm run test:e2e`, `npm audit --omit=dev`, and `npm run build` pass.

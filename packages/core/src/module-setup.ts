@@ -165,7 +165,7 @@ export function moduleSetup(data: Context, module: ModuleKey): ModuleSetup {
     if (missing.length)
       return result(
         "needs-setup",
-        `${missing.length} enabled source${missing.length === 1 ? " needs" : "s need"} configuration. Blizzard/Wowhead/Mojang names are starters, not automatic integrations. Use the Needs setup source filter.`
+        `${missing.length} enabled source${missing.length === 1 ? " needs" : "s need"} configuration. Use the Needs setup source filter.`
       );
     if (sources.some((source) => source.data.health === "degraded"))
       return result(

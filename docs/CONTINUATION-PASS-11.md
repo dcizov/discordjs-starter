@@ -184,7 +184,7 @@ Kept up to date as the pass progresses.
 | Cross-server apply    | `assertTargetAllowed` + preview for a second guild      | No complete target picker/mapping UI, no execution-time recheck surfaced to the UI                                                                      |
 | Music diagnostics     | `diagnosticText` with secret redaction                  | No per-stage client taxonomy, no dedupe of repeated exception text, no bounded per-client summary                                                       |
 | Embeds                | `replies.ts`: `ReplyCard`, tones `info\|success\|error` | No `warning` tone, no identity/pagination/attribution primitives, 4 files still call `EmbedBuilder` directly, no fixtures                               |
-| News adapters         | `rss` + `steam` implemented                             | `blizzard`/`wowhead`/`mojang` are selectable but unimplemented                                                                                          |
+| News adapters         | `rss` + `steam` + `webhook` implemented; the three unimplemented starters removed by migration `0009` | —                                                                                                                                                       |
 
 ### Absent (confirmed by search this session)
 
@@ -365,3 +365,47 @@ feature slices.
 10. Documentation framework migration
 11. Embed / message presentation layer
 12. Cross-feature validation and final report
+
+### Slice 9 — news source cleanup
+
+Done out of the brief's order, for a stated reason: the template builder
+(slice 5) is the largest remaining piece and this one is self-contained and
+completable, while a half-built builder would violate the "working vertical
+slices, not schemas" rule.
+
+`blizzard`, `wowhead` and `mojang` were selectable news adapters that never had
+a fetch path: `feeds.ts` handles `webhook` and `steam` explicitly and every
+other adapter falls through to the RSS/Atom reader, so all three already
+behaved exactly like `rss`. The extra values only implied a provider
+integration that did not exist.
+
+Removed from the `sourceSchema` enum, the source editor, the source cards and
+their icons, and from the setup/permission guidance strings.
+
+**Migration `0009_drop_unimplemented_news_adapters`** converts stored rows
+instead of dropping them — a deliberate choice. Narrowing the enum alone would
+have been the destructive version: existing rows would fail validation and an
+administrator could not fix them from the dashboard, because the editor would
+no longer offer the value the row still carried. The migration rewrites
+`resources.data->>'adapter'` to `rss` and is scoped to `kind = 'source'` so
+unrelated jsonb carrying the same key is left alone.
+
+`tests/news-adapters.test.ts` proves the conversion against a real PGlite
+instance: the URL, schedule and tags survive; a disabled starter with no URL is
+converted rather than dropped; a `steam` row is untouched; a `route` row is
+untouched; and no row is deleted.
+
+Demo sources were renamed from the publisher names to
+"Community feed · Minecraft / Warcraft / Diablo", because what they demonstrate
+is a bring-your-own feed about a subject, not an integration with a provider.
+The three e2e heading assertions were updated to match.
+
+`docs/INTEGRATIONS.md` now documents how a future provider is added in four
+small pieces, and warns against the two things that produced this problem:
+speculative adapters, and adapters whose only implementation is "the
+administrator will supply a URL" — which is what RSS / Atom already means.
+
+**Not done:** webhook-based news ingestion was *not* removed. Orbit's
+`webhook_secrets` table backs its own HMAC-signed ingestion endpoint and is
+unrelated to news-provider webhooks; deleting it would have been collateral
+damage.

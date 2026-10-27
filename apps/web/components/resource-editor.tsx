@@ -750,15 +750,6 @@ export function ResourceEditor({
                     { value: "rss", label: "RSS / Atom feed" },
                     { value: "steam", label: "Steam · official app news API" },
                     { value: "webhook", label: "Signed incoming webhook" },
-                    {
-                      value: "blizzard",
-                      label: "Blizzard · bring your own feed",
-                    },
-                    {
-                      value: "wowhead",
-                      label: "Wowhead · bring your own feed",
-                    },
-                    { value: "mojang", label: "Mojang · bring your own feed" },
                   ]}
                 />
               </Field>
@@ -793,16 +784,11 @@ export function ResourceEditor({
                     onChange={(e) => set("url", e.target.value)}
                     placeholder="https://your-publisher.example/feed.xml"
                   />
-                  {["blizzard", "wowhead", "mojang"].includes(
-                    values.adapter
-                  ) && (
-                    <span className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2.5 text-[11px] leading-relaxed text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
-                      <Info size={13} className="mt-0.5 shrink-0" />
-                      No default feed is assumed. Supply a publisher-supported
-                      URL, or choose a signed webhook. Scraping is never
-                      enabled.
-                    </span>
-                  )}
+                  <span className="flex items-start gap-1.5 rounded-lg bg-amber-50 p-2.5 text-[11px] leading-relaxed text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                    <Info size={13} className="mt-0.5 shrink-0" />
+                    No default feed is assumed. Supply a publisher-supported
+                    URL, or choose a signed webhook. Scraping is never enabled.
+                  </span>
                 </Field>
               )}
               {channelSelect}

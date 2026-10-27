@@ -64,6 +64,13 @@
       "when": 1793103430466,
       "tag": "0008_account_identity_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793103431466,
+      "tag": "0009_drop_unimplemented_news_adapters",
+      "breakpoints": true
     }
   ]
 }

@@ -307,7 +307,7 @@ export const permissionMatrix: Array<{
     channelType: "text",
     required: ["ViewChannel", "SendMessages", "EmbedLinks"],
     condition:
-      "Enabled, configured Steam/RSS/Atom/signed-webhook source with a direct destination OR matching route. Blizzard/Wowhead/Mojang starters stay setup-required until configured.",
+      "Enabled, configured Steam/RSS/Atom/signed-webhook source with a direct destination OR matching route. A source without a verified feed URL stays setup-required until configured.",
     failure:
       "No automatic delivery without a source and direct destination or matching route. Inbound signed webhooks do NOT need Discord ManageWebhooks.",
   },

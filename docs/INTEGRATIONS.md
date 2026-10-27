@@ -2,16 +2,59 @@
 
 ## News source matrix
 
-| Starter / adapter | What Orbit actually uses                          | Setup                                                               |
-| ----------------- | ------------------------------------------------- | ------------------------------------------------------------------- |
-| Steam             | Official `ISteamNews/GetNewsForApp/v2` API        | Set a public Steam application ID (e.g. 570); no fabricated RSS URL |
-| RSS / Atom        | HTTPS XML feeds                                   | Supply a verified publisher-supported URL                           |
-| Blizzard          | Administrator-supplied RSS/Atom or signed webhook | Setup required; no universal news URL/API is assumed                |
-| Wowhead           | Administrator-supplied RSS/Atom or signed webhook | Setup required; HTML scraping is disabled                           |
-| Mojang            | Administrator-supplied RSS/Atom or signed webhook | Setup required; verify the publisher’s current supported endpoint   |
-| Incoming webhook  | Authenticated JSON events                         | Generate a source-specific signing secret                           |
+| Adapter          | What Orbit actually uses                   | Setup                                                               |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------- |
+| Steam            | Official `ISteamNews/GetNewsForApp/v2` API | Set a public Steam application ID (e.g. 570); no fabricated RSS URL |
+| RSS / Atom       | HTTPS XML feeds                            | Supply a verified publisher-supported URL                           |
+| Incoming webhook | Authenticated JSON events                  | Generate a source-specific signing secret                           |
 
-The named Blizzard/Wowhead/Mojang starters are routing/configuration templates, **not invented feed implementations**. An available publisher feed may differ by product, locale, or licensing. Verify it directly with the publisher. You can create any number of verified RSS/Atom sources or use an authorized integration to push updates. An API adapter in this release means the supported Steam app-news adapter, not unrestricted arbitrary-URL JSON execution.
+These three are the only adapters, because they are the only ones that fetch
+something. An API adapter in this release means the supported Steam app-news
+adapter, not unrestricted arbitrary-URL JSON execution.
+
+### Blizzard, Wowhead and Mojang were removed (2026-10-27)
+
+Those three used to be selectable in the source editor. They were never
+implementations: `feeds.ts` handles `webhook` and `steam` explicitly and every
+other adapter falls through to the RSS/Atom reader, so all three already
+behaved exactly like `rss`. The only thing the extra values did was imply a
+provider integration that did not exist, and to name three publishers whose
+feed URLs varied by product, locale and licensing.
+
+The removal is a **conversion, not a deletion**. Migration
+`0009_drop_unimplemented_news_adapters` rewrites
+`resources.data->>'adapter'` from `blizzard`/`wowhead`/`mojang` to `rss` on
+source rows only. The URL, keywords, tags, destination, schedule and every
+other field are untouched, and the row keeps fetching exactly what it fetched
+before. Nothing is deleted and no history is erased. It is scoped to
+`kind = 'source'` so unrelated jsonb that happens to carry the same key is left
+alone.
+
+Narrowing the enum without the migration would have been the destructive
+version: existing rows would fail validation and an administrator could not fix
+them from the dashboard, because the editor would no longer offer the value the
+row still carried.
+
+A source that used one of these is now shown as an RSS / Atom source. If it has
+no URL it stays `setup_required` with the same guidance as any other unconfigured
+feed. If you were relying on a specific publisher feed, verify the publisher's
+current supported endpoint and paste it in.
+
+### Adding a future provider
+
+A provider is only worth adding when it has a documented, public interface.
+The work is four small pieces, and nothing else changes:
+
+1. Narrow the enum in `sourceSchema` (`packages/core/src/config.ts`) by one
+   value — no client is needed for RSS-family feeds.
+2. Add a branch in `packages/core/src/feeds.ts` that fetches and returns
+   normalized `FeedItem`s. Keep the parsing provider-specific.
+3. Add a label and icon in `resource-editor.tsx` / `resources-page.tsx`.
+4. Add a migration if a previously-stored value must be converted.
+
+Do not add a speculative adapter, a universal integration client, or an
+adapter whose only implementation is "the administrator will supply a URL" —
+that is what RSS / Atom already means.
 
 RSS/Atom fetching requires HTTPS, a public DNS resolution, the standard HTTPS port, a suitable XML content type, and a response at most 1 MiB. The validated IP is pinned to the network socket. Every redirect is separately validated, up to three redirects. XML DTDs/entities are rejected. Private networks, loopback, cloud metadata, reserved networks, URL credentials, and internal hostnames are blocked. Do not place secrets in a feed URL; source URLs are visible to server administrators.
 

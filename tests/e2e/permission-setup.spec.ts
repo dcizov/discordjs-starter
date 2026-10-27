@@ -70,16 +70,22 @@ test("module setup filters are useful and publisher starters remain explicitly s
   // filter in the table toolbar, not a page-level select.
   await chooseFacet(page, "Filter by status", "Needs setup");
   await expect(
-    page.getByRole("heading", { name: "Mojang", exact: true })
+    page.getByRole("heading", {
+      name: "Community feed · Minecraft",
+      exact: true,
+    })
   ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Steam", exact: true })
   ).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "Blizzard", exact: true })
+    page.getByRole("heading", {
+      name: "Community feed · Warcraft",
+      exact: true,
+    })
   ).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Wowhead", exact: true })
+    page.getByRole("heading", { name: "Community feed · Diablo", exact: true })
   ).toBeVisible();
   await expect(
     page.getByText(/No default publisher feed or scraping is assumed/).first()

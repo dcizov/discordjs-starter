@@ -349,8 +349,8 @@ export function createDemo(): DemoState {
     health: "healthy",
     lastChecked: minutesAgo(18),
   });
-  add("source", "Mojang", {
-    adapter: "mojang",
+  add("source", "Community feed · Minecraft", {
+    adapter: "rss",
     url: "",
     channelId: channels[5].id,
     keywords: [],
@@ -365,9 +365,9 @@ export function createDemo(): DemoState {
   });
   add(
     "source",
-    "Blizzard",
+    "Community feed · Warcraft",
     {
-      adapter: "blizzard",
+      adapter: "rss",
       url: "",
       channelId: channels[4].id,
       keywords: [],
@@ -378,15 +378,15 @@ export function createDemo(): DemoState {
       includeSummary: true,
       health: "setup_required",
       lastError:
-        "Blizzard does not provide a configured universal news API. Add a verified feed or a signed webhook.",
+        "No publisher news API is built in. Add a verified RSS/Atom URL or use a signed incoming webhook.",
     },
     false
   );
   add(
     "source",
-    "Wowhead",
+    "Community feed · Diablo",
     {
-      adapter: "wowhead",
+      adapter: "rss",
       url: "",
       channelId: channels[4].id,
       keywords: [],
