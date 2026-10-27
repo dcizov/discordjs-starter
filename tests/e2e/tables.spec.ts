@@ -157,11 +157,19 @@ test("the audit log filters by action and pages on the server", async ({
       const url = new URL(route.request().url());
       requests.push(url.searchParams);
       const filter = url.searchParams.get("filter") ?? "all";
+      const query = (url.searchParams.get("query") ?? "").toLowerCase();
       const pageNumber = Number(url.searchParams.get("page") ?? "1");
       const size = Number(url.searchParams.get("pageSize") ?? "7");
       const direction = url.searchParams.get("dir") === "asc" ? 1 : -1;
       const matching = entries
         .filter((row) => filter === "all" || row.action === filter)
+        .filter(
+          (row) =>
+            !query ||
+            `${row.actorName} ${row.action} ${row.target} ${row.detail}`
+              .toLowerCase()
+              .includes(query)
+        )
         .sort((a, b) => direction * a.createdAt.localeCompare(b.createdAt));
       const start = (pageNumber - 1) * size;
       await route.fulfill({
