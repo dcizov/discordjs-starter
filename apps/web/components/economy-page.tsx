@@ -304,9 +304,14 @@ export function EconomyPage() {
                   },
                 ]}
                 footerNote={
+                  // The snapshot holds the top contributors; the total is the
+                  // server's count. Saying both is honest about what is missing
+                  // instead of implying this row list is everyone.
                   data.accounts.length <
                   (data.stats?.accountCount ?? data.accounts.length)
-                    ? "· top contributors by balance"
+                    ? `· top ${data.accounts.length} of ${number(
+                        data.stats?.accountCount ?? data.accounts.length
+                      )} contributors`
                     : undefined
                 }
                 emptyTitle={

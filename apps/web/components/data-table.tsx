@@ -197,11 +197,11 @@ export function DataTable<T extends { id: string }>({
   // complete reference list (channels, roles) and every row renders. A paged
   // client list keeps its own page size, so "Rows per page" is a real control
   // rather than a fixed number dressed up as one.
-  const [clientSize, setClientSize] = useState(pageSize ?? 7);
   const pagedClient = !server && pageSize !== undefined;
+  const [clientSize, setClientSize] = useState(pageSize ?? 7);
   const size = server
     ? (pageSize ?? 7)
-    : pageSize
+    : pagedClient
       ? clientSize
       : Math.max(rows.length, 1);
   const [clientSort, setClientSort] = useState<SortingState>([]);

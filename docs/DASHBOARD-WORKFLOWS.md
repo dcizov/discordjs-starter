@@ -26,30 +26,40 @@ were considered — Orbit keeps its own visual language and Radix primitives.
 | Reactions / Rate Up / Discuss counts                   | Orbit posts Discord embeds; reactions belong to Discord  | Not portable: Steam supplies no reaction data for news items                 | Low                                     | —      | Would require inventing numbers or scraping Steam                                                                                      | —                                                                                      | **Rejected** — no fabricated counts, no scraping                                                                                                    |
 | `Share`                                                | `CopyButton` exists on several dashboard surfaces        | News card has no copy-link action                                            | Low                                     | Tiny   | Client-side only                                                                                                                       | —                                                                                      | **Deferred** — the provider link is already visible and clickable                                                                                   |
 | "More events from <game>" + `View All`                 | Same poll exposes only the latest items                  | No pagination of provider history                                            | Medium                                  | Medium | `View All` would need a provider-side history endpoint per adapter; Steam has no documented one for news                               | A dated list of the remaining polled items                                             | **Implemented without `View All`** — the list comes from the same poll, so no second request and no invented deep links                             |
-| Faceted filters with counts                            | History tables: search + one filter + server sorting     | No per-facet counts, no multi-column sort                                    | Medium                                  | Medium | Facet counts are extra aggregate queries per dataset; must stay server-side                                                            | Counts shown next to each filter value, still paginated                                | **Deferred** — counts need per-kind aggregate queries; sorting shipped instead                                                                      |
+| Faceted filters with counts                            | Tables: search + one column filter + server sorting      | Per-value counts need aggregate queries per dataset                          | Medium                                  | Medium | Counts must be honest: an aggregate query per facet value, never an estimate from the current page                                     | A filter that names its value in the trigger and resets the view                       | **Implemented without invented counts** — a caller that can count its options (the news source status filter) shows them; server lists (audit, ledger) show the filter without a number because the page does not know the totals |
 | Row selection / bulk actions                           | None                                                     | None                                                                         | Low for Orbit's datasets                | Large  | Needs a safe multi-row action first (audit logs and deliveries are append-only evidence)                                               | —                                                                                      | **Rejected for now** — no domain action is safe to apply to many rows                                                                               |
 | Column visibility                                      | Shipped this pass (`DataTable`)                          | —                                                                            | Medium                                  | Small  | Client state only                                                                                                                      | A "Columns" menu that cannot hide the last column                                      | **Implemented**                                                                                                                                     |
 
 ## Table foundation
 
-One component (`apps/web/components/data-table.tsx`) serves audit, moderation
-cases, ledger and delivery history:
+One component (`apps/web/components/data-table.tsx`, plus `table-facet.tsx` for
+the faceted filter) serves every list: audit, moderation cases, ledger, delivery
+history, wallet history, news sources and deliveries, channels, roles and the
+economy leaderboard. Card layouts (role panels, news sources, shop items) keep
+the same compact controls above them, because they are lists too.
 
-- rows come from `GET /api/guilds/:id/history`, already paginated and filtered
-  by the database — the browser never loads a whole table;
-- sorting is a **request parameter**, validated per dataset in
-  `packages/db/src/history-sort.ts`, and the query string is built and parsed by
-  one shared contract (`packages/core/src/history-query.ts`) so a rename cannot
-  silently drop a filter;
-- changing sort or filter resets to page 1, and the footer states both the
-  matching row count and the ordering;
-- loading, empty, error-with-retry states are explicit, and the empty state
-  distinguishes "no rows at all" from "no rows match".
+- **Server-owned data** (history kinds) comes from
+  `GET /api/guilds/:id/history`, already paginated and filtered by the database.
+  The table runs TanStack Table in manual modes: sorting and filtering are
+  request parameters, validated per dataset in `packages/db/src/history-sort.ts`
+  and built/parsed by one shared contract
+  (`packages/core/src/history-query.ts`). A page of rows is never re-sorted in
+  the browser and presented as the ordering of the whole dataset.
+- **Complete client lists** (leaderboard, channels, roles, resources) sort and
+  page through TanStack's row models, with stable row ids from the domain and a
+  page size that is a real control.
+- One toolbar (search, facets, reset, view options, actions) and one footer
+  (single range sentence, page size, page position with disabled edges). The
+  footer never duplicates the count and never states a selected-row total,
+  because selection is not offered.
+- Loading, empty, error-with-retry states are explicit, and the empty state
+  distinguishes "nothing here yet" from "no rows match" while keeping the search
+  reachable.
 
-Deliberately absent: TanStack Table (the server already paginates, so a client
-row model would only re-sort the current page), row selection and bulk actions
-(no dataset has a safe multi-row action), drag-and-drop (no ordering domain),
-and chart scaffolding.
+Deliberately absent: row selection and bulk actions (no dataset has a safe
+multi-row action; audit rows are append-only evidence), drag-and-drop (no
+persisted ordering), task-specific status/priority columns, and chart
+scaffolding.
 
 ## Styling and component base
 

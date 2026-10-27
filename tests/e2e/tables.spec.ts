@@ -18,15 +18,18 @@ async function hydrated(page: Page) {
   });
 }
 
-/** One column's text for every visible row, in row order. */
+/**
+ * One column's text for every visible row, in row order.
+ *
+ * Read as a single query (`td:nth-child`) rather than cell by cell: a table
+ * that is re-rendering a server response can otherwise change row count
+ * between two reads and fail on a row that no longer exists.
+ */
 async function column(rows: Locator, index: number) {
-  const count = await rows.count();
-  const values: string[] = [];
-  for (let i = 0; i < count; i += 1)
-    values.push(
-      (await rows.nth(i).locator("td").nth(index).innerText()).trim()
-    );
-  return values;
+  const values = await rows
+    .locator(`td:nth-child(${index + 1})`)
+    .allInnerTexts();
+  return values.map((value) => value.trim());
 }
 
 /** The same, as numbers, with separators and currency glyphs stripped. */
@@ -123,10 +126,11 @@ test("the audit log filters by action and pages on the server", async ({
   // knows the real total rather than the size of the page it holds.
   await expect(table.getByText(/^Page 1 of \d+$/)).toBeVisible();
 
-  // Historical identity: the picture recorded with the action is shown, and a
-  // row that recorded none says so instead of inventing one.
+  // Historical identity: the actor's recorded picture is rendered by the shared
+  // identity cell. (The "nothing was recorded" fallback is asserted
+  // deterministically in tests/dashboard-identity.test.ts — this database
+  // accumulates rows from other specs, so which actor lands on page 1 varies.)
   await expect(table.locator("tbody img")).not.toHaveCount(0);
-  await expect(table.locator("tbody")).toContainText("no avatar recorded");
 
   // Keyboard operation of the faceted filter: open with Enter, type to narrow,
   // commit with Enter. The trigger then states the active value.
@@ -215,7 +219,17 @@ test("the transaction history exposes type facets and server paging", async ({
   await expect(rows).not.toHaveCount(pageSize);
 
   await chooseFacet(page, "Filter transaction type", "Transfer");
-  const types = await column(rows, 1);
-  expect(types.length).toBeGreaterThan(0);
-  for (const type of types) expect(type.toLowerCase()).toContain("transfer");
+  // The filter is a server request: wait until every rendered row is a transfer
+  // instead of sampling the previous response.
+  await expect
+    .poll(async () => {
+      const types = await column(rows, 1);
+      return (
+        types.length > 0 &&
+        types.every((type) => type.toLowerCase().includes("transfer"))
+      );
+    })
+    .toBe(true);
+  await expect(footer(table)).toHaveCount(1);
+  await expect(rows.first()).toBeVisible();
 });

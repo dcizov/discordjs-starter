@@ -439,7 +439,12 @@ export function AuditPage() {
               key: "detail",
               label: "Details",
               render: (r) => (
-                <span className="line-clamp-2 max-w-xs text-muted-foreground">
+                // Clamped for scanning, with the full text on hover and in the
+                // row's detail dialog.
+                <span
+                  className="line-clamp-2 max-w-xs text-muted-foreground"
+                  title={r.detail}
+                >
                   {r.detail}
                 </span>
               ),

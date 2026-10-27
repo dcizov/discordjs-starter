@@ -1,6 +1,83 @@
 # Dashboard UX: audit identity, music state, first-visit tour, hero animation
 
-Date: 2026-10-25. Branch: `arena/99c6cf65-discordjs-starter`.
+Date: 2026-10-25 (audit identity, music state) · 2026-10-27 (economy identity, table composition).
+Branch: `arena/99c6cf65-discordjs-starter`.
+
+## Pass 9 — who people are, and how lists behave
+
+### Economy identity is now recorded, not guessed
+
+**Gap.** The audit log could show a recorded avatar, but the economy leaderboard,
+the transaction history, the music queue and the member picker could not: the
+`accounts` row stored a display name and nothing else, the ledger had no place
+for a picture, and a transfer recipient was stored as a raw user id until they
+interacted themselves.
+
+**What changed.**
+
+- `accounts.avatar` (nullable `text`, migration `drizzle/0006_accounts_avatar.sql`)
+  stores the avatar **hash** captured from the member object on the daily,
+  activity, transfer and purchase paths (`packages/db/src/economy.ts`, callers in
+  `apps/bot`). An interaction that carries no hash never erases a stored one, and
+  a transfer recipient is created with their display name and hash when known.
+- `loadDashboard()` adds `avatarUrl` to every account (and to the wallet) through
+  the same `userAvatarUrl()` helper the audit log uses: the URL is derived from
+  the stored hash on the server. There is no per-row Discord request and no new
+  OAuth scope.
+- The paged `/api/guilds/:id/history` response for `kind=audit` now includes
+  `actorAvatarUrl`. The audit table is built from that endpoint (not from the
+  snapshot), so before this its avatars could not appear at all.
+- `components/identity/identity-cell.tsx` is the one identity cell used by the
+  leaderboard, ledger, audit rows, moderation cases and music queue: 24 px slot,
+  `object-cover` cropping, truncating name, optional marker ("You") and a second
+  quiet line. `ActorAvatar` keeps three cases apart — a recorded picture, an
+  Orbit/system glyph, and honest initials with "no avatar captured"/"no avatar
+  recorded" when nothing was ever stored.
+
+**Policy.**
+
+- *Current identity* (leaderboard, transaction history, member picker, account
+  menu): whatever the bot last captured for that account. It is refreshed the
+  next time the member earns, spends or receives something; no profile is
+  fetched to decorate a list.
+- *Historical identity* (audit rows and their detail dialog): the hash recorded
+  with the action, never overwritten by a later profile change. A row written
+  before avatars were captured keeps initials and says so.
+- An unusable hash yields `null` rather than a URL that would 404, and demo
+  illustrations are the only local paths accepted.
+
+### Table composition
+
+Every dataset table renders one shared foundation
+(`apps/web/components/data-table.tsx` + `table-facet.tsx`):
+
+- **One toolbar**: search on the left, faceted filters (single-choice, because
+  the history API filters one value) with counts only where they are known, a
+  Reset that appears only when a filter is active, and view options plus real
+  actions on the right.
+- **One footer**: a single range sentence ("Showing 1–7 of 24"), rows-per-page,
+  and first/previous/next/last controls that stay visible and disabled when
+  everything fits on one page. There is no second "N records" line and no
+  selected-row count, because selection is not offered.
+- **Honest modes**: TanStack Table owns sorting and paging for a complete client
+  list (leaderboard, channels, roles); for server-paged data (audit, ledger,
+  deliveries, cases, wallet history) it runs in manual mode and only reports
+  intent, so a page of seven rows is never re-sorted in the browser and called
+  "sorted by date". Client sorting uses stable columns and row ids derived from
+  the domain (user id, channel id, resource id).
+- **States**: loading dims the body with `aria-busy`, a failed request shows the
+  error with a retry instead of an empty table, and a zero-match search says
+  "No records match" while keeping the search and filters reachable.
+- **Column controls**: a "Columns" menu that cannot hide the row's identity
+  column; numeric columns are right-aligned and tabular.
+
+Reference mapping (shadcn *tasks* table): search toolbar ✔, faceted filters ✔
+(counts only when known), column visibility ✔, sortable headers with `aria-sort`
+✔, pagination + page size + disabled edge states ✔, row actions ✔, tabs with
+counts where a real count exists ✔. Deliberately absent: row selection and bulk
+actions (no dataset has a safe multi-row operation; audit rows are append-only
+evidence), drag-and-drop (no persisted ordering), and the task-specific
+priority/status/label columns (Orbit has no such fields).
 
 ## Audit identity images
 
@@ -31,9 +108,9 @@ every actor, so a real avatar was never shown.
 - Recorded, not current: a later avatar change does not rewrite history, and the
   UI says so.
 - Deleted or unknown users keep initials; no avatar is invented.
-- Economy leaderboards (`accounts`) still store no avatar hash, so those lists
-  keep initials. Adding one would require syncing member metadata that the bot
-  does not currently persist for every rewarded member.
+- Economy lists show the hash captured on the member's last economy
+  interaction, which may lag a recent avatar change; it is refreshed by that
+  member's next daily/activity/transfer/purchase. Rows never trigger a lookup.
 - Community post audit rows still store the actor's snowflake as the display
   name (pre-existing behaviour in `packages/db/src/community.ts`); the avatar is
   not available at that layer. This is a known data-quality gap, not a UI bug.
