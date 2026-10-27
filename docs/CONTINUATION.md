@@ -1630,3 +1630,36 @@ and the account menu is addressed by the nickname the server shows.
   the member detail dialog and the demo template flow.
 - Live behaviour of Discord's per-route rate limits during a large sweep is
   bounded by page size and page cap, not measured.
+
+---
+
+## Levels & XP (this pass) — `2f3413d` → `03bbd10`
+
+Full detail per slice lives in `docs/CONTINUATION-PASS-11.md`. Summary:
+
+| Area                      | State                                                                                          | Verification                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Curve, schema, award path | Deterministic documented curve; atomic SQL increments; idempotent events                        | 37 tests in `tests/leveling.test.ts`, brute-force-checked to level 1000      |
+| Message + voice earning   | Cooldown, bot/webhook exclusion, exclusions, repetition fingerprints (no content stored), Voice States only, AFK excluded, whole-interval accounting, honest restart accounting | 11 tests for the pure rules; wired into `gateway.ts` + a 30s maintenance tick |
+| `/rank`, `/levels`, `/xp` | Rank with both XP numbers; paginated board; audited adjustments, keyed on the interaction id    | 11 tests including the server-side Manage Server re-check                    |
+| Role rewards              | Stack or replace; reconcile after every change; Administrator refused outright; recorded before announcing | 17 pure policy tests + 13 against a fake guild                       |
+| Dashboard + docs          | Leaderboard, settings, exclusions, rewards, announcement preview, curve table; `docs/LEVELING.md` | Typecheck/lint/build only — **no browser was used on the page**          |
+
+### Two things worth carrying forward
+
+**The documented curve table was wrong and is now pinned.** Eight of nine rows
+were off, because `totalXpForLevel(n)` (XP to reach level n) and
+`xpForLevel(n)` (XP to leave it) are easy to conflate. The doc now says which is
+which, and two tests assert every published row plus
+`total(n+1) = total(n) + cost(n)` for n ≤ 200.
+
+**`HELP_ORDER` is the one module list that fails silently.** Adding a module
+means touching eight places; seven break the build when missed.
+`HELP_ORDER` in `apps/bot/src/interactions/replies.ts` is a plain array, so
+omitting `xp` there made the whole group vanish from `/help` with no type error.
+
+### Deliberately not built
+
+- Member XP detail linked from the member page.
+- No live Discord server was used for any of this: no command has been run
+  against the real API, and no reward role has been granted or announced.
