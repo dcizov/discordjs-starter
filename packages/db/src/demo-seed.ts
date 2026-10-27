@@ -587,6 +587,8 @@ export function createDemo(): DemoState {
   const member = (
     n: number,
     input: {
+      /** Overrides the generated id; used for the signed-in demo person. */
+      userId?: string;
       username?: string | null;
       globalName?: string | null;
       nickname?: string | null;
@@ -598,7 +600,8 @@ export function createDemo(): DemoState {
       roles: string[];
     }
   ): Member => {
-    const userId = `1200000000000004${String(n).padStart(2, "0")}`;
+    const userId =
+      input.userId ?? `1200000000000004${String(n).padStart(2, "0")}`;
     const names = {
       userId,
       username: input.username ?? null,
@@ -624,6 +627,9 @@ export function createDemo(): DemoState {
   };
   const members: Member[] = [
     member(0, {
+      // The person signed into the demo is a member of the demo server, so the
+      // account menu, the leaderboard and the directory name them the same way.
+      userId: DEMO_USER_ID,
       username: "jamie.davis",
       globalName: "Jamie Davis",
       nickname: "Jamie",
