@@ -133,13 +133,12 @@ test("the audit log filters by action and pages on the server", async ({
   const facet = page.getByRole("button", { name: "Filter audit action" });
   await facet.focus();
   await page.keyboard.press("Enter");
-  const listbox = page.getByRole("listbox");
-  await expect(listbox).toBeVisible();
-  const input = page.locator("[cmdk-input]");
-  await input.focus();
+  const list = page.locator("[cmdk-list]");
+  await expect(list).toBeVisible();
+  await page.locator("[cmdk-input]").focus();
   await page.keyboard.type("Moderated");
   await page.keyboard.press("Enter");
-  await expect(listbox).toBeHidden();
+  await expect(list).toBeHidden();
   await expect(
     page.getByRole("button", { name: "Filter audit action: Moderated" })
   ).toBeVisible();

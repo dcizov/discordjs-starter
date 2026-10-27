@@ -43,9 +43,11 @@ export async function chooseOption(
  * Choose a value in a table's faceted filter (`table-facet.tsx`).
  *
  * The trigger is a button whose accessible name is the descriptive label, plus
- * the chosen value once a filter is applied. The popup is a cmdk list, so its
- * items are `option`s named by their visible text — which includes the count
- * when the caller knows one, hence the prefix match.
+ * the chosen value once a filter is applied. The popup is a cmdk command list;
+ * it is addressed through cmdk's own structural attributes (the same ones
+ * `chooseComboboxOption` uses) so the helper does not depend on how the item
+ * markup evolves. The trigger is still found by its accessible name, which is
+ * what a screen-reader user hears.
  */
 export async function chooseFacet(
   page: Page | Locator,
@@ -56,14 +58,16 @@ export async function chooseFacet(
   await expect(trigger).toBeVisible();
   await trigger.click();
   const view = root(page);
-  const listbox = view.getByRole("listbox");
-  await expect(listbox).toBeVisible();
-  const item = listbox.getByRole("option", {
-    name: new RegExp(`^${option}\b`),
-  });
+  const list = view.locator("[cmdk-list]");
+  await expect(list).toBeVisible();
+  // The option text carries the value and, when the caller knows one, a count:
+  // "Needs setup 2". Matching the prefix avoids depending on that suffix.
+  const item = list
+    .locator("[cmdk-item]")
+    .filter({ hasText: new RegExp(`^${option}`) });
   await expect(item).toHaveCount(1);
   await item.click();
-  await expect(listbox).toBeHidden();
+  await expect(list).toBeHidden();
   await expect(trigger).toContainText(option);
 }
 
