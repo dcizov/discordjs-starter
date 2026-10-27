@@ -63,7 +63,10 @@ test("the economy leaderboard ranks, sorts, pages and searches a complete list",
   // Identity: the demo personas with an illustration show a real picture, and
   // the current member is marked. At least one row deliberately has no avatar.
   await expect(table.locator("tbody img")).not.toHaveCount(0);
-  await expect(table.locator("tbody")).toContainText("no avatar captured");
+  // Current surfaces no longer narrate a missing picture: a row without one
+  // draws initials and keeps its name, and the label lives in the roster.
+  await expect(table.locator("tbody")).not.toContainText("no avatar captured");
+  await expect(table.locator("tbody tr").first()).not.toBeEmpty();
   await expect(table.getByText("You", { exact: true })).toHaveCount(1);
 
   // Sorting a client list re-orders every row, not just the visible page.

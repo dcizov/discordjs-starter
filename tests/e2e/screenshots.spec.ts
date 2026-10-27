@@ -81,6 +81,8 @@ test.describe("visual evidence", () => {
       [`${root}/settings`, "settings-config-form"],
       [`${root}/economy`, "economy"],
       [`${root}/channels`, "channels"],
+      [`${root}/templates`, "templates"],
+      [`${root}/members`, "members"],
     ] as const;
     for (const [url, name] of sections) {
       await open(page, url || "/");
@@ -103,6 +105,24 @@ test.describe("visual evidence", () => {
         description:
           "No demo track is playing, so the stop confirmation cannot be opened.",
       });
+    }
+  });
+
+  test("member detail and column menu", async ({ page }) => {
+    await open(page, `${root}/members`);
+    await capture(page, "desktop-members");
+    await page.getByRole("button", { name: "Columns", exact: true }).click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await capture(page, "desktop-members-columns");
+    await page.keyboard.press("Escape");
+    const firstAction = page
+      .getByRole("button", { name: /^Actions for / })
+      .first();
+    if (await firstAction.count()) {
+      await firstAction.click();
+      await page.getByRole("menuitem", { name: "View member details" }).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await capture(page, "desktop-member-detail");
     }
   });
 
@@ -137,6 +157,8 @@ test.describe("visual evidence", () => {
     await page.setViewportSize(mobile);
     await open(page, "/");
     await capture(page, "mobile-overview");
+    await open(page, `${root}/members`);
+    await capture(page, "mobile-members");
     const nav = page.getByRole("button", { name: "Open navigation" });
     if (await nav.count()) {
       await nav.click();

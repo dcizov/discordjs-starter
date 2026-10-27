@@ -6,9 +6,13 @@ const f = vi.hoisted(() => ({
   state: vi.fn(),
   health: vi.fn(),
   beat: vi.fn(),
+  roster: vi.fn(),
 }));
 vi.mock("../apps/bot/src/infrastructure/guild-sync", () => ({
   syncGuild: f.sync,
+}));
+vi.mock("../apps/bot/src/infrastructure/roster-sync", () => ({
+  reconcileRosters: f.roster,
 }));
 vi.mock("@orbit/db", () => ({
   putMusicState: f.state,
@@ -31,6 +35,7 @@ function dependencies() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  f.roster.mockResolvedValue(0);
   for (const mock of [f.sync, f.state, f.health, f.beat])
     mock.mockResolvedValue(undefined);
 });
@@ -44,14 +49,21 @@ describe("owned bot maintenance", () => {
     const stop = await startMaintenance(client, music, abort.signal);
     expect(f.sync).toHaveBeenCalledOnce();
     expect(f.state).toHaveBeenCalledOnce();
-    expect(vi.getTimerCount()).toBe(2);
+    // One sweep at startup, after the guild list is known.
+    expect(f.roster).toHaveBeenCalledOnce();
+    // Heartbeat, guild snapshot and roster reconciliation.
+    expect(vi.getTimerCount()).toBe(3);
     await vi.advanceTimersByTimeAsync(30000);
     expect(f.beat).toHaveBeenCalledTimes(2);
+    // The hourly sweep is not the 30-second beat: nothing extra yet.
+    expect(f.roster).toHaveBeenCalledOnce();
     abort.abort();
     await stop?.();
     expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(300000);
     expect(f.beat).toHaveBeenCalledTimes(2);
+    // Still only the startup sweep: the hourly timer was cleared on abort.
+    expect(f.roster).toHaveBeenCalledOnce();
   });
   it("does not initialize snapshots or timers after stop during guild sync", async () => {
     let complete!: () => void;

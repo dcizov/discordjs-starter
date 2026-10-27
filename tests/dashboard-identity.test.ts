@@ -8,6 +8,7 @@ const deps = vi.hoisted(() => ({
   activity: vi.fn(),
   posts: vi.fn(),
   history: vi.fn(),
+  identities: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth", () => ({
@@ -28,6 +29,7 @@ vi.mock("@orbit/db", () => ({
   listCommunityPosts: deps.posts,
   getOwnEconomyHistory: deps.history,
   emptyMusic: () => music,
+  getMemberIdentities: deps.identities,
 }));
 import { loadDashboard, withAuditAvatarUrl } from "../apps/web/lib/dashboard";
 import { HttpError } from "../apps/web/lib/auth";
@@ -88,6 +90,8 @@ beforeEach(() => {
   });
   deps.account.mockResolvedValue(null);
   deps.activity.mockResolvedValue([]);
+  // No synchronized roster unless a test provides one.
+  deps.identities.mockResolvedValue([]);
 });
 afterEach(() => vi.unstubAllEnvs());
 describe("dashboard identity projection and tenant boundary", () => {
