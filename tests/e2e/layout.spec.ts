@@ -81,7 +81,7 @@ test("failed profile refresh retains the current identity and image rather than 
     })
   );
   const account = page.getByRole("button", {
-    name: "Account menu for Jamie Davis",
+    name: "Account menu for Jamie",
     exact: true,
   });
   await account.click();

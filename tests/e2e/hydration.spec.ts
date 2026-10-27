@@ -69,7 +69,7 @@ test("the dashboard overview hydrates icons, identity images and the activity ch
     timeout: 15000,
   });
   const images = page.locator(
-    '[aria-label="Switch server, current: The Cozy Corner"] img, [aria-label="Account menu for Jamie Davis"] img'
+    '[aria-label="Switch server, current: The Cozy Corner"] img, [aria-label="Account menu for Jamie"] img'
   );
   await expect(images).toHaveCount(2);
   for (const image of await images.all()) {

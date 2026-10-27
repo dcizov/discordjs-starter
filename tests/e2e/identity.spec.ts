@@ -9,7 +9,9 @@ const guildButton = (page: Page, name = "The Cozy Corner") =>
     name: `Switch server, current: ${name}`,
     exact: true,
   });
-const accountButton = (page: Page, name = "Jamie Davis") =>
+// The account menu names the signed-in person the way this server does: their
+// nickname here, not the global account name.
+const accountButton = (page: Page, name = "Jamie") =>
   page.getByRole("button", { name: `Account menu for ${name}`, exact: true });
 async function visit(page: Page) {
   await page.goto(root);
