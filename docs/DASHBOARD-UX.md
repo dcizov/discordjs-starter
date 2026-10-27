@@ -108,8 +108,8 @@ fails — never as a blanket style for a whole table.
 ### What was verified, and what was not
 
 - **Assertions passed** (`npx vitest run`, 72 files / 909 tests; the browser
-  suite in CI at `76c1e9b`: `80 passed, 5 skipped` in the main run, plus a
-  five-test shard). Unit tests cover the
+  suite in CI at `e0b8865`: `81 passed, 5 skipped` in the main run, plus a
+  five-test shard, green on both the push and the PR run). Unit tests cover the
   projection (`tests/dashboard-identity.test.ts`: recorded avatar, current
   identity updated by a later interaction, absent avatar, unusable hash, animated
   hash, demo persona, system actor).
@@ -122,6 +122,14 @@ fails — never as a blanket style for a whole table.
 - **Not measured:** frame timing of the hero animation, real Discord requests
   (demo mode only), and a live-mode profile whose avatar changes between two
   interactions.
+
+The failed-request state had never been exercised in a browser, and adding the
+test found a real bug: a request that failed **before any row arrived** never
+reached the error state at all, because the table returned its loading skeleton
+whenever no result existed. That is the one state a reader cannot act on — an
+endless "Loading records" with no message and no retry. A failure with no result
+now renders the shared error with its retry; the skeleton is only for a request
+that is genuinely in flight.
 
 ### Visible table changes, per dataset
 

@@ -1441,15 +1441,15 @@ to the pixel.
 
 ### Verification (pass 9, branch `arena/99c6cf65-discordjs-starter`)
 
-| Check                                   | Result                                                                                                                      |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `npx vitest run`                        | **909 tests in 72 files pass**                                                                                              |
-| `npx tsc --noEmit` (root, `apps/web`)   | pass                                                                                                                        |
-| `npx eslint apps packages tests`        | pass                                                                                                                        |
-| `npm run format:check`                  | pass                                                                                                                        |
-| `npm run build:web`                     | pass, 25 documentation pages prerendered                                                                                    |
-| CI `verify` + `containers` on `76c1e9b` | **success on both the push run and the PR run** — `80 passed, 5 skipped`, ~2 min                                            |
-| Earlier CI in this pass                 | `3b983ea` 7 failed → `a79b2ab` 4 → `2418404` 2 → `dddf4b6` 1 → `9846539` 1 → `c68bcef` 1 (one shard only) → `76c1e9b` green |
+| Check                                   | Result                                                                                                                                                                                             |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npx vitest run`                        | **909 tests in 72 files pass**                                                                                                                                                                     |
+| `npx tsc --noEmit` (root, `apps/web`)   | pass                                                                                                                                                                                               |
+| `npx eslint apps packages tests`        | pass                                                                                                                                                                                               |
+| `npm run format:check`                  | pass                                                                                                                                                                                               |
+| `npm run build:web`                     | pass, 25 documentation pages prerendered                                                                                                                                                           |
+| CI `verify` + `containers` on `e0b8865` | **success on both the push run and the PR run** — `81 passed, 5 skipped`, ~2 min                                                                                                                   |
+| Earlier CI in this pass                 | `3b983ea` 7 failed → `a79b2ab` 4 → `2418404` 2 → `dddf4b6` 1 → `9846539` 1 → `c68bcef` 1 (one shard only) → `76c1e9b` green → `1b4907c`/`6e8e079` 1 (the new failure-state test) → `e0b8865` green |
 
 Each failing browser run was read through the Checks API annotations (the log
 and artifact downloads are not reachable from this sandbox) and fixed at the
@@ -1457,7 +1457,11 @@ cause: a facet addressed by a role the command list does not expose, cells read
 while a server response was replacing them, an audit expectation that depended
 on which row happened to be on page 1 of a database other specs write to, a
 stubbed history endpoint that ignored the `query` parameter, and an automod test
-that collided with the row its own failed attempt left behind on retry. No
+that collided with the row its own failed attempt left behind on retry. Adding
+that last browser test then found a real defect rather than a test defect: a
+history request that failed before any row arrived rendered the loading skeleton
+forever, with no message and no retry. `history-table` now shows the shared error
+state and retry in that case. No
 assertion was weakened, no sleep or retry was added to hide a race.
 
 ### What was not verified
