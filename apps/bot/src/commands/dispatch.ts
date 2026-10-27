@@ -7,6 +7,7 @@ import { moderationCommand } from "./moderation";
 import { rolesCommand } from "./roles";
 import { musicCommand } from "./music";
 import { newsCommand } from "./news";
+import { levelingCommand } from "./leveling";
 import { helpCommand } from "./help";
 import { handleDeals } from "../features/deals/commands";
 
@@ -18,6 +19,10 @@ export async function dispatchCommand(
   communityRest?: Pick<REST, "get" | "post">
 ) {
   switch (context.i.commandName) {
+    case "rank":
+    case "levels":
+    case "xp":
+      return levelingCommand(context);
     case "poll":
     case "announce":
       return communityCommand(context, client, communityRest);

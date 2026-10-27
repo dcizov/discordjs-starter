@@ -12,6 +12,7 @@ const f = vi.hoisted(() => ({
   music: vi.fn(),
   news: vi.fn(),
   deals: vi.fn(),
+  leveling: vi.fn(),
 }));
 vi.mock("../apps/bot/src/commands/community", () => ({
   communityCommand: f.community,
@@ -27,6 +28,9 @@ vi.mock("../apps/bot/src/commands/music", () => ({ musicCommand: f.music }));
 vi.mock("../apps/bot/src/commands/news", () => ({ newsCommand: f.news }));
 vi.mock("../apps/bot/src/features/deals/commands", () => ({
   handleDeals: f.deals,
+}));
+vi.mock("../apps/bot/src/commands/leveling", () => ({
+  levelingCommand: f.leveling,
 }));
 import { dispatchCommand } from "../apps/bot/src/commands/dispatch";
 import { registerCommands } from "../apps/bot/src/commands/registration";

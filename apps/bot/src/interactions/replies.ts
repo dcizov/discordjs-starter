@@ -356,6 +356,7 @@ const HELP_ORDER: CommandModule[] = [
   "moderation",
   "polls",
   "announcements",
+  "xp",
 ];
 
 /**

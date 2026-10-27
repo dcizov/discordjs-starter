@@ -1163,3 +1163,67 @@ The rules are tested and the gateway handlers are wired, but Discord's actual
 event stream is unproven here. The commands (`rank`, `top`, `xp`) are
 registered in the catalog but **not yet implemented**, and the dashboard has no
 leveling surface yet.
+
+---
+
+## Slice 13c — `/rank`, `/levels`, `/xp`
+
+### The leaderboard root had to be renamed twice
+
+The brief only warned about colliding with the economy's `leaderboard`. Two
+names were rejected in the end:
+
+- **`leaderboard`** — already the economy's root. Two modules shipping the same
+  root would make the help catalog and autocomplete ambiguous.
+- **`top`** — `/timeout` already exists and **contains** it. The `/help`
+  overview test, which counts how often a root name appears, caught this: `/top`
+  matched twice, once inside `` `/timeout` ``. Anything matching command names by
+  substring would confuse the two.
+
+The root is **`levels`**. That test earned its keep here.
+
+### Authorization is re-checked server-side
+
+`/xp` sets `defaultMemberPermissions(ManageGuild)`, but the handler checks the
+actor's guild permissions again. That Discord field is a hint to the client — it
+hides the command in the picker and nothing more. A hand-crafted interaction can
+carry any name, so the bot treats the client's claim as a claim.
+
+Adjustments are audited with the actor, the target and the change, and keyed on
+the interaction id so a retried interaction cannot adjust twice.
+
+`set` is stored as the **difference** to the current total, not as an
+assignment: setting 1000 when a member has 400 records `+600`. That keeps the
+adjustment reversible in the audit trail and keeps `adjustedXp` meaningful.
+
+### Showing both XP numbers
+
+`/rank` deliberately shows *"reaching level N has cost X in total"* alongside
+*"the next level costs Y"*. Conflating those two is the most common way to get
+a leveling system wrong, and showing both is the cure — it is also the thing
+the two published sources index differently.
+
+### More couplings
+
+`HELP_ORDER` in `replies.ts` is another hand-maintained list keyed on
+`CommandModule`. Missing `xp` there made the whole group vanish from `/help`
+silently, with no type error — it is a plain array, not a `Record`. Adding a
+module now means touching: the zod config schema, the hand-written
+`GuildConfig` type, `ModuleKey`, `commandModuleLabels`, `moduleRoots`,
+`MODULE_DOCS` in `help.ts`, `HELP_ORDER` in `replies.ts`, and the overview
+toolkit's module cards. Six of those are compiler-enforced; `HELP_ORDER` is not.
+
+### Verification
+
+Typecheck clean. `eslint --max-warnings=0` clean on every touched file.
+`format:check` clean. `build:web` succeeds. `npm test`: **1182 passed / 90
+files** (was 1168 / 89), +11 covering `/rank`, `/levels` and the `/xp`
+authorization path — including that an actor without Manage Server is refused
+and no award is made.
+
+### Not verified
+
+No live Discord server, so none of these commands have been run against the
+real API. The handlers are tested against mocked storage; Discord registration
+and the interaction round-trip are unproven. The dashboard still has no
+leveling surface.

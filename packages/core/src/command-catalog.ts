@@ -43,11 +43,15 @@ const moduleRoots: Record<CommandModule, readonly string[]> = {
   news: ["news"],
   polls: ["poll"],
   /**
-   * `top` is the XP leaderboard and is deliberately not called `leaderboard`:
-   * that root already belongs to the economy, and two modules shipping the
-   * same root would make the help catalog and autocomplete ambiguous.
+   * The XP leaderboard. Two names were rejected:
+   *
+   * - `leaderboard` — that root already belongs to the economy, and two
+   *   modules shipping the same root would make the help catalog ambiguous.
+   * - `top` — `/timeout` already exists and contains it, so anything matching
+   *   command names by substring would confuse the two. The help overview
+   *   test caught this one.
    */
-  xp: ["rank", "top", "xp"],
+  xp: ["rank", "levels", "xp"],
   announcements: ["announce"],
 };
 function moduleFor(root: string): CommandModule {

@@ -454,4 +454,82 @@ export const commandDefinitions = [
       });
     return root;
   }),
+  /*
+    Leveling. `top` is the XP leaderboard and is deliberately not named
+    `leaderboard`: that root is the economy's, and two modules shipping the
+    same root would make the help catalog and autocomplete ambiguous.
+  */
+  command("rank", "See your level and progress in this server").addUserOption(
+    (o) =>
+      o
+        .setName("member")
+        .setDescription("Whose level to look at (default: you)")
+        .setRequired(false)
+  ),
+  command(
+    "levels",
+    "See who has earned the most XP in this server"
+  ).addIntegerOption((o) =>
+    o
+      .setName("page")
+      .setDescription("Leaderboard page (10 members per page)")
+      .setMinValue(1)
+      .setMaxValue(100)
+      .setRequired(false)
+  ),
+  // Adjusting XP by hand is an operator action, gated like the other
+  // moderator-facing roots and audited on the way through.
+  command("xp", "Adjust a member’s XP (Manage Server)")
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .addSubcommand((s) =>
+      s
+        .setName("give")
+        .setDescription("Add XP to a member")
+        .addUserOption((o) =>
+          o
+            .setName("member")
+            .setDescription("Member to reward")
+            .setRequired(true)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("amount")
+            .setDescription("How much XP to add")
+            .setMinValue(1)
+            .setMaxValue(1000000)
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("take")
+        .setDescription("Remove XP from a member")
+        .addUserOption((o) =>
+          o.setName("member").setDescription("Member").setRequired(true)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("amount")
+            .setDescription("How much XP to remove")
+            .setMinValue(1)
+            .setMaxValue(1000000)
+            .setRequired(true)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("set")
+        .setDescription("Set a member’s total XP")
+        .addUserOption((o) =>
+          o.setName("member").setDescription("Member").setRequired(true)
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("total")
+            .setDescription("The total XP they should have")
+            .setMinValue(0)
+            .setMaxValue(100000000)
+            .setRequired(true)
+        )
+    ),
 ];
