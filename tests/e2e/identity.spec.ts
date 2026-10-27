@@ -60,9 +60,10 @@ test("real local demo images decode in fixed-size accessible identity controls",
     animations: "disabled",
   });
   await account.click();
-  await expect(
-    page.getByText("Demo administrator · sample image")
-  ).toBeVisible();
+  // The menu shows the same identity the roster holds: this guild's name for
+  // the person, then the handle, then what the workspace is.
+  await expect(page.getByText("@jamie.davis", { exact: false })).toBeVisible();
+  await expect(page.getByText(/Demo administrator/)).toBeVisible();
   await page.screenshot({
     path: ".artifacts/dashboard-account-demo.png",
     animations: "disabled",

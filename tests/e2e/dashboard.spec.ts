@@ -18,7 +18,27 @@ test("overview is polished, responsive, and clearly labels simulation", async ({
   await expect(
     page.getByText("Your changes are saved, not sent.")
   ).toBeVisible();
-  await expect(page.getByText("2,846", { exact: true })).toBeVisible();
+  // The demo's member total is the roster it can actually show, not a
+  // decorative number: compare the card with the members API.
+  const roster = await page.request.get(
+    `/api/guilds/${guild}/members?pageSize=1`
+  );
+  expect(roster.ok()).toBe(true);
+  const counts = (await roster.json()).counts as {
+    guildMemberCount: number;
+    syncedMembers: number;
+  };
+  expect(counts.guildMemberCount).toBe(counts.syncedMembers);
+  await expect(
+    page
+      .getByText(
+        new Intl.NumberFormat("en-US").format(counts.guildMemberCount),
+        {
+          exact: true,
+        }
+      )
+      .first()
+  ).toBeVisible();
   await expect(page.getByText("Sample activity")).toBeVisible();
   await page.getByRole("button", { name: "Customize", exact: true }).click();
   await page.getByRole("switch", { name: "A little welcome" }).click();
