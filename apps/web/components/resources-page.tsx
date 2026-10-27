@@ -29,6 +29,7 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "./data-table";
+import { RoleDot } from "./role-badge";
 import { FacetFilterButton, type FacetFilter } from "./table-facet";
 import { IdentityCell } from "./identity/identity-cell";
 import { HistoryTable } from "./history-table";
@@ -605,14 +606,12 @@ export function ResourcesPage({
                                 key={id}
                                 className="flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-[10px] text-muted-foreground"
                               >
-                                {r.data.emojis?.[i] ?? (
-                                  <span
-                                    className="size-1.5 rounded-full"
-                                    style={{
-                                      background: role?.color ?? "#aaa",
-                                    }}
-                                  />
-                                )}
+                                {r.data.emojis?.[i] ??
+                                  (role ? (
+                                    <RoleDot role={role} />
+                                  ) : (
+                                    <span className="size-1.5 rounded-full bg-muted-foreground/40" />
+                                  ))}
                                 {role?.name ?? "Deleted role"}
                               </span>
                             );

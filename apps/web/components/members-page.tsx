@@ -3,7 +3,7 @@ import {
   membersQueryString,
   type MemberFilter,
 } from "@orbit/core/members-query";
-import type { Member, MembersPage, RosterSync } from "@orbit/core";
+import type { GuildRole, Member, MembersPage, RosterSync } from "@orbit/core";
 import {
   AlertTriangle,
   CircleCheck,
@@ -17,6 +17,7 @@ import { PageHeader } from "./page-header";
 import type { FacetFilter } from "./table-facet";
 import { useWorkspace } from "./workspace";
 import { IdentityCell } from "./identity/identity-cell";
+import { RoleList } from "./role-badge";
 import { Button } from "./ui/button";
 import {
   Badge,
@@ -132,9 +133,19 @@ export function MembersPage() {
     [result]
   );
 
+  // Whole role objects, not just names: the shared role component needs the
+  // colour, the position for hierarchy ordering, and the managed flag.
   const roles = useMemo(
-    () => new Map(data.guild.roles.map((role) => [role.id, role.name])),
+    () => new Map(data.guild.roles.map((role) => [role.id, role])),
     [data.guild.roles]
+  );
+  /** Resolve a member's role ids to roles that still exist in this guild. */
+  const rolesOf = useCallback(
+    (ids: readonly string[]) =>
+      ids
+        .map((id) => roles.get(id))
+        .filter((role): role is GuildRole => !!role),
+    [roles]
   );
 
   const columns: Column<MemberRow>[] = [
@@ -185,27 +196,7 @@ export function MembersPage() {
     {
       key: "roles",
       label: "Roles",
-      render: (m) => {
-        const named = m.roles
-          .map((id) => roles.get(id))
-          .filter((name): name is string => !!name);
-        if (!named.length)
-          return <span className="text-muted-foreground">No roles</span>;
-        return (
-          <span className="flex flex-wrap items-center gap-1">
-            {named.slice(0, 2).map((name) => (
-              <Badge key={name} className="max-w-[140px] truncate">
-                {name}
-              </Badge>
-            ))}
-            {named.length > 2 && (
-              <span className="text-[10px] text-muted-foreground">
-                +{named.length - 2} more
-              </span>
-            )}
-          </span>
-        );
-      },
+      render: (m) => <RoleList roles={rolesOf(m.roles)} max={2} />,
     },
   ];
 
@@ -506,10 +497,14 @@ function MemberDetail({
   onClose,
 }: {
   member: Member | null;
-  roles: Map<string, string>;
+  roles: Map<string, GuildRole>;
   timezone: string;
   onClose: () => void;
 }) {
+  /** Ids held by this member, resolved to roles that still exist. */
+  const held = (member?.roles ?? [])
+    .map((id) => roles.get(id))
+    .filter((role): role is GuildRole => !!role);
   return (
     <Dialog
       open={!!member}
@@ -564,12 +559,8 @@ function MemberDetail({
                   : `Left${member.departedAt ? ` on ${new Date(member.departedAt).toLocaleDateString("en", { timeZone: timezone })}` : ""}`}
               </dd>
               <dt className="text-muted-foreground">Roles</dt>
-              <dd className="flex flex-wrap gap-1">
-                {member.roles.length
-                  ? member.roles.map((id) => (
-                      <Badge key={id}>{roles.get(id) ?? "Unknown role"}</Badge>
-                    ))
-                  : "No roles"}
+              <dd>
+                <RoleList roles={held} max={8} />
               </dd>
               <dt className="text-muted-foreground">Identity captured</dt>
               <dd>

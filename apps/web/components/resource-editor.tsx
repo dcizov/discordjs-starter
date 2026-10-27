@@ -34,6 +34,7 @@ import {
 } from "./ui/primitives";
 import { Combobox } from "./ui/combobox";
 import { Switch } from "./ui/switch";
+import { RoleDot } from "./role-badge";
 import { useWorkspace } from "./workspace";
 export const kindNames: Record<ResourceKind, string> = {
   panel: "role panel",
@@ -984,10 +985,7 @@ export function RolePicker({
               )
             }
           />
-          <span
-            className="size-1.5 rounded-full"
-            style={{ background: r.color || "#999" }}
-          />
+          <RoleDot role={r} />
           {r.name}
         </label>
       ))}

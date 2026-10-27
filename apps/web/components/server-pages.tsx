@@ -2,7 +2,9 @@
 import { copyText } from "@/lib/clipboard";
 import { cn, relativeTime } from "@/lib/utils";
 import { roleAssignmentIssue } from "@orbit/core/permissions";
+import { sortRolesByHierarchy } from "@orbit/core/roles";
 import { PermissionSetup } from "./permission-setup";
+import { RoleBadge } from "./role-badge";
 import type { AuditEntry, GuildConfig } from "@orbit/core";
 import {
   Check,
@@ -247,7 +249,7 @@ export function ChannelsPage() {
               // shared with the rest of the dashboard.
               <DataTable
                 label="Roles"
-                rows={[...roles].sort((a, b) => b.position - a.position)}
+                rows={sortRolesByHierarchy(roles)}
                 search={{
                   value: q,
                   onChange: setQ,
@@ -259,15 +261,7 @@ export function ChannelsPage() {
                     key: "name",
                     label: "Role",
                     sortValue: (r) => r.name,
-                    render: (r) => (
-                      <span className="flex items-center gap-2 font-medium">
-                        <span
-                          className="size-2 rounded-full"
-                          style={{ background: r.color || "#aaa" }}
-                        />
-                        {r.name}
-                      </span>
-                    ),
+                    render: (r) => <RoleBadge role={r} />,
                   },
                   {
                     key: "position",

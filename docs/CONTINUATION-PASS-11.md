@@ -640,3 +640,74 @@ It compiles, is in the client bundle, and the surrounding page renders, but the
 dropdown only appears once a template is selected, which happens client-side, so
 it is absent from the server-rendered HTML and its appearance and interaction
 are unproven.
+
+---
+
+## Slice 12a — shared role presentation
+
+### Why
+
+Roles were drawn in at least five places and no two agreed. The members table
+showed the first two names as plain badges with no colour and no ordering. Member
+detail showed every name as a plain badge. The roles view drew a colour dot with
+`r.color || "#aaa"`. Two pickers had their own dots with different fallbacks
+(`#999`, `#aaa`). None marked managed roles, none ordered by hierarchy, and the
+overflow affordances differed.
+
+### What was added
+
+**`packages/core/src/roles.ts`** (new, pure). The decisions, kept out of the
+markup so they can be tested without rendering anything:
+
+- `roleSwatch` — resolves a colour to something safe to paint. Treats `""`,
+  `null`, and `#000000` as _no colour_: Discord stores `#000000` for "no colour"
+  as well as for a genuinely black role, and painting that black makes the dot
+  vanish on a dark background. Anything unparseable falls back the same way
+  rather than reaching CSS as an invalid value.
+- `sortRolesByHierarchy` — position descending, ties broken by name so renders
+  are stable instead of depending on row order.
+- `splitRolesForDisplay` / `describeRoles` — compact `+N` overflow where the
+  collapsed names feed both the tooltip and the accessible label, so the full
+  list is reachable by mouse and screen reader.
+- `assignableRoles` — excludes `@everyone` and managed roles.
+- `rolesBelowCeiling` / `effectiveHierarchyCeiling` — hierarchy guards, with the
+  ceiling being the **lower** of the actor's and the bot's reach so a dashboard
+  user cannot borrow the bot's privileges.
+
+**`apps/web/components/role-badge.tsx`** (new). `RoleBadge`, `RoleList` and
+`RoleDot`, used by the members table, member detail, the roles view, and both
+pickers. The dot carries an inset ring so a near-white role stays visible on a
+light background and a near-black one on a dark background.
+
+### Verified colour support, not assumed
+
+discord.js is **14.27.0** (declared `^14.22.1`, locked `14.27.0`). Its `Role`
+exposes `hexColor` and nothing else — `colors`, `unicodeEmoji` and `icon` are all
+absent, checked by inspection of `Role.prototype`. Gradient and holographic role
+styles therefore do not exist in this version and were not invented. The stored
+`GuildRole` type carries a single `color: string`.
+
+### Deliberately left alone
+
+The self-role _preview_ button in `resources-page.tsx` still renders a bare role
+name. It is a deliberate mock of Discord's own UI on Discord's own palette
+(`bg-[#4e5058]` and friends); forcing the shared badge into it would make the
+simulation less faithful, not more consistent.
+
+### Verified
+
+- `npm run typecheck` clean; `eslint --max-warnings=0` clean on every touched
+  file; `npm run format` applied.
+- `npx vitest run`: **1083 passed** (1062 baseline, +21).
+- `tests/roles.test.ts` (21) covers the colour fallback including the `#000000`
+  sentinel and unparseable input, stable hierarchy ordering with tie-breaks and
+  no mutation of the input, overflow splitting and its accessible description,
+  exclusion of `@everyone` and managed roles, and the hierarchy ceilings —
+  including that nothing is assignable when either the actor or the bot sits at
+  the bottom.
+
+### Not verified
+
+No browser is available in this session, so none of these surfaces were looked
+at. The components compile and the suite passes; their rendered appearance is
+unproven.
