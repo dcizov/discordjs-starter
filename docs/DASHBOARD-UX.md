@@ -59,12 +59,15 @@ Every dataset table renders one shared foundation
   and first/previous/next/last controls that stay visible and disabled when
   everything fits on one page. There is no second "N records" line and no
   selected-row count, because selection is not offered.
-- **Honest modes**: TanStack Table owns sorting and paging for a complete client
-  list (leaderboard, channels, roles); for server-paged data (audit, ledger,
-  deliveries, cases, wallet history) it runs in manual mode and only reports
-  intent, so a page of seven rows is never re-sorted in the browser and called
-  "sorted by date". Client sorting uses stable columns and row ids derived from
-  the domain (user id, channel id, resource id).
+- **Honest modes**: for a complete client list (leaderboard, channels, roles)
+  TanStack Table builds the sorted and paginated row models, and the table's
+  `rows` are the whole dataset; for server-paged data (audit, ledger, deliveries,
+  cases, wallet history) it runs in `manualSorting`/`manualPagination` mode, so a
+  page of seven rows is never re-sorted in the browser and called "sorted by
+  date". There is no second sorting or paging implementation to drift: the
+  React state (`clientSort`, `clientPage`, `hidden`) is the single source of
+  truth and is handed to TanStack as controlled state, whose change callbacks
+  write back to it. Rows are keyed by the domain id (`getRowId`), not by index.
 - **States**: loading dims the body with `aria-busy`, a failed request shows the
   error with a retry instead of an empty table, and a zero-match search says
   "No records match" while keeping the search and filters reachable.
