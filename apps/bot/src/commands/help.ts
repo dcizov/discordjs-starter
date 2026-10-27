@@ -16,6 +16,7 @@ const MODULE_DOCS: Record<CommandModule, { slug: string; file: string }> = {
   polls: { slug: "commands", file: "COMMANDS.md" },
   announcements: { slug: "commands", file: "COMMANDS.md" },
   xp: { slug: "leveling", file: "LEVELING.md" },
+  tickets: { slug: "tickets", file: "TICKETS.md" },
 };
 
 /**

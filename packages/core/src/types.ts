@@ -9,7 +9,8 @@ export type ModuleKey =
   | "news"
   | "polls"
   | "announcements"
-  | "xp";
+  | "xp"
+  | "tickets";
 export type ResourceKind =
   "panel" | "rule" | "case" | "shop" | "deal" | "source" | "route";
 export type Resource = {
@@ -75,6 +76,7 @@ export type GuildConfig = {
    * which is a duplication worth knowing about: adding a field means editing
    * both this type and `configSchema`.
    */
+  tickets: import("@orbit/core/tickets").TicketConfig;
   xp: {
     messageEnabled: boolean;
     messageMin: number;

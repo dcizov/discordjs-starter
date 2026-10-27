@@ -52,6 +52,7 @@ const moduleRoots: Record<CommandModule, readonly string[]> = {
    *   test caught this one.
    */
   xp: ["rank", "levels", "xp"],
+  tickets: ["ticket"],
   announcements: ["announce"],
 };
 function moduleFor(root: string): CommandModule {

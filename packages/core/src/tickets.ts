@@ -1,6 +1,3 @@
-/** An unset id, matching the convention in `./config`. */
-const optionalId = z.union([snowflake, z.literal("")]).default("");
-
 /**
  * Support tickets. Pure rules only: no Discord, no database, no clock.
  *
@@ -17,7 +14,18 @@ const optionalId = z.union([snowflake, z.literal("")]).default("");
  * interesting behaviour is testable without a Discord server.
  */
 import { z } from "zod";
-import { snowflake } from "./config";
+
+/**
+ * Defined locally rather than imported from `./config`.
+ *
+ * `config.ts` imports `ticketConfigSchema` from here, so importing anything
+ * back would make the two modules load each other. The rule itself is two
+ * lines, and duplicating it is cheaper than a cycle that only shows up as an
+ * undefined binding at runtime.
+ */
+const snowflake = z.string().regex(/^\d{17,20}$/, "Enter a valid Discord ID");
+/** An unset id, matching the convention in `./config`. */
+const optionalId = z.union([snowflake, z.literal("")]).default("");
 
 export const ticketStates = ["open", "claimed", "closed"] as const;
 export type TicketState = (typeof ticketStates)[number];

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEAL_QUALITY_DEFAULTS } from "./deal-policy";
+import { defaultTicketConfig, ticketConfigSchema } from "./tickets";
 import type { GuildConfig } from "./types";
 export const snowflake = z
   .string()
@@ -33,6 +34,7 @@ export const configSchema = z
         polls: z.boolean().default(false),
         announcements: z.boolean().default(false),
         xp: z.boolean().default(false),
+        tickets: z.boolean().default(false),
       })
       .default({
         roles: true,
@@ -44,6 +46,7 @@ export const configSchema = z
         polls: false,
         announcements: false,
         xp: false,
+        tickets: false,
       }),
     economy: z
       .object({
@@ -93,6 +96,7 @@ export const configSchema = z
         escalationThreshold: 3,
         escalationMinutes: 10,
       }),
+    tickets: ticketConfigSchema.default(defaultTicketConfig),
     xp: z
       .object({
         messageEnabled: z.boolean(),

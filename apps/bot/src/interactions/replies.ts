@@ -365,6 +365,7 @@ const HELP_ORDER: Record<CommandModule, number> = {
   music: 20,
   economy: 30,
   xp: 40,
+  tickets: 45,
   deals: 50,
   news: 60,
   moderation: 70,

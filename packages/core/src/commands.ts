@@ -532,4 +532,40 @@ export const commandDefinitions = [
             .setRequired(true)
         )
     ),
+  command("ticket", "Open or work a support ticket")
+    .addSubcommand((s) =>
+      s
+        .setName("open")
+        .setDescription("Open a support ticket")
+        .addStringOption((o) =>
+          o
+            .setName("subject")
+            .setDescription("What you need help with")
+            .setMaxLength(100)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("close")
+        .setDescription("Close a ticket (yours, or one you support)")
+        .addStringOption((o) =>
+          o
+            .setName("reason")
+            .setDescription("Why it is being closed")
+            .setMaxLength(500)
+            .setRequired(false)
+        )
+    )
+    .addSubcommand((s) =>
+      s.setName("claim").setDescription("Take a ticket (support only)")
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("reopen")
+        .setDescription("Reopen a closed ticket (support only)")
+    )
+    .addSubcommand((s) =>
+      s.setName("info").setDescription("Show the current ticket")
+    ),
 ];

@@ -126,6 +126,9 @@ export function OverviewToolkit() {
         : setups.music.label,
     deals: `${data.resources.filter((r) => r.kind === "deal" && r.enabled).length} active subscriptions`,
     news: `${data.resources.filter((r) => r.kind === "source").length} sources, one home for updates`,
+    tickets: config.tickets.enabled
+      ? "Private support, one channel per person"
+      : "Private support, switched off",
     xp: config.xp.rewards.length
       ? `${config.xp.rewards.length} level ${config.xp.rewards.length === 1 ? "reward" : "rewards"} configured`
       : "Levels earned, no rewards set yet",

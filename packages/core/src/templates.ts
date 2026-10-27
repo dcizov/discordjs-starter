@@ -108,6 +108,11 @@ const partialConfig = {
       polls: z.boolean().optional(),
       announcements: z.boolean().optional(),
       xp: z.boolean().optional(),
+      // Kept in step with `ModuleKey` by hand. `.strict()` means a module
+      // added elsewhere breaks template capture until it is listed here, which
+      // is annoying but far better than a template silently dropping a
+      // module's setting.
+      tickets: z.boolean().optional(),
     })
     .strict()
     .optional(),
