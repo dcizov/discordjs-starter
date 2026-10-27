@@ -346,18 +346,37 @@ export function musicActionCard(action: string, state: MusicState): ReplyCard {
   };
 }
 
-const HELP_ORDER: CommandModule[] = [
-  "general",
-  "roles",
-  "music",
-  "economy",
-  "deals",
-  "news",
-  "moderation",
-  "polls",
-  "announcements",
-  "xp",
-];
+/**
+ * Display order of the `/help` overview's groups.
+ *
+ * A `Record`, not an array, for one reason. Every other module list in the
+ * codebase (`commandModuleLabels`, `moduleRoots`) is a
+ * `Record<CommandModule, …>`, so adding a module breaks the build until it is
+ * filled in. This one used to be a plain array, which meant a new module could
+ * be added everywhere else and still be absent from `/help` — no type error,
+ * no failing test; the group just vanished. That is how `xp` shipped
+ * invisible on the first try.
+ *
+ * Values are sort weights; gaps are fine and keep later insertions cheap.
+ */
+const HELP_ORDER: Record<CommandModule, number> = {
+  general: 0,
+  roles: 10,
+  music: 20,
+  economy: 30,
+  xp: 40,
+  deals: 50,
+  news: 60,
+  moderation: 70,
+  polls: 80,
+  announcements: 90,
+};
+
+/** Modules in display order. Exhaustive over `CommandModule` by construction. */
+export const helpOrder = (): CommandModule[] =>
+  (Object.entries(HELP_ORDER) as [CommandModule, number][])
+    .sort(([, a], [, b]) => a - b)
+    .map(([module]) => module);
 
 /**
  * `/help` overview.
@@ -391,12 +410,13 @@ export function helpOverviewCard(
     entry.enabled = entry.enabled || command.moduleEnabled;
     roots.set(command.root, entry);
   }
-  const fields = HELP_ORDER.map((module) => ({
-    module,
-    commands: [...roots.entries()].filter(
-      ([, entry]) => entry.module === module
-    ),
-  }))
+  const fields = helpOrder()
+    .map((module) => ({
+      module,
+      commands: [...roots.entries()].filter(
+        ([, entry]) => entry.module === module
+      ),
+    }))
     .filter((group) => group.commands.length)
     .map((group) => ({
       name: `${commandModuleLabels[group.module]}${group.commands.every(([, entry]) => !entry.enabled) ? " (paused)" : ""}`,

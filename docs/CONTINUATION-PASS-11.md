@@ -1315,11 +1315,11 @@ compounded all the way up (level 100 was out by ~170,000 XP).
 The cause is a real off-by-one in how the two functions relate, and it is
 exactly the confusion the doc warns about:
 
-- `totalXpForLevel(n)` — XP to *reach* level n.
-- `xpForLevel(n)` — XP to *leave* level n, i.e. `5n² + 50n + 100`.
+- `totalXpForLevel(n)` — XP to _reach_ level n.
+- `xpForLevel(n)` — XP to _leave_ level n, i.e. `5n² + 50n + 100`.
 
 `total(n+1) = total(n) + cost(n)`. Writing "level n costs 5n²+50n+100" without
-saying *to advance from it* invites the wrong reading.
+saying _to advance from it_ invites the wrong reading.
 
 The table is now generated from the functions and pinned by two tests: every
 documented row matches, and `total(n+1) = total(n) + cost(n)` holds for

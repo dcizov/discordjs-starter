@@ -1637,13 +1637,13 @@ and the account menu is addressed by the nickname the server shows.
 
 Full detail per slice lives in `docs/CONTINUATION-PASS-11.md`. Summary:
 
-| Area                      | State                                                                                          | Verification                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Curve, schema, award path | Deterministic documented curve; atomic SQL increments; idempotent events                        | 37 tests in `tests/leveling.test.ts`, brute-force-checked to level 1000      |
+| Area                      | State                                                                                                                                                                           | Verification                                                                  |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Curve, schema, award path | Deterministic documented curve; atomic SQL increments; idempotent events                                                                                                        | 37 tests in `tests/leveling.test.ts`, brute-force-checked to level 1000       |
 | Message + voice earning   | Cooldown, bot/webhook exclusion, exclusions, repetition fingerprints (no content stored), Voice States only, AFK excluded, whole-interval accounting, honest restart accounting | 11 tests for the pure rules; wired into `gateway.ts` + a 30s maintenance tick |
-| `/rank`, `/levels`, `/xp` | Rank with both XP numbers; paginated board; audited adjustments, keyed on the interaction id    | 11 tests including the server-side Manage Server re-check                    |
-| Role rewards              | Stack or replace; reconcile after every change; Administrator refused outright; recorded before announcing | 17 pure policy tests + 13 against a fake guild                       |
-| Dashboard + docs          | Leaderboard, settings, exclusions, rewards, announcement preview, curve table; `docs/LEVELING.md` | Typecheck/lint/build only — **no browser was used on the page**          |
+| `/rank`, `/levels`, `/xp` | Rank with both XP numbers; paginated board; audited adjustments, keyed on the interaction id                                                                                    | 11 tests including the server-side Manage Server re-check                     |
+| Role rewards              | Stack or replace; reconcile after every change; Administrator refused outright; recorded before announcing                                                                      | 17 pure policy tests + 13 against a fake guild                                |
+| Dashboard + docs          | Leaderboard, settings, exclusions, rewards, announcement preview, curve table; `docs/LEVELING.md`                                                                               | Typecheck/lint/build only — **no browser was used on the page**               |
 
 ### Two things worth carrying forward
 

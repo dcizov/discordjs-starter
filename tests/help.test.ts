@@ -1,4 +1,9 @@
 import { defaultConfig } from "@orbit/core";
+import {
+  commandModuleLabels,
+  type CommandModule,
+} from "@orbit/core/command-catalog-types";
+import { helpOrder } from "../apps/bot/src/interactions/replies";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -34,6 +39,40 @@ describe("/help overview", () => {
     // Subcommands are reachable through /help command:<path>, not listed as roots.
     expect(text).not.toContain("/deals search");
   });
+  it("groups every module in the union, exactly once, in a stable order", () => {
+    // HELP_ORDER used to be a plain array, so adding a module to the seven
+    // other places it belongs could leave it out here with no type error and
+    // no failing test - the group just disappeared from /help. That is how
+    // `xp` shipped invisible. It is now a Record (so the build breaks on a
+    // missing entry) and this test checks the second failure mode: a module
+    // that is present but duplicated, or that the union gained without anyone
+    // noticing.
+    const catalog = catalogWith();
+    const data = embed(
+      helpOverviewCard(catalog, "https://example.test/docs/commands")
+    );
+    const modules = [...new Set(catalog.commands.map((c) => c.module))];
+    const headings = (data.fields ?? []).map((f) => f.name);
+
+    for (const key of modules) {
+      const label = commandModuleLabels[key];
+      // The heading carries the label plus an optional " (paused)" suffix.
+      const matches = headings.filter((name) => name.startsWith(label));
+      expect(matches, `module ${key} should be grouped once`).toHaveLength(1);
+    }
+    // Every module in the union is grouped, including ones with no commands
+    // yet, so a new module is visible the moment it exists rather than the
+    // moment someone configures it.
+    const allModules = Object.keys(commandModuleLabels) as CommandModule[];
+    const grouped = allModules.filter((key) =>
+      headings.some((name) => name.startsWith(commandModuleLabels[key]))
+    );
+    expect(grouped.sort()).toEqual([...allModules].sort());
+    // Order is stable and derived, not incidental.
+    expect(helpOrder()).toEqual([...helpOrder()]);
+    expect(new Set(helpOrder()).size).toBe(allModules.length);
+  });
+
   it("marks permission-restricted commands and paused modules", () => {
     const live = embed(helpOverviewCard(catalogWith(true), "https://x.test"));
     const paused = embed(
