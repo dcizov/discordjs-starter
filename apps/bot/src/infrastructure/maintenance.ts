@@ -4,6 +4,7 @@ import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import type { MusicService } from "../features/music/service";
 import { syncGuild } from "./guild-sync";
+import { reconcileRosters } from "./roster-sync";
 
 /** Snapshot initialization and owned periodic work, not Discord/queue readiness. */
 export async function startMaintenance(
@@ -53,9 +54,32 @@ export async function startMaintenance(
     for (const guild of client.guilds.cache.values())
       track(syncGuild(guild), "Scheduled guild sync failed");
   }, 300000);
+  /*
+    Roster reconciliation: bounded, and only for guilds whose copy is missing or
+    stale. It runs once at startup (after the gateway has the guild list) and then
+    hourly, which is far longer than the 6-hour staleness threshold so a restart
+    heals a missed join or a crashed sweep without touching every guild each time.
+  */
+  const reconcile = () =>
+    reconcileRosters(client.guilds.cache.values()).then(
+      (swept) => {
+        if (swept) logger.info({ swept }, "Roster reconciliation swept guilds");
+      },
+      (error) =>
+        logger.warn(
+          { error: errorDiagnostic(error) },
+          "Roster reconciliation failed"
+        )
+    );
+  track(reconcile(), "Roster reconciliation failed");
+  const rosterTimer = setInterval(
+    () => track(reconcile(), "Roster reconciliation failed"),
+    3600000
+  );
   function clear() {
     clearInterval(heartbeat);
     clearInterval(syncTimer);
+    clearInterval(rosterTimer);
   }
   signal.addEventListener("abort", clear, { once: true });
   return async () => {
