@@ -363,9 +363,13 @@ test("a failed history request says so and retries instead of claiming an empty 
 
   await page.goto(`${root}/audit`);
   await hydrated(page);
-  const alert = page.getByRole("alert");
+  // Next renders its own empty route announcer with `role="alert"`, so the
+  // failure state is found by its text rather than by the role alone.
+  const alert = page
+    .getByRole("alert")
+    .filter({ hasText: "This section couldn’t load." });
   await expect(alert).toBeVisible();
-  await expect(alert).toContainText("This section couldn’t load.");
+  await expect(alert).toContainText("The history service is unavailable.");
   // The failure is not an empty table, and the empty state is not shown at all.
   await expect(page.getByRole("region", { name: "Audit events" })).toHaveCount(
     0
