@@ -582,3 +582,71 @@ export const communityPosts = pgTable(
     check("community_version_positive", sql`${t.version}>0`),
   ]
 );
+
+/**
+ * Support tickets.
+ *
+ * One row per ticket. The row outliving its channel is the normal case after
+ * any incident — someone deletes the channel, the bot loses a permission, a
+ * restart lands mid-flow — so `channelId` is nullable and orphan detection is a
+ * first-class rule rather than a cleanup script's private heuristic.
+ */
+export const tickets = pgTable(
+  "tickets",
+  {
+    id: text("id").primaryKey(),
+    guildId: text("guild_id")
+      .notNull()
+      .references(() => guilds.id, { onDelete: "cascade" }),
+    /** Per-guild sequence, so members see #0001 rather than a uuid. */
+    number: integer("number").notNull(),
+    /** Null once the channel is gone, or for a thread that was never made. */
+    channelId: text("channel_id"),
+    openerId: text("opener_id").notNull(),
+    /** Who claimed it. Null means unclaimed. */
+    claimerId: text("claimer_id"),
+    state: text("state").notNull().default("open"),
+    /** Optional, and only when the server asks for one. */
+    subject: text("subject"),
+    openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closerId: text("closer_id"),
+    closeReason: text("close_reason"),
+    /** Drives auto-close. Touched by any message in the ticket. */
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    /**
+     * The rendered transcript, captured at close time.
+     *
+     * Stored rather than re-read from Discord, because the channel is usually
+     * deleted immediately afterwards and Discord's retention of a deleted
+     * channel is not something to depend on for a support record.
+     */
+    transcript: text("transcript"),
+    /** Set when the transcript was truncated, so nobody mistakes it for whole. */
+    transcriptTruncated: boolean("transcript_truncated")
+      .notNull()
+      .default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // The number is unique per guild: two tickets must never both be #4.
+    uniqueIndex("tickets_guild_number_key").on(t.guildId, t.number),
+    index("tickets_guild_state_idx").on(t.guildId, t.state),
+    index("tickets_guild_opener_idx").on(t.guildId, t.openerId, t.state),
+    index("tickets_channel_idx").on(t.guildId, t.channelId),
+    index("tickets_activity_idx").on(t.state, t.lastActivityAt),
+    index("tickets_retention_idx").on(t.state, t.closedAt),
+    check(
+      "tickets_state_valid",
+      sql`${t.state} in ('open','claimed','closed')`
+    ),
+    check("tickets_number_positive", sql`${t.number}>0`),
+  ]
+);

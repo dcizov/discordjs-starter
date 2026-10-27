@@ -6,6 +6,7 @@ export * from "./store";
 export * from "./history";
 export * from "./members";
 export * from "./leveling";
+export * from "./tickets";
 export * from "./templates";
 
 export { activityCounts } from "./activity";

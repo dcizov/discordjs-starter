@@ -85,6 +85,11 @@ export type DemoState = {
       }
     >;
   };
+  /**
+   * Tickets, keyed by id. Shaped like the SQL row so the demo branch and the
+   * real one are read by the same code.
+   */
+  tickets?: Record<string, import("./tickets").TicketRow>;
 };
 /** Demo-only persona illustrations; "Orbit" has no user avatar by design. */
 const DEMO_PERSONA_AVATARS: Record<string, string> = {
