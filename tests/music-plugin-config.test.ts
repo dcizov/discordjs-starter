@@ -63,10 +63,12 @@ describe("reviewed non-adult Lavalink plugin profile", () => {
         .map(([name]) => name)
     ).toEqual(["youtube"]); // extended-search wrapper only
     expect(config.plugins.youtube.oauth.enabled).toBe(false);
+    // Upstream's own DEFAULT_CLIENTS: four credential-free clients, in order.
     expect(config.plugins.youtube.clients).toEqual([
       "MUSIC",
       "ANDROID_VR",
       "WEB",
+      "WEBEMBEDDED",
     ]);
     expect(config.plugins.youtube.allowDirectVideoIds).toBe(false);
     expect(config.plugins.youtube.allowDirectPlaylistIds).toBe(false);

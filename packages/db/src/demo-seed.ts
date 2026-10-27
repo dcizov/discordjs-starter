@@ -5,10 +5,13 @@ import type {
   Delivery,
   Guild,
   LedgerEntry,
+  Member,
   MusicState,
   Resource,
+  RosterSync,
   ServiceHealth,
 } from "@orbit/core";
+import { displayName as resolveDisplayName } from "@orbit/core/identity";
 import {
   DEMO_GUILD_ID,
   DEMO_USER_ID,
@@ -20,6 +23,14 @@ export type DemoState = {
   communityPosts?: import("@orbit/core/community").CommunityPost[];
   version: number;
   guilds: Guild[];
+  /**
+   * Demo guild roster. Separate from `accounts` on purpose: a member is not an
+   * economy record, and the members screen reads only this.
+   */
+  members?: Member[];
+  rosterSync?: Record<string, RosterSync>;
+  templates?: import("./templates").DemoTemplate[];
+  templateRuns?: import("./templates").DemoTemplateRun[];
   resources: Resource[];
   audit: AuditEntry[];
   accounts: Account[];
@@ -28,6 +39,13 @@ export type DemoState = {
   music: Record<string, MusicState>;
   operations: Record<string, { payload: string; result: any }>;
   inventory: Record<string, number>;
+};
+/** Demo-only persona illustrations; "Orbit" has no user avatar by design. */
+const DEMO_PERSONA_AVATARS: Record<string, string> = {
+  Alex: "/demo/alex.svg",
+  Sophie: "/demo/sophie.svg",
+  Milo: "/demo/milo.svg",
+  Jamie: "/demo/jamie-davis.svg",
 };
 const minutesAgo = (n: number) =>
   new Date(Date.now() - n * 60000).toISOString();
@@ -55,7 +73,12 @@ export function createDemo(): DemoState {
       "Orbit",
       "#8b5cf6",
       10,
-      (P.ManageRoles | P.ManageMessages | P.ModerateMembers).toString(),
+      (
+        P.ManageRoles |
+        P.ManageChannels |
+        P.ManageMessages |
+        P.ModerateMembers
+      ).toString(),
       true
     ),
     role(104, "Community", "#9c8aee", 2),
@@ -125,7 +148,11 @@ export function createDemo(): DemoState {
     name: "The Cozy Corner",
     icon: DEMO_GUILD_ICON,
     installed: true,
-    memberCount: 2846,
+    // Discord counts the members it currently has, so this matches the present
+    // rows below (the departed sample member is not counted). Real guilds keep
+    // Discord's own number, which is why the members screen reports both the
+    // synchronized row count and Discord's count separately.
+    memberCount: 15,
     config,
     roles: roles.map((item) => ({
       ...item,
@@ -397,6 +424,9 @@ export function createDemo(): DemoState {
     guildId: guild.id,
     userId: i === 0 ? DEMO_USER_ID : `12000000000000040${i}`,
     name,
+    // Four personas have a bundled illustration; the rest deliberately do not,
+    // so the "no avatar was ever captured" fallback is exercised in the demo.
+    avatar: DEMO_PERSONA_AVATARS[name] ?? null,
     balance: [4250, 38750, 34200, 28150, 26400, 22750, 18200, 15450][i],
     lastDaily: null,
   }));
@@ -478,6 +508,8 @@ export function createDemo(): DemoState {
     guildId: guild.id,
     actorId: DEMO_USER_ID,
     actorName,
+    // Simulated personas: local original illustrations, never live Discord metadata.
+    actorAvatar: DEMO_PERSONA_AVATARS[String(actorName)] ?? null,
     action,
     target,
     detail,
@@ -543,6 +575,173 @@ export function createDemo(): DemoState {
     position: 72000,
     updatedAt: minutesAgo(0),
   };
+  /*
+    A representative roster, not a decorated one. Between these rows every case
+    the members screen and the identity policy have to handle appears once:
+    a nickname that differs from the global name, a global name and handle that
+    agree (so the second line is suppressed), a member with only a handle, a
+    guild-specific avatar that must win over the global one, a member with no
+    avatar at all, a bot, a departed member, a very long name and a member whose
+    roles are all non-default.
+  */
+  const member = (
+    n: number,
+    input: {
+      /** Overrides the generated id; used for the signed-in demo person. */
+      userId?: string;
+      username?: string | null;
+      globalName?: string | null;
+      nickname?: string | null;
+      avatar?: string | null;
+      guildAvatar?: string | null;
+      bot?: boolean;
+      present?: boolean;
+      joinedDaysAgo: number;
+      roles: string[];
+    }
+  ): Member => {
+    const userId =
+      input.userId ?? `1200000000000004${String(n).padStart(2, "0")}`;
+    const names = {
+      userId,
+      username: input.username ?? null,
+      globalName: input.globalName ?? null,
+      nickname: input.nickname ?? null,
+    };
+    return {
+      guildId: guild.id,
+      userId,
+      username: names.username,
+      globalName: names.globalName,
+      nickname: names.nickname,
+      displayName: resolveDisplayName(names, "guild"),
+      avatar: input.avatar ?? null,
+      guildAvatar: input.guildAvatar ?? null,
+      bot: input.bot ?? false,
+      joinedAt: minutesAgo(input.joinedDaysAgo * 1440),
+      roles: input.roles,
+      present: input.present ?? true,
+      departedAt: input.present === false ? minutesAgo(2880) : null,
+      syncedAt: minutesAgo(4),
+    };
+  };
+  const members: Member[] = [
+    member(0, {
+      // The person signed into the demo is a member of the demo server, so the
+      // account menu, the leaderboard and the directory name them the same way.
+      userId: DEMO_USER_ID,
+      username: "jamie.davis",
+      globalName: "Jamie Davis",
+      nickname: "Jamie",
+      avatar: "/demo/jamie-davis.svg",
+      joinedDaysAgo: 420,
+      roles: [roles[0].id, roles[1].id, roles[2].id],
+    }),
+    member(1, {
+      username: "alex",
+      globalName: "Alex",
+      avatar: "/demo/alex.svg",
+      joinedDaysAgo: 380,
+      roles: [roles[1].id, roles[2].id],
+    }),
+    member(2, {
+      username: "sophie.l",
+      globalName: "Sophie Laurent",
+      nickname: "Sophie",
+      // A guild avatar with no global avatar: the guild one must be used.
+      guildAvatar: "/demo/sophie.svg",
+      joinedDaysAgo: 365,
+      roles: [roles[0].id],
+    }),
+    member(3, {
+      username: "milochen",
+      globalName: "Milo Chen",
+      nickname: "Milo",
+      avatar: "/demo/milo.svg",
+      joinedDaysAgo: 300,
+      roles: [roles[2].id],
+    }),
+    member(4, {
+      username: "aria",
+      globalName: null,
+      joinedDaysAgo: 280,
+      roles: [roles[2].id],
+    }),
+    member(5, {
+      // The screenshot case: a global name, no nickname, no recorded avatar.
+      username: "wtfaq",
+      globalName: "wtFAQ",
+      joinedDaysAgo: 260,
+      roles: [],
+    }),
+    member(6, {
+      username: "noah.kim",
+      globalName: "Noah Kim",
+      nickname: "Noah",
+      joinedDaysAgo: 240,
+      roles: [roles[3].id],
+    }),
+    member(7, {
+      username: "luna.park",
+      globalName: "Luna Park",
+      joinedDaysAgo: 210,
+      roles: [roles[3].id, roles[4].id],
+    }),
+    member(8, {
+      username: "theo",
+      globalName: "Theo",
+      joinedDaysAgo: 180,
+      roles: [roles[4].id],
+    }),
+    member(9, {
+      username: "bartholomew.maximilian.featherstonehaugh",
+      globalName: "Bartholomew Maximilian Featherstonehaugh",
+      nickname: "Bart",
+      joinedDaysAgo: 150,
+      roles: [roles[5].id],
+    }),
+    member(10, {
+      // Nickname only: the handle is the only secondary identifier.
+      username: "quiet.fox",
+      globalName: null,
+      nickname: "A very quiet fox",
+      joinedDaysAgo: 120,
+      roles: [],
+    }),
+    member(11, {
+      username: "orbit",
+      globalName: "Orbit",
+      bot: true,
+      joinedDaysAgo: 430,
+      roles: [],
+    }),
+    member(12, {
+      username: "casey.former",
+      globalName: "Casey Former",
+      present: false,
+      joinedDaysAgo: 200,
+      roles: [],
+    }),
+    member(13, {
+      username: "rae",
+      globalName: "Rae",
+      joinedDaysAgo: 12,
+      roles: [],
+    }),
+    member(14, {
+      username: "tomas",
+      globalName: "Tomás Herrera",
+      nickname: "Tomi",
+      joinedDaysAgo: 9,
+      roles: [roles[4].id],
+    }),
+    member(15, {
+      username: "priya",
+      globalName: "Priya Raman",
+      joinedDaysAgo: 4,
+      roles: [],
+    }),
+  ];
   return {
     version: 1,
     guilds: [
@@ -569,6 +768,20 @@ export function createDemo(): DemoState {
     accounts,
     ledger,
     deliveries,
+    members,
+    rosterSync: {
+      [guild.id]: {
+        guildId: guild.id,
+        status: "complete",
+        startedAt: minutesAgo(5),
+        completedAt: minutesAgo(4),
+        lastAttemptAt: minutesAgo(4),
+        pagesFetched: 1,
+        syncedCount: members.filter((m) => m.present).length,
+        expectedCount: guild.memberCount,
+        lastError: null,
+      },
+    },
     music: { [guild.id]: music },
     operations: {},
     inventory: {},

@@ -24,10 +24,13 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "./data-table";
+import { IdentityCell } from "./identity/identity-cell";
+import { personFields } from "@/lib/person";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { ResourceEditor } from "./resource-editor";
 import { Button } from "./ui/button";
+import { ConfirmDialog } from "./ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -49,10 +52,12 @@ import {
   Field,
   Input,
   SearchInput,
-  Select,
+  SectionHeader,
   Spinner,
 } from "./ui/primitives";
+import { Combobox } from "./ui/combobox";
 import { Switch } from "./ui/switch";
+import { TabBar, TabPanel } from "./ui/tabs";
 import { useWorkspace } from "./workspace";
 export function EconomyPage() {
   const { data, api, refresh } = useWorkspace();
@@ -69,6 +74,21 @@ export function EconomyPage() {
   const ec = data.guild.config.economy;
   const me =
     data.wallet ?? data.accounts.find((a) => a.userId === data.user.id);
+  const [memberQuery, setMemberQuery] = useState("");
+  // Rank is computed over the whole authorized snapshot, then narrowed by the
+  // search — so "rank 3" keeps meaning third place, not third match.
+  const leaderboard = data.accounts
+    // Ranks are assigned before the search runs, so filtering never renumbers
+    // the people who are still on screen. `id` is the stable row key.
+    .map((account, index) => ({
+      ...account,
+      id: account.userId,
+      rank: index + 1,
+    }))
+    .filter((account) =>
+      account.name.toLowerCase().includes(memberQuery.trim().toLowerCase())
+    );
+  const shopItems = data.resources.filter((r) => r.kind === "shop");
   const shop = data.resources.filter(
     (r) =>
       r.kind === "shop" && r.name.toLowerCase().includes(query.toLowerCase())
@@ -128,7 +148,7 @@ export function EconomyPage() {
             value: number(total),
             detail: "Every little contribution adds up.",
             icon: Coins,
-            bg: "bg-[#fbf4e4] text-[#caa557]",
+            bg: "bg-[#fbf4e4] text-amber-700 dark:text-amber-300",
           },
           {
             label: "Community earners",
@@ -142,7 +162,7 @@ export function EconomyPage() {
             value: `${number(ec.dailyAmount)} ${ec.symbol}`,
             detail: "A reason to drop in and say hello.",
             icon: Gift,
-            bg: "bg-[#ecf5ef] text-[#83ad95]",
+            bg: "bg-[#ecf5ef] text-emerald-700 dark:text-emerald-300",
           },
         ].map((m) => (
           <Card className="p-5" key={m.label}>
@@ -164,191 +184,226 @@ export function EconomyPage() {
           </Card>
         ))}
       </div>
-      <div className="mb-5 flex gap-6 border-b">
-        {[
+      <TabBar
+        id="economy"
+        label="Economy sections"
+        value={tab}
+        onChange={(next) => {
+          setTab(next);
+          setQuery("");
+        }}
+        tabs={[
           { id: "overview", label: "Overview" },
-          { id: "shop", label: "Community shop" },
+          {
+            id: "shop",
+            label: "Community shop",
+            badge: shopItems.length,
+          },
           { id: "transactions", label: "Transaction history" },
-        ].map((t) => (
-          <button
-            className={cn(
-              "-mb-px border-b-2 pb-3 pt-1 text-[12px] font-medium",
-              tab === t.id
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground"
-            )}
-            key={t.id}
-            onClick={() => {
-              setTab(t.id);
-              setQuery("");
-            }}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        ]}
+      />
       {tab === "overview" ? (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <Card>
-            <div className="flex items-center justify-between border-b px-5 py-4">
-              <h2 className="text-xs font-semibold">
-                A constellation of contributors
-              </h2>
-              <Badge tone="amber">
-                <Trophy size={10} />
-                Leaderboard
-              </Badge>
-            </div>
-            <DataTable
-              rows={data.accounts.map((a, i) => ({
-                ...a,
-                id: a.userId,
-                rank: i + 1,
-              }))}
-              columns={[
-                {
-                  key: "rank",
-                  label: "Rank",
-                  render: (r) => (
-                    <span
-                      className={cn(
-                        "flex size-6 items-center justify-center rounded-full text-[11px] font-semibold",
-                        r.rank === 1
-                          ? "bg-amber-50 text-amber-500"
-                          : r.rank === 2
-                            ? "bg-slate-100 text-slate-500"
-                            : r.rank === 3
-                              ? "bg-orange-50 text-orange-400"
-                              : "text-muted-foreground"
-                      )}
-                    >
-                      {r.rank <= 3 ? <Medal size={14} /> : r.rank}
-                    </span>
-                  ),
-                },
-                {
-                  key: "member",
-                  label: "Member",
-                  render: (r) => (
-                    <span className="flex items-center gap-2.5">
-                      <span className="flex size-7 items-center justify-center rounded-full bg-violet-50 text-violet-400 dark:bg-violet-500/10">
-                        {r.name.slice(0, 1)}
-                      </span>
-                      <span className="font-medium">
-                        {r.name}
-                        {r.userId === data.user.id && (
-                          <span className="ml-1.5 text-[9px] text-muted-foreground">
-                            you
-                          </span>
+        <TabPanel id="economy" tab="overview">
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <Card className="self-start">
+              <SectionHeader
+                title="A constellation of contributors"
+                aside={
+                  <Badge tone="amber">
+                    <Trophy size={10} aria-hidden />
+                    Leaderboard
+                  </Badge>
+                }
+              />
+              <DataTable
+                label="Contributors by balance"
+                pageSize={10}
+                search={{
+                  value: memberQuery,
+                  onChange: setMemberQuery,
+                  placeholder: "Find a member…",
+                  label: "Search the leaderboard",
+                }}
+                rows={leaderboard}
+                columns={[
+                  {
+                    key: "rank",
+                    label: "Rank",
+                    canHide: false,
+                    sortValue: (r) => r.rank,
+                    className: "w-16",
+                    render: (r) => (
+                      <span className="flex items-center gap-1.5 tabular-nums">
+                        <span
+                          className={cn(
+                            "inline-flex size-5 items-center justify-center rounded-full text-[11px] font-semibold",
+                            r.rank === 1
+                              ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
+                              : r.rank === 2
+                                ? "bg-slate-100 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300"
+                                : r.rank === 3
+                                  ? "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-300"
+                                  : "text-muted-foreground"
+                          )}
+                        >
+                          {r.rank}
+                        </span>
+                        {/* The medal decorates the top three; the number is the
+                            rank, so a colour or a glyph is never the only cue. */}
+                        {r.rank <= 3 && (
+                          <Medal
+                            size={11}
+                            aria-hidden
+                            className="text-amber-600 dark:text-amber-300"
+                          />
                         )}
+                        <span className="sr-only">
+                          {r.rank === 1
+                            ? "first place"
+                            : r.rank === 2
+                              ? "second place"
+                              : r.rank === 3
+                                ? "third place"
+                                : `rank ${r.rank}`}
+                        </span>
                       </span>
-                    </span>
-                  ),
-                },
-                {
-                  key: "balance",
-                  label: "Balance",
-                  render: (r) => (
-                    <span className="font-medium tabular-nums text-[#bc9c55]">
-                      {ec.symbol} {number(r.balance)}
-                    </span>
-                  ),
-                },
-              ]}
-              emptyTitle="Every constellation starts with one star"
-              emptyDescription="Members will appear here after earning their first daily or activity reward."
-            />
-          </Card>
-          <div className="space-y-5">
-            <Card className="relative overflow-hidden border-violet-200/50 bg-gradient-to-br from-[#f1eafa] via-card to-card p-6 dark:from-violet-500/10 dark:to-card">
-              <div className="absolute -right-9 -top-9 size-36 rounded-full border-[16px] border-violet-200/20" />
-              <div className="relative">
-                <span className="flex items-center gap-2 text-[11px] font-medium text-[#9a7fc0]">
-                  <Sparkles size={14} />
-                  Your little corner of the cosmos
-                </span>
-                <p className="mt-6 text-[11px] text-muted-foreground">
-                  Your balance
-                </p>
-                <p className="mt-1 text-[34px] font-semibold tracking-[-1px]">
-                  <span className="mr-2 text-[#ba9a62]">{ec.symbol}</span>
-                  {number(me?.balance ?? 0)}
-                </p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  {ec.currency}
-                </p>
-                <Button
-                  className="mt-6 w-full"
-                  disabled={
-                    busy || !dailyReady || !data.guild.config.modules.economy
-                  }
-                  onClick={claimDaily}
-                >
-                  {busy ? (
-                    <Spinner />
-                  ) : dailyReady ? (
-                    <Gift size={14} />
-                  ) : (
-                    <Check size={14} />
-                  )}
-                  {dailyReady
-                    ? `Claim ${number(ec.dailyAmount)} daily ${ec.currency}`
-                    : "All set for today. See you tomorrow!"}
-                </Button>
-                <Button
-                  variant="outline"
-                  className="mt-2.5 w-full"
-                  onClick={() => setTransfer(true)}
-                  disabled={!ec.transferEnabled}
-                >
-                  <Send size={13} />
-                  Send a little appreciation
-                </Button>
-              </div>
+                    ),
+                  },
+                  {
+                    key: "member",
+                    label: "Member",
+                    canHide: false,
+                    sortValue: (r) => r.name,
+                    render: (r) => (
+                      <IdentityCell
+                        id={r.userId}
+                        name={r.name}
+                        src={r.avatarUrl}
+                        person={r}
+                        badge={
+                          r.userId === data.user.id ? (
+                            <Badge tone="purple">You</Badge>
+                          ) : null
+                        }
+                      />
+                    ),
+                  },
+                  {
+                    key: "balance",
+                    label: `${ec.currency} balance`,
+                    canHide: false,
+                    align: "right",
+                    sortValue: (r) => r.balance,
+                    render: (r) => (
+                      <span className="font-medium text-amber-800 tabular-nums dark:text-amber-300">
+                        {number(r.balance)}{" "}
+                        <span className="text-[10px] font-normal text-muted-foreground">
+                          {ec.symbol}
+                        </span>
+                      </span>
+                    ),
+                  },
+                ]}
+                footerNote={
+                  // The snapshot holds the top contributors; the total is the
+                  // server's count. Saying both is honest about what is missing
+                  // instead of implying this row list is everyone.
+                  data.accounts.length <
+                  (data.stats?.accountCount ?? data.accounts.length)
+                    ? `· top ${data.accounts.length} of ${number(
+                        data.stats?.accountCount ?? data.accounts.length
+                      )} contributors`
+                    : undefined
+                }
+                emptyTitle={
+                  memberQuery
+                    ? "No member matches that search"
+                    : "Every constellation starts with one star"
+                }
+                emptyDescription={
+                  memberQuery
+                    ? "Try the first letters of a display name, or clear the search."
+                    : "Members will appear here after earning their first daily or activity reward."
+                }
+              />
             </Card>
-            <OwnHistory />
-            <Card className="p-5">
-              <div className="mb-2 flex items-center gap-2 text-[12px] font-semibold">
-                <ShieldCheck size={14} className="text-emerald-500" />
-                Fair by design.
-              </div>
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Every reward and transfer is recorded. Atomic transactions mean
-                no double claims, no negative balances, and no lost little
-                thank-yous.
-              </p>
-              <p className="mt-3 border-t pt-3 text-[10px] text-muted-foreground">
-                Virtual currency only. No cash value. No gambling.
-              </p>
-            </Card>
+            <div className="space-y-5">
+              <Card className="relative overflow-hidden border-violet-200/50 bg-gradient-to-br from-[#f1eafa] via-card to-card p-6 dark:from-violet-500/10 dark:to-card">
+                <div className="absolute -right-9 -top-9 size-36 rounded-full border-[16px] border-violet-200/20" />
+                <div className="relative">
+                  <span className="flex items-center gap-2 text-[11px] font-medium text-violet-700 dark:text-violet-300">
+                    <Sparkles size={14} />
+                    Your little corner of the cosmos
+                  </span>
+                  <p className="mt-6 text-[11px] text-muted-foreground">
+                    Your balance
+                  </p>
+                  <p className="mt-1 text-[34px] font-semibold tracking-[-1px]">
+                    <span className="mr-2 text-amber-700 dark:text-amber-300">
+                      {ec.symbol}
+                    </span>
+                    {number(me?.balance ?? 0)}
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    {ec.currency}
+                  </p>
+                  <Button
+                    className="mt-6 w-full"
+                    disabled={
+                      busy || !dailyReady || !data.guild.config.modules.economy
+                    }
+                    onClick={claimDaily}
+                  >
+                    {busy ? (
+                      <Spinner />
+                    ) : dailyReady ? (
+                      <Gift size={14} />
+                    ) : (
+                      <Check size={14} />
+                    )}
+                    {dailyReady
+                      ? `Claim ${number(ec.dailyAmount)} daily ${ec.currency}`
+                      : "All set for today. See you tomorrow!"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="mt-2.5 w-full"
+                    onClick={() => setTransfer(true)}
+                    disabled={!ec.transferEnabled}
+                  >
+                    <Send size={13} />
+                    Send a little appreciation
+                  </Button>
+                </div>
+              </Card>
+              <OwnHistory />
+              <Card className="p-5">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+                  <ShieldCheck size={14} className="text-emerald-500" />
+                  Fair by design.
+                </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Every reward and transfer is recorded; atomic transactions
+                  rule out double claims and negative balances.
+                </p>
+                <p className="mt-3 border-t pt-3 text-[10px] text-muted-foreground">
+                  Virtual currency only. No cash value. No gambling.
+                </p>
+              </Card>
+            </div>
           </div>
-        </div>
+        </TabPanel>
       ) : (
-        <>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <SearchInput
-              value={query}
-              onChange={setQuery}
-              placeholder={
-                tab === "shop"
-                  ? "Find a little something…"
-                  : "Search transactions…"
-              }
-            />
-            {tab === "transactions" && (
-              <Select
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                className="h-9 w-36 text-[11px]"
-                aria-label="Transaction type"
-              >
-                <option value="all">All transactions</option>
-                {["daily", "activity", "transfer", "purchase"].map((t) => (
-                  <option key={t}>{t}</option>
-                ))}
-              </Select>
-            )}
-          </div>
+        <TabPanel id="economy" tab={tab}>
+          {tab === "shop" && (
+            <div className="mb-4">
+              <SearchInput
+                value={query}
+                onChange={setQuery}
+                placeholder="Find a little something…"
+              />
+            </div>
+          )}
           {tab === "shop" ? (
             shop.length ? (
               <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -428,7 +483,7 @@ export function EconomyPage() {
                       </span>
                     </div>
                     <div className="mt-5 flex items-center justify-between border-t pt-4">
-                      <span className="text-sm font-semibold text-[#b89a5e]">
+                      <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
                         {ec.symbol} {number(item.data.price)}
                       </span>
                       <Button
@@ -468,20 +523,42 @@ export function EconomyPage() {
                 kind="ledger"
                 query={query}
                 filter={filter}
+                onQueryChange={setQuery}
+                onFilterChange={setFilter}
+                searchLabel="Search transactions"
+                searchPlaceholder="Search transactions…"
+                facetLabel="Filter transaction type"
+                facetTitle="Type"
+                facetOptions={[
+                  { value: "all", label: "All transactions" },
+                  { value: "daily", label: "Daily" },
+                  { value: "activity", label: "Activity" },
+                  { value: "transfer", label: "Transfer" },
+                  { value: "purchase", label: "Purchase" },
+                ]}
                 columns={[
                   {
                     key: "member",
                     label: "Member",
-                    render: (r) => (
-                      <span className="font-medium">
-                        {data.accounts.find((a) => a.userId === r.userId)
-                          ?.name ?? r.userId}
-                      </span>
-                    ),
+                    canHide: false,
+                    render: (r) => {
+                      const account = data.accounts.find(
+                        (a) => a.userId === r.userId
+                      );
+                      return (
+                        <IdentityCell
+                          id={r.userId}
+                          name={account?.name ?? "Unknown member"}
+                          src={account?.avatarUrl}
+                          person={account}
+                        />
+                      );
+                    },
                   },
                   {
                     key: "type",
                     label: "Type",
+                    sortKey: "type",
                     render: (r) => (
                       <Badge
                         tone={
@@ -506,6 +583,7 @@ export function EconomyPage() {
                   {
                     key: "amount",
                     label: "Amount",
+                    sortKey: "amount",
                     render: (r) => (
                       <span
                         className={cn(
@@ -523,6 +601,7 @@ export function EconomyPage() {
                   {
                     key: "time",
                     label: "When",
+                    sortKey: "createdAt",
                     render: (r) => (
                       <span className="whitespace-nowrap text-muted-foreground">
                         {relativeTime(
@@ -538,7 +617,7 @@ export function EconomyPage() {
               />
             </Card>
           )}
-        </>
+        </TabPanel>
       )}
       {editor !== undefined && (
         <ResourceEditor
@@ -615,47 +694,31 @@ export function EconomyPage() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog
+      <ConfirmDialog
         open={!!deleting}
-        onOpenChange={(o) => {
-          if (!o) setDeleting(null);
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
         }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remove this little reward?</DialogTitle>
-            <DialogDescription>
-              “{deleting?.name}” will leave the shop. Existing purchases and
-              ledger records will remain.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDeleting(null)}>
-              Keep it
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                if (!deleting) return;
-                setBusy(true);
-                try {
-                  await api(`/resources/shop/${deleting.id}`, "DELETE");
-                  await refresh();
-                  toast.success("Shop item deleted");
-                  setDeleting(null);
-                } catch (e: any) {
-                  toast.error(e.message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {busy ? <Spinner /> : <Trash2 size={13} />}Delete item
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        title="Remove this little reward?"
+        description={`“${deleting?.name ?? ""}” will leave the shop. Existing purchases and ledger records will remain.`}
+        cancelLabel="Keep it"
+        confirmLabel="Delete item"
+        busy={busy}
+        onConfirm={async () => {
+          if (!deleting) return;
+          setBusy(true);
+          try {
+            await api(`/resources/shop/${deleting.id}`, "DELETE");
+            await refresh();
+            toast.success("Shop item deleted");
+            setDeleting(null);
+          } catch (e: any) {
+            toast.error(e.message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
     </>
   );
 }
@@ -707,15 +770,24 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
         <form className="space-y-5" onSubmit={submit}>
           <Field label="Send to" required>
             {data.demo ? (
-              <Select value={to} onChange={(e) => setTo(e.target.value)}>
-                {data.accounts
+              <Combobox
+                value={to}
+                onValueChange={setTo}
+                placeholder="Choose a member"
+                searchPlaceholder="Search members…"
+                options={data.accounts
                   .filter((a) => a.userId !== data.user.id)
-                  .map((a) => (
-                    <option key={a.userId} value={a.userId}>
-                      {a.name}
-                    </option>
-                  ))}
-              </Select>
+                  .map((a) => {
+                    // The picker, the row it fills and the leaderboard must all
+                    // print the same name for the same person.
+                    const label = personFields(a, a.name).name;
+                    return {
+                      value: a.userId,
+                      label,
+                      person: { id: a.userId, name: label, src: a.avatarUrl },
+                    };
+                  })}
+              />
             ) : (
               <Input
                 required

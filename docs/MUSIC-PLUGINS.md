@@ -6,7 +6,7 @@ Reviewed against upstream release tags/source on **2026-10-24**. The base remain
 
 | Requested project                                                                    | Pinned release | Active responsibility                                                                                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------------------------ | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [youtube-source](https://github.com/lavalink-devs/youtube-source/tree/1.18.2#plugin) | 1.18.2         | The **only YouTube audio manager**, including `ytsearch`/`ytmsearch`. The built-in YouTube loader stays off. Public, non-age-restriction-capable MUSIC/ANDROID_VR/WEB clients only; OAuth/embedded/TV clients are not enabled.                                                                                          |
+| [youtube-source](https://github.com/lavalink-devs/youtube-source/tree/1.18.2#plugin) | 1.18.2         | The **only YouTube audio manager**, including `ytsearch`/`ytmsearch`. The built-in YouTube loader stays off. Credential-free clients `MUSIC, ANDROID_VR, WEB, WEBEMBEDDED` (upstream's documented example list); OAuth, TV and `poToken` remain disabled by default.                                                    |
 | [SponsorBlock](https://github.com/topi314/SponsorBlock-Plugin/tree/3.0.1)            | 3.0.1          | Sponsor segment/chapter extension, not another music source. The bot sends the documented per-player categories PUT after joining voice.                                                                                                                                                                                |
 | [LavaSrc](https://github.com/topi314/LavaSrc/tree/4.8.3)                             | 4.8.3          | **Extended YouTube search** for LavaSearch and **LRCLIB lyrics** for LavaLyrics. `sources.youtube` creates a search wrapper around youtube-source, not another audio manager. All premium/credential-dependent/mirroring/yt-dlp/TTS adapters stay off. `providers: []` prevents silent mirrored-recording substitution. |
 | [LavaSearch](https://github.com/topi314/LavaSearch/tree/1.0.0)                       | 1.0.0          | Extended-search REST API, using LavaSrc's search wrapper. No additional audio source.                                                                                                                                                                                                                                   |
@@ -30,6 +30,84 @@ There are ten plugin identities: these nine plus Soundy. There is no second Soun
 - lyrics.kt and LavaLyrics expose **different routes**, not conflicting Spring mappings. Do not call both for a single lookup: use lyrics.kt for YouTube, LavaLyrics/LRCLIB for other recordings. The dashboard does not currently expose lyrics or extended-search buttons, and it does not make duplicate/background lyric requests.
 - SponsorBlock has **no global `enabled`/category YAML switch**. `MusicPluginRest` uses the actual authenticated `/v4/sessions/{sessionId}/players/{guildId}/sponsorblock/categories` PUT with a JSON array. The default is `sponsor,selfpromo,interaction`; set `MUSIC_SPONSORBLOCK_CATEGORIES=` and restart the bot to disable it. Other valid categories: `intro,outro,preview,music_offtopic,filler`. Invalid categories fail explicitly. A remote node without the plugin is left alone; optional setup failures are logged/audited and do not silently claim sponsor skipping.
 - LavaDSPX 0.0.5 contains template/hand-written plugin packaging metadata. The build installer normalizes this to **one** `lavadspx-plugin` registration, preserving its classes/notices. It will not modify a signed JAR. There is no made-up `plugins.lavadspx.enabled` flag.
+
+### Why one specific YouTube item still fails (and what Orbit does about it)
+
+Observed on a production deployment (`youtube-source 1.18.2`, Lavalink 4.2.2,
+Lavaplayer 2.2.6, Soundy 1.1.0):
+
+```text
+All clients failed to load the item.
+Client [ANDROID_VR] failed: This video requires login.
+Client [WEB] failed: No supported audio streams available.
+```
+
+This is a **provider restriction raised after lookup, during playback**. It is not
+a Discord voice handshake failure, not an URL-validation rejection (the URL was
+accepted and resolved), and not a plugin conflict — both failures come from two
+different clients of the same source manager. Upstream documents exactly this
+class of error as "requests flagged by YouTube"; the documented ways to change the
+outcome are OAuth (a signed-in session) or a `poToken`, with the important caveat
+that neither is a guaranteed fix ("not a silver bullet"), and OAuth means lending a
+YouTube account to the backend — upstream advises a burner account because of the
+risk. Terms and account risk are the operator's decision, not a default.
+
+Orbit therefore ships the credential-free client list, keeps `oauth.enabled: false`
+and `pot` unset, and never supplies cookies or account tokens implicitly. If an
+operator chooses to opt in, upstream's own keys are used, unchanged:
+
+```yaml
+plugins:
+  youtube:
+    oauth:
+      enabled: true
+      # refreshToken: "..."   # only after completing upstream's device flow
+    # or, for WEB/WEBEMBEDDED only:
+    # pot:
+    #   token: "..."
+    #   visitorData: "..."
+```
+
+Never commit those values: they are credentials. Keep them in an ignored
+`application.yml` overlay or the container environment, restart Lavalink, and
+re-run `npm run music:doctor`. Orbit's audit summary names the failure category
+(`provider-login`, `no-streams`, `drm`, `rate-limit`, `auth`, `network`,
+`format`, `unknown`) so an operator can tell "the provider answered with an
+authentication/bot challenge" from "the backend cannot reach the provider".
+
+`provider-login` is a **classification of the evidence in the exception**, not a
+diagnosis of one universal cause: the message says the provider asked for a
+signed-in/verified session or rejected this backend's client (for example
+`requires login`, `Sign in to confirm you're not a bot`). It deliberately does
+not claim "this item is fully private", and it is kept distinct from a Discord
+voice-permission problem (Connect/Speak) and from backend connectivity, which are
+different failures with different diagnostics. Ordinary listeners get that
+concise explanation and nothing else — no tokens, cookies, signed URLs or stack
+traces; the full exception stays in the operator-only audit detail, and the
+doctor is the next step for whoever can read the backend logs.
+
+What was checked and ruled out for that report:
+
+- **Version**: 1.18.2 is the newest youtube-source release (published 2026-07-27,
+  checked 2026-10-26), so this is not an outdated-plugin problem.
+- **Client list**: the configured list is upstream's own default
+  (`DEFAULT_CLIENTS = MUSIC, ANDROID_VR, WEB, WEBEMBEDDED` in
+  `YoutubeAudioSourceManager`), and none of those four is OAuth-only. `TV` is the
+  only client whose _playback_ needs sign-in; it is not enabled.
+- **`allowDirectVideoIds: false` / `allowDirectPlaylistIds: false`**: these only
+  gate _bare identifiers_ (`dQw4w9WgXcQ`, `PL…`). Full `watch?v=`, `youtu.be`,
+  `shorts`, `live` and `playlist?list=` URLs are routed regardless of the flag, so
+  the setting is not why a pasted link fails.
+- **Plugin overlap**: both error lines come from two clients of one source
+  manager, so no second YouTube manager is fighting over the item.
+
+Because Orbit also treats a bare identifier as search text, `/play` now answers
+that case with an explicit "paste the full link" hint instead of a generic empty
+result.
+
+Items that require a login, are private, region-locked, removed, DRM-protected or
+otherwise provider-restricted can remain unplayable. Orbit reports that plainly
+instead of pretending a different recording was played.
 
 ## SFW boundaries — do not confuse sources with content ratings
 

@@ -14,6 +14,23 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     ...devices["Desktop Chrome"],
+    // The dashboard introduction is shown once per person. Browser tests start
+    // from an established workspace so they exercise its features; the
+    // first-visit experience has its own spec with an empty storage state.
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: "http://localhost:3000",
+          localStorage: [
+            {
+              name: "orbit:tour:v1:120000000000000099",
+              value: '{"version":1,"outcome":"finished"}',
+            },
+          ],
+        },
+      ],
+    },
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
       ? {
           executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,

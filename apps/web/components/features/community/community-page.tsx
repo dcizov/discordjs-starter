@@ -14,7 +14,7 @@ import { useWorkspace } from "../../workspace";
 import { PageHeader } from "../../page-header";
 import { ModuleSetupBanner } from "../../module-setup";
 import { Button } from "../../ui/button";
-import { Card, Field, Select, EmptyState } from "../../ui/primitives";
+import { Card, Field, FormSelect, EmptyState } from "../../ui/primitives";
 
 import { PostEditor } from "./draft-editor";
 import { PostRecord } from "./post-record";
@@ -225,21 +225,21 @@ export function CommunityPage({ kind }: { kind: CommunityKind }) {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div className="w-48">
           <Field label="Publication state">
-            <Select
+            <FormSelect
               value={filter}
-              onChange={(e) => {
-                setFilter(e.target.value);
-                void run(() => load(1, e.target.value));
+              onValueChange={(next) => {
+                setFilter(next);
+                void run(() => load(1, next));
               }}
               disabled={busy}
-            >
-              <option value="all">All states</option>
-              {communityStates.map((state) => (
-                <option key={state} value={state}>
-                  {state}
-                </option>
-              ))}
-            </Select>
+              options={[
+                { value: "all", label: "All states" },
+                ...communityStates.map((state) => ({
+                  value: state,
+                  label: state,
+                })),
+              ]}
+            />
           </Field>
         </div>
         <p className="text-xs text-muted-foreground">

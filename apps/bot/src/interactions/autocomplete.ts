@@ -1,9 +1,28 @@
 import type { AutocompleteInteraction } from "discord.js";
 import { PermissionFlagsBits } from "discord.js";
 import { listCommunityPosts, getGuild, listResources } from "@orbit/db";
+import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { dealGameSelection } from "../features/deals/selection";
 export async function handleAutocomplete(i: AutocompleteInteraction) {
   if (!i.guild) return;
+
+  if (i.commandName === "help") {
+    // The catalog is the source, so autocomplete can never offer an invocation the
+    // bot does not register. Subcommand paths are offered by their full path.
+    const stored = await getGuild(i.guild.id);
+    const focused = String(i.options.getFocused()).toLowerCase();
+    const commands = stored ? getCommandCatalog(stored.config).commands : [];
+    await i.respond(
+      commands
+        .filter((command) => command.path.includes(focused))
+        .slice(0, 25)
+        .map((command) => ({
+          name: `/${command.path} — ${command.description}`.slice(0, 100),
+          value: command.path,
+        }))
+    );
+    return;
+  }
 
   if (["poll", "announce"].includes(i.commandName)) {
     if (!i.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {

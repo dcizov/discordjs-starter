@@ -16,6 +16,21 @@ type Entry = {
   blockedUntil?: number;
   failure?: Failure;
 };
+/**
+ * How long a verified guild-permission snapshot may be reused.
+ *
+ * Read views tolerate a longer window than mutations. The old behaviour
+ * bypassed the cache for *every* mutation, so a burst of dashboard controls
+ * (pause, skip, volume, repeat) issued one Discord request each and hit the
+ * OAuth guild-list rate limit; the fix is a short time window, not "no cache".
+ *
+ * A stale snapshot never authorizes execution by itself: bot actions fetch the
+ * member again (`force: true`) and re-check module, role and channel
+ * permissions at execution time.
+ */
+export const PERMISSION_READ_MAX_AGE_MS = 30_000;
+export const PERMISSION_MUTATION_MAX_AGE_MS = 10_000;
+
 export type DiscordPermissionState = {
   entries: Map<string, Entry>;
   pending: Map<string, Promise<DiscordPermissionGuild[]>>;
@@ -35,7 +50,7 @@ export class DiscordPermissionError extends Error {
       status === 401
         ? "Your Discord sign-in has expired or lacks guild access. Sign in again."
         : status === 429
-          ? `Discord is rate limiting permission checks. Please try again in ${retryAfterSeconds ?? 30} seconds.`
+          ? `Discord is rate limiting permission checks. Please try again in ${retryAfterSeconds ?? 30} ${(retryAfterSeconds ?? 30) === 1 ? "second" : "seconds"}.`
           : "Discord permission checks are temporarily unavailable. Please try again shortly."
     );
   }
@@ -101,7 +116,16 @@ export class DiscordPermissionClient {
     while (this.state.entries.size > this.maxEntries)
       this.state.entries.delete(this.state.entries.keys().next().value!);
   }
-  async guilds(sessionId: string, accessToken: string, fresh = false) {
+  /**
+   * `maxAgeMs` is how old a verified snapshot may be before Discord is asked
+   * again. `0` forces a lookup (used where a caller must observe revocation
+   * immediately); concurrent callers always share one in-flight request.
+   */
+  async guilds(
+    sessionId: string,
+    accessToken: string,
+    options: number | { maxAgeMs?: number } = {}
+  ) {
     if (!sessionId || !accessToken) throw new DiscordPermissionError(401);
     // Never store access tokens as cache keys, and never mix rotated tokens.
     const key = `${sessionId}:${createHash("sha256").update(accessToken).digest("hex")}`;
@@ -113,10 +137,13 @@ export class DiscordPermissionClient {
         Math.ceil((this.state.globalBlockedUntil - now) / 1000),
         429
       );
+    const requested =
+      typeof options === "number" ? options : (options?.maxAgeMs ?? 30000);
+    const maxAge = Number.isFinite(requested) ? Math.max(0, requested) : 30000;
+    // A forced lookup (maxAgeMs 0) still yields to a request already in flight.
     const pending = this.state.pending.get(key);
     if (pending) return pending;
-    if (!fresh && entry?.data && now - entry.verifiedAt! < 30000)
-      return entry.data;
+    if (entry?.data && now - entry.verifiedAt! < maxAge) return entry.data;
     if (entry?.blockedUntil && entry.blockedUntil > now)
       throw new DiscordPermissionError(
         entry.failure?.status ?? 429,

@@ -24,6 +24,8 @@ Thumbs.db
 *.tsbuildinfo
 playwright-report/
 test-results/
+# Screenshot evidence from tests/e2e/screenshots.spec.ts (CI artifact, not source).
+visual-evidence/
 .artifacts/
 .cache-index.html
 **/next-env.d.ts

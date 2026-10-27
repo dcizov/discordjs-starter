@@ -1,6 +1,7 @@
 import { previewNewsRouting } from "@orbit/db/src/news-preview";
 import { getOwnEconomyHistory } from "@orbit/db";
 import { assertMusicQueueAdmission } from "@orbit/core/music-policy";
+import { musicSearchProvider } from "@orbit/core/music-sources";
 import {
   communityActionSchema,
   CommunityConflict,
@@ -17,7 +18,7 @@ import {
 import { simulateCommunityAction } from "@orbit/db/src/community-demo";
 import { eq, and, sql } from "drizzle-orm";
 import { authorize, HttpError } from "@/lib/auth";
-import { loadDashboard } from "@/lib/dashboard";
+import { loadDashboard, withAuditAvatarUrl } from "@/lib/dashboard";
 import { assertOrigin, body, rateLimit } from "@/lib/security";
 import type { ResourceKind } from "@orbit/core";
 import { encrypt, resourceSchemas, snowflake } from "@orbit/core";
@@ -25,10 +26,22 @@ import { inviteUrl, isDemo, required } from "@orbit/core/environment";
 import { BotActionUnavailableError } from "@orbit/core/bot-actions";
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
-import { pollSource, searchGames } from "@orbit/core/feeds";
+import { pollSourceDetailed, searchGames } from "@orbit/core/feeds";
+import { UpstreamError } from "@orbit/core/integration-http";
+import { HISTORY_KINDS, parseHistoryQuery } from "@orbit/core/history-query";
+import { parseMembersQuery } from "@orbit/core/members-query";
+import {
+  buildTemplate,
+  previewTemplate,
+  TEMPLATE_OMISSIONS,
+} from "@orbit/core/templates";
+import { applyTargetFromSnapshot, assertTargetAllowed } from "@/lib/templates";
+import { deleteTemplate } from "@orbit/db";
+import { newsCard } from "@orbit/core/news-presentation";
 import { createQueue, enqueueAction } from "@orbit/core/queue";
 import {
   audit,
+  createTemplateRun,
   database,
   deleteResource,
   economyTransaction,
@@ -36,11 +49,18 @@ import {
   getGuild,
   queryHistory,
   getResource,
+  getTemplate,
+  getTemplateRun,
+  listMembers,
+  listTemplates,
   putMusicState,
+  saveTemplate,
+  updateTemplateRun,
   reserveDelivery,
   saveConfig,
   saveResource,
   schema,
+  getRosterSync,
 } from "@orbit/db";
 import { demoTransaction } from "@orbit/db/src/demo";
 import { NextResponse } from "next/server";
@@ -64,7 +84,11 @@ async function handle(req: Request, context: Context) {
     if (mutating) assertOrigin(req);
     const auth = await authorize(guildId, mutating);
     await rateLimit(`${auth.user.id}:${guildId}`);
-    const actor = { id: auth.user.id, name: auth.user.name };
+    const actor = {
+      id: auth.user.id,
+      name: auth.user.name,
+      avatar: auth.user.avatar ?? null,
+    };
     if (path[2] === "invite" && req.method === "GET")
       return NextResponse.json({ url: inviteUrl(guildId) });
     if (!auth.guild.installed)
@@ -239,34 +263,272 @@ async function handle(req: Request, context: Context) {
       }
       throw new HttpError(404, "Endpoint not found");
     }
+    if (path[2] === "members") {
+      // The roster the bot synchronized, never a guess assembled from accounts.
+      if (path.length === 3 && req.method === "GET")
+        return NextResponse.json(
+          await listMembers(
+            guildId,
+            parseMembersQuery(new URL(req.url).searchParams)
+          )
+        );
+      if (path[3] === "sync" && path.length === 4 && req.method === "POST") {
+        if (isDemo())
+          return NextResponse.json({
+            demo: true,
+            message:
+              "Demo mode already holds a complete roster; a live sync would ask Discord. Nothing was requested.",
+            sync: await getRosterSync(guildId),
+          });
+        const job = await enqueueAction(
+          guildId,
+          actor.id,
+          "sync-roster",
+          {},
+          `roster-sync-${Date.now()}`
+        );
+        return NextResponse.json(
+          { accepted: true, jobId: job.id },
+          { status: 202 }
+        );
+      }
+      throw new HttpError(404, "Endpoint not found");
+    }
+    if (path[2] === "templates") {
+      // Templates are readable only through the guild they were captured from.
+      // `auth.guilds` is the list this user may manage, so an id alone never
+      // grants access to another community's blueprint.
+      const sources = auth.guilds.filter((g) => g.installed).map((g) => g.id);
+      if (path.length === 3 && req.method === "GET")
+        return NextResponse.json({
+          templates: await listTemplates(sources),
+          omissions: TEMPLATE_OMISSIONS,
+        });
+      if (path.length === 3 && req.method === "POST") {
+        const input = z
+          .object({
+            name: z.string().min(1).max(100),
+            description: z.string().max(500).default(""),
+            include: z
+              .object({
+                structure: z.boolean().default(true),
+                config: z.boolean().default(true),
+              })
+              .strict(),
+          })
+          .strict()
+          .parse(await body(req));
+        if (!input.include.structure && !input.include.config)
+          throw new HttpError(
+            400,
+            "Choose structure, Orbit configuration, or both."
+          );
+        const guild = await getGuild(guildId);
+        if (!guild) throw new HttpError(409, "This server is still syncing");
+        if (isDemo()) {
+          // The demo has no Discord session, so the captured document comes from
+          // the same demo snapshot the dashboard displays.
+          const document = buildTemplate({
+            name: input.name,
+            description: input.description,
+            include: input.include,
+            structure: {
+              roles: guild.roles.map((role) => ({
+                id: role.id,
+                name: role.name,
+                color: role.color,
+                position: role.position,
+                permissions: role.permissions,
+                managed: role.managed || !!role.assignedToBot,
+              })),
+              channels: guild.channels.map((channel) => ({
+                id: channel.id,
+                name: channel.name,
+                type: channel.type,
+                parentId: null,
+                overwrites: [],
+              })),
+            },
+            config: guild.config,
+          });
+          const saved = await saveTemplate({
+            sourceGuildId: guildId,
+            name: document.name,
+            description: document.description,
+            createdBy: actor.id,
+            document,
+          });
+          return NextResponse.json(
+            { ...saved, demo: true, note: "Captured from the demo snapshot." },
+            { status: 201 }
+          );
+        }
+        // Only the bot can read permission overwrites, so capturing is a job.
+        const job = await enqueueAction(
+          guildId,
+          actor.id,
+          "capture-template",
+          input,
+          `capture-template-${Date.now()}`
+        );
+        return NextResponse.json(
+          { accepted: true, jobId: job.id },
+          { status: 202 }
+        );
+      }
+      if (path[3] === "runs" && path[4] && req.method === "GET") {
+        const run = await getTemplateRun(path[4]);
+        if (!run || run.guildId !== guildId)
+          throw new HttpError(404, "Apply run not found");
+        return NextResponse.json(run);
+      }
+      const id = path[3] ? z.string().uuid().parse(path[3]) : null;
+      if (id) {
+        const template = await getTemplate(id, sources);
+        if (!template) throw new HttpError(404, "Template not found");
+        if (path.length === 4 && req.method === "GET")
+          return NextResponse.json(template);
+        if (path[4] === "preview" && req.method === "POST") {
+          const { targetGuildId, mapping } = z
+            .object({
+              targetGuildId: snowflake,
+              mapping: z.record(z.string(), z.string()).optional(),
+            })
+            .strict()
+            .parse(await body(req));
+          const target = assertTargetAllowed(
+            await getGuild(targetGuildId),
+            auth.guilds
+          );
+          return NextResponse.json({
+            template: { id: template.id, name: template.name },
+            target: { id: target.id, name: target.name },
+            plan: previewTemplate({
+              template: template.data,
+              target: applyTargetFromSnapshot(target),
+              mapping,
+            }),
+          });
+        }
+        if (path[4] === "apply" && req.method === "POST") {
+          const input = z
+            .object({
+              targetGuildId: snowflake,
+              fingerprint: z.string().min(3).max(80),
+              mapping: z.record(z.string(), z.string()).optional(),
+            })
+            .strict()
+            .parse(await body(req));
+          const target = assertTargetAllowed(
+            await getGuild(input.targetGuildId),
+            auth.guilds
+          );
+          const plan = previewTemplate({
+            template: template.data,
+            target: applyTargetFromSnapshot(target),
+            mapping: input.mapping,
+          });
+          if (plan.blockers.length)
+            throw new HttpError(409, plan.blockers[0].message);
+          if (plan.fingerprint !== input.fingerprint)
+            throw new HttpError(
+              409,
+              "This server changed since your preview. Preview again before applying."
+            );
+          if (isDemo()) {
+            // Demo mode must not pretend it created Discord resources.
+            const run = await createTemplateRun({
+              guildId: target.id,
+              templateId: template.id,
+              actorId: actor.id,
+              plan: {
+                ...plan,
+                sourceGuildId: template.sourceGuildId,
+                demo: true,
+              },
+            });
+            await updateTemplateRun(run.id, {
+              state: "simulated",
+              result: {
+                created: [],
+                reused: plan.items
+                  .filter((item) => item.action === "reuse")
+                  .map((item) => ({
+                    key: item.key,
+                    name: item.name,
+                    id: item.targetId,
+                  })),
+                failed: [],
+                configured: [],
+                message:
+                  "Demo mode: nothing was created in a Discord server. This is the plan that a live apply would execute.",
+              },
+            });
+            // Same shape as the live branch, so the page reads one thing.
+            return NextResponse.json(
+              { runId: run.id, accepted: true, demo: true },
+              { status: 202 }
+            );
+          }
+          const run = await createTemplateRun({
+            guildId: target.id,
+            templateId: template.id,
+            actorId: actor.id,
+            plan: { ...plan, sourceGuildId: template.sourceGuildId },
+          });
+          const job = await enqueueAction(
+            target.id,
+            actor.id,
+            "apply-template",
+            {
+              templateId: template.id,
+              runId: run.id,
+              fingerprint: input.fingerprint,
+              mapping: input.mapping ?? {},
+            },
+            `apply-template-${run.id}`
+          );
+          return NextResponse.json(
+            { runId: run.id, jobId: job.id, accepted: true },
+            { status: 202 }
+          );
+        }
+        if (path.length === 4 && req.method === "DELETE") {
+          if (template.sourceGuildId !== guildId)
+            throw new HttpError(
+              403,
+              "Only the server this template was captured from can delete it."
+            );
+          await deleteTemplate(template.id, template.sourceGuildId);
+          return NextResponse.json({ ok: true });
+        }
+      }
+      throw new HttpError(404, "Endpoint not found");
+    }
     if (path[2] === "history" && req.method === "GET") {
       const u = new URL(req.url);
-      const kind = z
-        .enum(["audit", "ledger", "deliveries", "cases"])
-        .parse(u.searchParams.get("kind"));
-      const page = z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(100000)
-        .parse(u.searchParams.get("page") ?? 1);
-      const pageSize = z.coerce
-        .number()
-        .int()
-        .min(1)
-        .max(50)
-        .parse(u.searchParams.get("pageSize") ?? 7);
-      const query = z
-        .string()
-        .max(100)
-        .parse(u.searchParams.get("query") ?? "");
-      const filter = z
-        .string()
-        .max(30)
-        .parse(u.searchParams.get("filter") ?? "all");
-      return NextResponse.json(
-        await queryHistory(guildId, kind, { page, pageSize, query, filter })
-      );
+      const kind = z.enum(HISTORY_KINDS).parse(u.searchParams.get("kind"));
+      // One shared contract (`@orbit/core/history-query`) builds and parses
+      // these parameters, so the dashboard cannot request a filter the route
+      // quietly ignores. Sorting is further checked per dataset in @orbit/db.
+      const params = parseHistoryQuery(u.searchParams);
+      const result = await queryHistory(guildId, kind, {
+        ...params,
+        sort: params.sort as never,
+      });
+      // Audit rows carry the hash that was recorded with the action. The URL is
+      // derived here, on the server, from that stored hash — never from the
+      // actor's current profile and never with a per-row Discord request. The
+      // paged table is built from this response, so this is the only place the
+      // historical picture can survive.
+      if (kind === "audit")
+        return NextResponse.json({
+          ...result,
+          rows: (
+            result.rows as { actorId: string; actorAvatar: string | null }[]
+          ).map(withAuditAvatarUrl),
+        });
+      return NextResponse.json(result);
     }
     if (path[2] === "config" && req.method === "PATCH")
       return NextResponse.json(
@@ -316,17 +578,31 @@ async function handle(req: Request, context: Context) {
               "Generate webhook credentials first. No requests can be accepted without a signing secret."
             );
         }
-        const items = isDemo()
-          ? [
-              {
-                title: "Your source is ready for a test flight",
-                summary:
-                  "This is a simulated preview. No external source was fetched and nothing was sent to Discord.",
-                url: "",
-                id: "demo-test",
-              },
-            ]
-          : await pollSource(resource);
+        // Demo never fabricates provider metadata: it returns one clearly
+        // labelled simulated item with the same card contract as live ones.
+        const polled = isDemo()
+          ? {
+              items: [
+                {
+                  id: "demo-test",
+                  title: "Your source is ready for a test flight",
+                  summary:
+                    "This is a simulated preview. No external source was fetched and nothing was sent to Discord.",
+                  url: "",
+                  attribution: "unknown" as const,
+                  publisher: "",
+                  publishedAt: "",
+                  image: null,
+                  tags: [],
+                  sourceLabel: resource.name,
+                },
+              ],
+              notices: [
+                "Simulated preview: no external request, no Discord delivery.",
+              ],
+            }
+          : await pollSourceDetailed(resource);
+        const items = polled.items;
         if (!isDemo())
           await saveResource(
             guildId,
@@ -347,7 +623,15 @@ async function handle(req: Request, context: Context) {
         return NextResponse.json({
           ok: true,
           count: items.length,
-          items: items.slice(0, 3),
+          shown: Math.min(items.length, 3),
+          items: items
+            .slice(0, 3)
+            .map((item) =>
+              newsCard(item, { sourceName: resource.name, simulated: isDemo() })
+            ),
+          notices: polled.notices,
+          officialOnly:
+            resource.data.adapter === "steam" && !!resource.data.officialOnly,
           demo: isDemo(),
         });
       }
@@ -548,13 +832,28 @@ async function handle(req: Request, context: Context) {
             "repeat",
             "volume",
             "remove",
+            "seek",
           ]),
           query: z.string().min(2).max(200).optional(),
+          // Approved provider id only; the bot maps it to a search prefix and
+          // re-validates it. Arbitrary Lavalink prefixes/ids are never accepted.
+          source: z.string().max(32).optional(),
           volume: z.number().int().min(0).max(100).optional(),
+          position: z.number().int().min(1).max(86400).optional(),
           repeat: z.enum(["off", "track", "queue"]).optional(),
           trackId: z.string().max(100).optional(),
         })
         .parse(await body(req));
+      if (input.source && !musicSearchProvider(input.source))
+        throw new HttpError(
+          400,
+          "Unknown search provider. Choose SoundCloud, YouTube, YouTube Music or Bandcamp, or leave it to the server default."
+        );
+      if (input.source && input.action !== "play")
+        throw new HttpError(
+          400,
+          "A search provider only applies to the play action."
+        );
       const g = (await getDashboardData(guildId)).guild;
       if (!g.config.modules.music)
         throw new HttpError(400, "The music module is disabled");
@@ -592,6 +891,18 @@ async function handle(req: Request, context: Context) {
           case "remove":
             state.tracks = state.tracks.filter((t) => t.id !== input.trackId);
             break;
+          case "seek":
+            if (!state.current)
+              throw new HttpError(400, "Nothing is playing right now.");
+            if (!input.position)
+              throw new HttpError(400, "Choose a position in seconds.");
+            state.position = Math.min(
+              input.position * 1000,
+              state.current.duration > 0
+                ? state.current.duration - 1000
+                : input.position * 1000
+            );
+            break;
           case "play": {
             if (!input.query) throw new HttpError(400, "Enter a track title");
             assertMusicQueueAdmission(
@@ -601,10 +912,17 @@ async function handle(req: Request, context: Context) {
               g.config.music.maxQueue,
               g.config.music.maxPerMember ?? 0
             );
+            const provider = input.source
+              ? musicSearchProvider(input.source)
+              : undefined;
             const t = {
               id: randomUUID(),
               title: input.query,
-              author: "Demo request · no audio playback",
+              // The preview has no backend lookup, so it says so instead of
+              // implying that a provider searched for anything.
+              author: provider
+                ? `Demo request · ${provider.label} not searched · no audio playback`
+                : "Demo request · no audio playback",
               duration: 180000,
               uri: "",
               requestedBy: actor.name,
@@ -672,9 +990,13 @@ async function handle(req: Request, context: Context) {
       error instanceof BotActionUnavailableError ||
       error instanceof CommunityConflict
         ? error.status
-        : error instanceof ZodError
-          ? 422
-          : 400;
+        : // A provider outage is reported as a bad gateway, never as a bad
+          // request, so the dashboard can tell "fix your setup" from "retry".
+          error instanceof UpstreamError
+          ? 502
+          : error instanceof ZodError
+            ? 422
+            : 400;
     const message =
       error instanceof ZodError
         ? error.issues
@@ -683,8 +1005,12 @@ async function handle(req: Request, context: Context) {
         : error instanceof Error
           ? error.message
           : "Something went wrong";
-    const retryAfterSeconds =
-      error instanceof HttpError ? error.retryAfterSeconds : undefined;
+    const retryAfterSeconds = (() => {
+      if (error instanceof HttpError) return error.retryAfterSeconds;
+      if (!(error instanceof UpstreamError) || !error.retryAfterMs)
+        return undefined;
+      return Math.max(1, Math.ceil(error.retryAfterMs / 1000));
+    })();
     return NextResponse.json(
       { error: message, ...(retryAfterSeconds ? { retryAfterSeconds } : {}) },
       {

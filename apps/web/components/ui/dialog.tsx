@@ -34,9 +34,20 @@ export function DialogContent({
     </Primitive.Portal>
   );
 }
-export function DialogHeader({ children }: { children: React.ReactNode }) {
+export function DialogHeader({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="mb-6 pr-6 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mt-1.5 [&_p]:text-xs [&_p]:leading-relaxed [&_p]:text-muted-foreground">
+    <div
+      className={cn(
+        "mb-6 pr-6 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mt-1.5 [&_p]:text-xs [&_p]:leading-relaxed [&_p]:text-muted-foreground",
+        className
+      )}
+    >
       {children}
     </div>
   );

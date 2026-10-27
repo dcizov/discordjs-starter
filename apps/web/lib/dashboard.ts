@@ -8,7 +8,84 @@ import { isDemo } from "@orbit/core/environment";
 import { emptyMusic, getDashboardData, getAccount } from "@orbit/db";
 import "server-only";
 import { authorize, HttpError } from "./auth";
-import { guildIconUrl, publicUser } from "./discord-images";
+import {
+  guildIconUrl,
+  personAvatarUrl,
+  publicUser,
+  userAvatarUrl,
+} from "./discord-images";
+import { getMemberIdentities, type MemberIdentity } from "@orbit/db";
+import { displayName, secondaryName } from "@orbit/core/identity";
+type AccountRecord = NonNullable<Awaited<ReturnType<typeof getAccount>>>;
+/**
+ * Attach the current guild identity once, on the server, for either a list or a
+ * wallet.
+ *
+ * The hash captured on someone's last economy interaction is only a fallback:
+ * when the roster knows this member, the name and picture this server actually
+ * shows (nickname, guild avatar) win, and they are read from rows the bot already
+ * holds. No Discord request, and no waiting for the member to interact again.
+ */
+function withAccountAvatar<T extends AccountRecord>(
+  account: T,
+  member?: MemberIdentity
+): T & { username: string | null; globalName: string | null } {
+  const names = {
+    username: member?.username ?? account.username ?? null,
+    globalName: member?.globalName ?? account.globalName ?? null,
+    nickname: member?.nickname ?? null,
+  };
+  return {
+    ...account,
+    ...names,
+    avatarUrl: personAvatarUrl({
+      guildId: account.guildId,
+      userId: account.userId,
+      guildAvatar: member?.guildAvatar ?? account.guildAvatar ?? null,
+      avatar: member?.avatar ?? account.avatar ?? null,
+    }),
+  };
+}
+/**
+ * One projection for a historical audit row.
+ *
+ * The actor's picture is derived from the hash that was stored with the action.
+ * It is never looked up again and never replaced by the actor's current profile:
+ * an audit row is evidence of what happened then. A row recorded before avatars
+ * were captured, or by a system actor, keeps an honest `null` so the component
+ * can say so instead of inventing a face. Used by both the dashboard snapshot
+ * and the paged `/history` endpoint, because the table is built from the latter.
+ */
+export function withAuditAvatarUrl<
+  T extends { actorId: string; actorAvatar?: string | null },
+>(entry: T): T & { actorAvatarUrl: string | null } {
+  return {
+    ...entry,
+    actorAvatarUrl: userAvatarUrl(entry.actorId, entry.actorAvatar ?? null),
+  };
+}
+/**
+ * The roster row's picture, resolved once on the server: guild avatar first, then
+ * the account's global avatar. `null` means Discord has neither, and the cell
+ * says so with initials instead of a broken image.
+ */
+export function withMemberAvatarUrl<
+  T extends {
+    userId: string;
+    guildAvatar?: string | null;
+    avatar?: string | null;
+  },
+>(member: T, guildId: string): T & { avatarUrl: string | null } {
+  return {
+    ...member,
+    avatarUrl: personAvatarUrl({
+      guildId,
+      userId: member.userId,
+      guildAvatar: member.guildAvatar ?? null,
+      avatar: member.avatar ?? null,
+    }),
+  };
+}
 export async function loadDashboard(
   guildId: string,
   authorized?: Awaited<ReturnType<typeof authorize>>,
@@ -43,6 +120,24 @@ export async function loadDashboard(
         health: [],
         demo: isDemo(),
       };
+  // One batched read: the roster's current names and pictures for everyone this
+  // response mentions. Current surfaces use it instead of their own captures.
+  const identities = guild.installed
+    ? new Map(
+        (
+          await getMemberIdentities(guildId, [
+            ...data.accounts.map((account) => account.userId),
+            user.id,
+          ])
+        ).map((identity) => [identity.userId, identity])
+      )
+    : new Map<string, MemberIdentity>();
+  const me = identities.get(user.id);
+  const meNames = {
+    username: me?.username ?? null,
+    globalName: me?.globalName ?? null,
+    nickname: me?.nickname ?? null,
+  };
   return {
     ...data,
     guild: {
@@ -71,7 +166,11 @@ export async function loadDashboard(
         data.demo
       ),
     },
-    wallet: guild.installed ? await getAccount(guildId, user.id) : null,
+    wallet: guild.installed
+      ? await getAccount(guildId, user.id).then((account) =>
+          account ? withAccountAvatar(account, me) : null
+        )
+      : null,
     ...(ownLedger && guild.installed
       ? { walletHistory: await getOwnEconomyHistory(guildId, user.id) }
       : {}),
@@ -79,7 +178,35 @@ export async function loadDashboard(
       itad: !!process.env.ITAD_API_KEY,
       lavalink: !!process.env.LAVALINK_URL && !!process.env.LAVALINK_PASSWORD,
     },
-    user: publicUser(user),
+    // Audit avatars are the hashes recorded with each action. They are resolved
+    // from the row itself (no per-row Discord request) and may be stale: the
+    // audit log shows the actor's recorded identity, not their current avatar.
+    // Current identity for the people who spend and earn here: the hash the bot
+    // captured on their last economy interaction, resolved once per row from
+    // data already in this response. No Discord request, and no historical
+    // claim — the audit log is the place for "who they were then".
+    accounts: data.accounts.map((account) =>
+      withAccountAvatar(account, identities.get(account.userId))
+    ),
+    audit: data.audit.map(withAuditAvatarUrl),
+    // The account menu is the signed-in person *in this server*: a nickname is
+    // shown with the handle beside it, and the guild avatar wins over the global
+    // one exactly as it does in every other list.
+    user: {
+      ...publicUser(user),
+      ...meNames,
+      name: displayName({ ...meNames, storedName: user.name }, "guild"),
+      secondaryName: secondaryName(
+        { ...meNames, storedName: user.name },
+        "guild"
+      ),
+      avatarUrl: personAvatarUrl({
+        guildId,
+        userId: user.id,
+        guildAvatar: me?.guildAvatar ?? null,
+        avatar: me?.avatar ?? user.avatar ?? null,
+      }),
+    },
     guilds: guilds.map((g) => ({ ...g, iconUrl: guildIconUrl(g.id, g.icon) })),
   };
 }

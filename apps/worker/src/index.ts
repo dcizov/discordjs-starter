@@ -2,10 +2,12 @@ import { reconcileCommunityPosts } from "./community";
 import type { Resource } from "@orbit/core";
 import { fingerprint, safeText } from "@orbit/core";
 import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
-import { pollDeals, pollSource, safeLink } from "@orbit/core/feeds";
+import { pollDeals, pollSource } from "@orbit/core/feeds";
+import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import { assertDeliverableDeal } from "@orbit/core/deal-policy";
 import { dealEmbed, dealLinkRow } from "@orbit/core/deal-presentation";
+import { feedEmbed } from "@orbit/core/news-presentation";
 import type { GameDeal } from "@orbit/core/deal-types";
 import {
   createQueue,
@@ -40,6 +42,39 @@ async function main() {
   const rest = new REST({ version: "10", timeout: 15000, retries: 3 }).setToken(
     required("DISCORD_TOKEN")
   );
+  /**
+   * Recorded identity for worker-generated audit rows.
+   *
+   * These rows used to be written as `actorId: "orbit-worker"` with no avatar, so
+   * the dashboard showed a generic mark instead of the bot's real picture. One
+   * `GET /users/@me` per process (cached, including a failed lookup) gives the
+   * same id/avatar the bot would record, without a request per delivery.
+   */
+  let botIdentity: { id: string; name: string; avatar: string | null } | null =
+    null;
+  let botIdentityLookup: Promise<void> | null = null;
+  async function auditActor() {
+    if (!botIdentity && !botIdentityLookup) {
+      botIdentityLookup = (async () => {
+        try {
+          const me = (await rest.get(Routes.user())) as {
+            id: string;
+            avatar: string | null;
+          };
+          botIdentity = { id: me.id, name: "Orbit", avatar: me.avatar ?? null };
+        } catch (error) {
+          // Fall back to the stable synthetic actor rather than inventing a face.
+          logger.warn(
+            { error: errorDiagnostic(error) },
+            "Could not read the bot identity for audit records"
+          );
+          botIdentity = { id: "orbit-worker", name: "Orbit", avatar: null };
+        }
+      })();
+    }
+    if (botIdentityLookup) await botIdentityLookup;
+    return botIdentity!;
+  }
   async function updateSourceHealth(
     source: Resource,
     healthy: boolean,
@@ -108,6 +143,9 @@ async function main() {
     }
   }
   async function deliver(job: Job) {
+    // The bot identity is cached after the first lookup and is resolved outside
+    // the transaction, so a slow Discord API call cannot hold a row lock.
+    const actor = await auditActor();
     const result = await database().db.transaction(async (tx) => {
       await tx.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${job.data.deliveryId}, 1))`
@@ -177,59 +215,78 @@ async function main() {
             );
           assertDeliverableDeal(deal, source.data);
         }
+        // One shared presentation policy produces the preview cards and this
+        // embed, so a dashboard preview cannot promise different formatting.
         const embed = deal
           ? dealEmbed(deal)
-          : {
-              title: safeText(row.title, 256),
-              ...(safeLink(row.url) ? { url: safeLink(row.url) } : {}),
-              ...(payload.includeSummary
-                ? { description: safeText(payload.summary ?? "", 1000) }
-                : {}),
-              color: /^#[0-9a-f]{6}$/i.test(payload.color ?? "")
-                ? parseInt(payload.color.slice(1), 16)
-                : 0x9b7ada,
-              footer: {
-                text: safeText(
-                  `${payload.sourceName ?? source.name} · via Orbit`,
-                  150
-                ),
+          : feedEmbed(
+              {
+                id: row.externalId,
+                title: row.title,
+                url: row.url,
+                summary: payload.summary ?? "",
+                image: payload.image ?? null,
+                attribution: payload.attribution ?? "unknown",
+                publishedAt: payload.publishedAt ?? "",
+                tags: payload.tags ?? [],
+                // The provider's own label, e.g. "Community Announcements",
+                // so a syndicated item is never attributed to the configured
+                // subscription name. Older queued payloads only carry
+                // sourceName, which remains the fallback.
+                sourceLabel:
+                  payload.providerLabel || payload.sourceName || source.name,
+                publisher: payload.publisher ?? "",
               },
-              timestamp: new Date().toISOString(),
-            };
-        await rest.post(Routes.channelMessages(row.channelId), {
-          body: {
-            content: roleId ? `<@&${roleId}>` : "",
-            embeds: [embed],
-            ...(deal
-              ? {
-                  components: (() => {
-                    const row = dealLinkRow(deal);
-                    return row ? [row] : [];
-                  })(),
-                }
-              : {}),
-            allowed_mentions: {
-              parse: [],
-              roles: roleId ? [roleId] : [],
-              users: [],
-              replied_user: false,
+              {
+                includeSummary: payload.includeSummary,
+                color: payload.color,
+                sourceName: payload.sourceName ?? source.name,
+              }
+            );
+        const message = (await rest.post(
+          Routes.channelMessages(row.channelId),
+          {
+            body: {
+              content: roleId ? `<@&${roleId}>` : "",
+              embeds: [embed],
+              ...(deal
+                ? {
+                    components: (() => {
+                      const row = dealLinkRow(deal);
+                      return row ? [row] : [];
+                    })(),
+                  }
+                : {}),
+              allowed_mentions: {
+                parse: [],
+                roles: roleId ? [roleId] : [],
+                users: [],
+                replied_user: false,
+              },
+              nonce: fingerprint(
+                row.guildId,
+                row.sourceId,
+                `${row.externalId}:${row.channelId}`
+              ).slice(0, 24),
+              enforce_nonce: true,
             },
-            nonce: fingerprint(
-              row.guildId,
-              row.sourceId,
-              `${row.externalId}:${row.channelId}`
-            ).slice(0, 24),
-            enforce_nonce: true,
-          },
-        });
+          }
+        )) as { id?: string } | undefined;
         await tx
           .update(schema.deliveries)
-          .set({ status: "delivered", error: null, deliveredAt: new Date() })
+          .set({
+            status: "delivered",
+            error: null,
+            deliveredAt: new Date(),
+            // Only a confirmed id becomes a link in the dashboard.
+            messageId: message?.id ?? null,
+          })
           .where(eq(schema.deliveries.id, row.id));
         await tx.insert(schema.auditLogs).values({
           guildId: row.guildId,
-          actorId: "orbit-worker",
-          actorName: "Orbit",
+          actorId: actor.id,
+          actorName: actor.name,
+          actorAvatar: actor.avatar,
           action: "delivered",
           target: source.name,
           detail: `Delivered ${safeText(row.title, 100)} to #${channel.name}`,

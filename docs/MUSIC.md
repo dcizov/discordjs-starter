@@ -192,8 +192,28 @@ Skybot's OC ReMix adapter. All nine requested plugins, versions, exclusions,
 API responsibilities and licensing/integrity notes are documented in the
 [reviewed plugin profile](MUSIC-PLUGINS.md).
 
-- Choose **one** default `MUSIC_SEARCH_PREFIX`: `scsearch`, `bcsearch`,
-  `ytsearch` or `ytmsearch`. OC ReMix is URL-only. No automatic provider fallback.
+- `MUSIC_SEARCH_PREFIX` chooses the **default** text-search provider:
+  `scsearch` (SoundCloud), `ytsearch` (YouTube), `ytmsearch` (YouTube Music) or
+  `bcsearch` (Bandcamp). OC ReMix is URL-only. No automatic provider fallback.
+  Listeners do not have to accept that default: `/search` and `/play` take an
+  optional `source` option (`soundcloud`, `youtube`, `youtube-music`,
+  `bandcamp`) and the dashboard's play form has the same choice. Omitting it
+  means "this server's configured default".
+- **One provider table.** `packages/core/src/music-sources.ts` maps each
+  user-facing provider to its approved Lavalink prefix and to the source manager
+  that must be registered. The slash-command choices, `/help`, the dashboard
+  selector, the runtime resolver and the doctor all read that table, so an
+  option cannot be offered for something the runtime does not know. Raw Lavalink
+  prefixes/ids are never accepted from a user; unknown values are refused with
+  the list of real choices.
+- **YouTube and YouTube Music share one adapter** (`plugins.youtube`) but not one
+  catalogue; they stay two distinct choices. A provider whose manager is missing
+  from `/v4/info` is reported with the switch that enables it for this deployment
+  (`enableHint` above) instead of being quietly swapped for another provider.
+- **A `source` option never reroutes a link.** A pasted URL is routed by its
+  validated hostname. Passing `source` together with a link for a different
+  provider is refused with the reason; the matching provider (or omitting the
+  option) is accepted and the query stays a URL, never a search.
 - Update an **existing** `.env` host allowlist if you want YouTube/OC ReMix;
   changing `.env.example` does not overwrite your settings. The allowlist can
   restrict these supported providers, not add arbitrary/adult loaders.
@@ -224,6 +244,9 @@ npm run music:doctor
 npm run music:doctor -- --query "the same failing search text"
 npm run music:doctor -- --query "YOUR_PUBLIC_SUPPORTED_HTTPS_TRACK_URL"
 
+# Test one provider explicitly (soundcloud, youtube, youtube-music, bandcamp).
+npm run music:doctor -- --query "the same failing search text" --source youtube
+
 # Help works without credentials/services.
 npm run music:doctor -- --help
 ```
@@ -236,7 +259,34 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --
 
 For a compiled runtime container: `docker compose --profile live --profile music run --rm --no-deps bot node dist/music-doctor.js --query "the same failing search text"`. On the host use the published address (normally `localhost:2333`), not Compose's internal hostname. Keep the password in `.env`, never a command-line argument.
 
+The report lists **every supported provider** with its prefix, required source
+manager, whether that manager is registered, and whether it is the configured
+default. That table is the same one the runtime uses, so "the doctor is happy"
+and "`/search` offers this provider" cannot disagree. An unknown
+`MUSIC_SEARCH_PREFIX` is reported with the four valid values and is **not**
+switched for you; a reachable backend with no registered search adapter says so
+explicitly rather than looking healthy.
+
 Only `GET /v4/info` and, with a query, `GET /v4/loadtracks` are used. There is no gateway login, voice join, database/Redis access, queue mutation, playback, or fallback. The doctor shares the player's source/input policy. JSON goes to stdout and failures return exit status 1; use `npm run --silent music:doctor ...` for clean piping. Encoded tracks and signed source URLs are not printed. A successful lookup proves metadata loading, **not** stream decoding or voice.
+
+### Provider ids, search prefixes and source managers are three vocabularies
+
+Four is not a typo for eight. Orbit has **four** user-facing providers, **four**
+Lavalink search prefixes and **three** source-manager names, and each one is
+accepted somewhere different. Mixing them is how a working search gets
+"corrected" into a broken one.
+
+| Vocabulary                 | Values                                               | Where it is accepted / used                                                                         |
+| -------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Provider **id**            | `soundcloud`, `youtube`, `youtube-music`, `bandcamp` | `/play` and `/search` `source` option, dashboard "Search with", `music:doctor --source`             |
+| Lavalink **search prefix** | `scsearch`, `ytsearch`, `ytmsearch`, `bcsearch`      | `MUSIC_SEARCH_PREFIX` only — the bot adds it, you paste a prefix only when writing a query yourself |
+| **Source manager** name    | `soundcloud`, `youtube`, `bandcamp`                  | Lavalink's `/v4/info` and `application.yml`; YouTube Music has no manager of its own                |
+
+So `--source youtube-music` is valid, `--source ytmsearch` is not;
+`MUSIC_SEARCH_PREFIX=ytmsearch` is valid, `MUSIC_SEARCH_PREFIX=youtube-music` is
+not. Four ids + four prefixes is the eight some notes mention — two lists, not
+one option with eight values. `youtube` and `youtube-music` share one manager:
+enabling it enables both searches.
 
 ## Voice handshake: `not established in 15 seconds`
 
@@ -325,11 +375,137 @@ Slash-command errors use a red embed with a fenced, sanitized multiline diagnost
 
 Music slash/action/playback failures are also sent to the dashboard's **Audit** log. **Copy error** copies the exact stored sanitized detail, and **Copy full event** copies JSON. Line breaks are preserved, credentials/auth fields/URL query values are redacted, and storage is bounded to 8,192 characters with a truncation marker. The embed is only a presentation layer; it does not rewrite the audit detail or doctor JSON. Old shortened records cannot be recovered. Inspect/redact logs before sharing; never share `.env`, tokens, passwords, or private source URLs.
 
+### What `Lavalink connection error` means
+
+The bot used to log the fixed string `Lavalink connection error` with whatever
+the Shoukaku error event carried. Shoukaku forwards the WebSocket client's error,
+and for a refused dual-stack connect that is an `AggregateError` whose own
+message is **empty** — so the log line named no cause at all.
+
+The handler now reads only the fields the library actually sets — `name`,
+`message`, `code`, HTTP `status`, the `cause` chain and the members of an
+`AggregateError` — and prints them with the configured target. Everything passes
+through the same redaction as every other diagnostic, so a password or a signed
+URL that ends up in a message becomes `[REDACTED]`.
+
+| Category  | Evidence the bot saw                          | What it means                                                               |
+| --------- | --------------------------------------------- | --------------------------------------------------------------------------- |
+| `refused` | `ECONNREFUSED` (also as aggregate members)    | Nothing is listening at that address/port.                                  |
+| `dns`     | `ENOTFOUND`, `EAI_AGAIN`, …                   | The host name does not resolve from where the bot runs.                     |
+| `timeout` | `ETIMEDOUT`, `UND_ERR_CONNECT_TIMEOUT`, …     | A connection was attempted and nothing answered in time.                    |
+| `auth`    | HTTP `401`/`403`                              | Lavalink answered and rejected the request.                                 |
+| `tls`     | `DEPTH_ZERO_SELF_SIGNED_CERT`, `ERR_SSL_*`, … | The TLS handshake failed before Lavalink answered.                          |
+| `closed`  | `ECONNABORTED`, `EPIPE`                       | The socket opened and then closed.                                          |
+| `unknown` | nothing above                                 | No evidence in the error, so **no cause is invented** and no hint is shown. |
+
+Only the evidenced categories get a next step. For a refusal the log says to
+check that Lavalink is running and that the address and port are right — a
+host-run bot reaches `localhost:2333`, a Compose bot reaches `lavalink:2333`.
+The health row shows the same summary (category, code and sanitized message), so
+"Music backend — degraded" no longer hides the reason.
+
+An identical error repeating while the library retries with backoff is logged
+once and then counted at debug level, so a flapping backend cannot bury the first
+line that explains it. `disconnect` resets that counter.
+
+Music remains optional: a failed backend degrades the music module only. The
+dashboard, news, deals, moderation and economy keep working, and Orbit never
+starts a container for you.
+
+## Capability matrix
+
+Installed is not the same as working. This table records what Orbit implements,
+where it is reachable, what is covered by mocks, and what still needs an
+authorized live check on your deployment. **"Verified live" is only claimed
+where a real Discord/Lavalink run confirmed it**; in this repository it stays
+empty, because no live guild or audible test is available here.
+
+| Capability                | Backend capability                                          | Implemented                   | Slash commands                     | Dashboard                                | Mocked tests                                               | Verified live | Disabled / limits                                                                                                      |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------- | ---------------------------------- | ---------------------------------------- | ---------------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Text search (quick play)  | Lavalink search, `MUSIC_SEARCH_PREFIX` (default `scsearch`) | Yes (first result, by design) | `/play query:<text>`               | **Add to the queue** field               | `music-source`, `music-service`                            | No            | First match only; use `/search` to choose                                                                              |
+| Explicit search selection | Same search, up to 5 results                                | Yes                           | `/search query:<text>`             | Not offered (Discord-only menu)          | `music-search` (expiry, ownership, single use, duplicates) | No            | One use per menu, 2-minute expiry, same member + guild                                                                 |
+| Direct links              | Allowlisted hosts + DNS/SSRF checks                         | Yes                           | `/play query:<url>`                | Same field                               | `music-source` (URL matrices)                              | No            | HTTPS only, `MUSIC_ALLOWED_HOSTS`, public DNS, no adult adapters; public page linked, query strings stripped           |
+| Idle disconnect policy    | Per-guild timer + live re-check                             | Yes                           | `/queue`, `/stop`                  | Music settings (`idleDisconnectSeconds`) | `music-idle`, `music-service`                              | No            | Queue end/failure waits 60 s by default; empty channel 15 s; explicit stop leaves at once                              |
+| Track artwork and source  | Provider metadata                                           | Yes                           | `/queue`                           | Now-playing card + queue rows            | `replies`                                                  | No            | `safeImageUrl()`/`safeLink()` only; no signed media URLs, no stream endpoints                                          |
+| Playlists                 | Provider playlist load                                      | Yes (all returned tracks)     | `/play query:<playlist url>`       | Same field                               | `music-service` (whole-request admission)                  | No            | Rejected as a whole over `maxQueue`/`maxPerMember`; no partial enqueue                                                 |
+| Queue view                | Persisted snapshot                                          | Yes                           | `/queue`                           | Queue card                               | `music-service`, `replies`                                 | No            | Snapshot for observation, not session restore                                                                          |
+| Pause / resume            | `setPaused`                                                 | Yes                           | `/pause`, `/resume`                | Transport button                         | `music-service`                                            | No            | Requires an active player                                                                                              |
+| Skip                      | `stopTrack` + `end` event                                   | Yes                           | `/skip`                            | Transport button                         | `music-service`                                            | No            | Never retried automatically (a duplicate skip changes the queue)                                                       |
+| Stop                      | leave voice + clear snapshot                                | Yes                           | `/stop`                            | Stop dialog + transport                  | `music-service`                                            | No            | Clears the persisted queue; a restart does not replay it                                                               |
+| Volume                    | `setGlobalVolume`                                           | Yes                           | `/volume level:<0-100>`            | Slider (latest value wins)               | `music-service`, `volume-control`                          | No            | 0–100 integer; coalesced per interaction                                                                               |
+| Repeat                    | Queue policy                                                | Yes                           | `/repeat mode:<off\|track\|queue>` | Cycle button                             | `music-service`                                            | No            | Not an eviction policy                                                                                                 |
+| Shuffle                   | Queue order                                                 | Yes                           | `/shuffle`                         | Two buttons                              | `music-service`                                            | No            | Shuffles upcoming only                                                                                                 |
+| Remove a queued track     | Queue policy                                                | Yes                           | — (use `/queue` to see state)      | Row action                               | `music-api`                                                | No            | Dashboard only; the playing track is not removable this way                                                            |
+| Seek                      | `seekTo` (milliseconds)                                     | Yes                           | `/seek position:<seconds>`         | Seek slider                              | `music-service` (clamp, live duration, invalid input)      | No            | Finite duration only; clamps to 1 s before the end; not retried                                                        |
+| Progress display          | `playerUpdate` + persisted snapshot                         | Yes                           | —                                  | Progress bar + labels                    | `music-progress` (interpolation, staleness, clock skew)    | No            | Freezes after 90 s of silence and says "State unconfirmed"                                                             |
+| Voice join/leave          | Shoukaku/Discord handshake                                  | Yes                           | Implicit on `/play`                | —                                        | `music-voice` (event orders, stale cleanup)                | No            | Normal voice channels only; Stage supported as target is refused                                                       |
+| SponsorBlock skipping     | Lavalink plugin                                             | Optional                      | —                                  | —                                        | `music-plugins`, `music-plugin-config`                     | No            | Only when the plugin is loaded and categories are configured                                                           |
+| Lyrics                    | —                                                           | **No**                        | **No**                             | **No**                                   | —                                                          | —             | **No maintained, license-clear provider is configured.** No button, no command, no fabricated synced lyrics. See below |
+| Spotify / Apple Music     | —                                                           | **No**                        | —                                  | —                                        | —                                                          | —             | Deliberately absent (metadata mirroring is not playback)                                                               |
+
+### Why there is no lyrics feature
+
+Orbit does not ship a lyrics endpoint today. The maintained options all add a
+new credential, a licensing/attribution obligation and a per-guild cache, and
+several are undocumented or rate-limit aggressively. Adding a **Lyrics** button
+that sometimes returns nothing would imply a capability Orbit cannot promise, so
+the absence is documented instead of shipped as a dead control. A lyrics
+integration would need: a server-side key (never in the browser), a cache with
+explicit freshness, attribution next to the text, honest "not found" handling,
+and — for a _synchronized_ view — real timestamps plus alignment with the
+Lavalink position. Without those, static text only, and never the word "synced".
+
 ## Commands and controls
 
-`/play`, `/queue`, `/pause`, `/resume`, `/skip`, `/stop`, `/volume`, `/shuffle`, and `/repeat` are implemented; register them with Discord. Command replies remain **ephemeral**, including embeds. The dashboard's Commands reference is not live registration verification. Dashboard controls share the music service/action queue. Members must be in the bot's voice channel; configured DJ-role/Manage Server checks, module state, and bot channel permissions are enforced at execution time.
+`/play`, `/search`, `/queue`, `/pause`, `/resume`, `/skip`, `/stop`, `/seek`, `/volume`, `/shuffle`, and `/repeat` are implemented; register them with Discord. Command replies remain **ephemeral**, including embeds. The dashboard's Commands reference is not live registration verification. Dashboard controls share the music service/action queue. Members must be in the bot's voice channel; configured DJ-role/Manage Server checks, module state, and bot channel permissions are enforced at execution time.
 
 Volume is bounded to 0–100%; queue limits are configurable. Unsupported sources produce an error, not fabricated success. Accepted play requests do not certify audible playback. The dashboard waits for actual job completion and warns rather than claiming success if completion remains unconfirmed; failures are audited. Requests older than 30 seconds at execution are rejected instead of replayed. Music actions are not automatically retried, since a repeated skip/play could alter the queue twice.
+
+### `/search` and `/seek` in detail
+
+`/search` runs the same resolver and source policy as `/play` and lists at most
+five results with title, artist, source and duration. Each menu is:
+
+- **bound** to the member who ran it and to that guild (another member cannot
+  spend the results),
+- **single-use** — the interaction is claimed once, so a double click or a
+  replayed component cannot enqueue the same tracks twice,
+- **short-lived** — two minutes, then it must be run again,
+- **re-checked** — the chosen tracks still go through the voice, DJ-role,
+  module, queue-capacity and per-member admission checks, and a track that is
+  already queued or currently playing is not added again.
+
+Quick play is unchanged: `/play` resolves and queues the first match
+immediately, asking the backend for **one** result instead of fetching a list and
+discarding it. `/search` asks for the same bounded five it displays.
+
+The optional `source` option is available on both commands:
+
+| Choice          | Prefix      | Source manager to have registered | Enable it with                                            |
+| --------------- | ----------- | --------------------------------- | --------------------------------------------------------- |
+| `soundcloud`    | `scsearch`  | `soundcloud`                      | `plugins.soundy.enabled` (keep built-in SoundCloud off)   |
+| `youtube`       | `ytsearch`  | `youtube`                         | `plugins.youtube.enabled`                                 |
+| `youtube-music` | `ytmsearch` | `youtube`                         | `plugins.youtube.enabled` (same adapter, music catalogue) |
+| `bandcamp`      | `bcsearch`  | `bandcamp`                        | `lavalink.server.sources.bandcamp`                        |
+
+The provider that answered is named in the `/search` header (so a YouTube result
+and a YouTube Music result are never confused), and a missing adapter produces an
+actionable error naming that switch — playback is not attempted and no other
+provider is substituted.
+
+`/seek` takes seconds, requires a finite duration, clamps to one second before
+the end, and refuses live/unknown-length sources instead of pretending. It is
+sent to Lavalink in milliseconds. A successful reply means "the backend
+accepted the seek", not "you can hear it from that point". The dashboard slider
+behaves the same way: one request when the listener lets go, no request per
+pixel.
+
+The dashboard progress bar never polls Discord or Lavalink per second. It starts
+from the persisted snapshot and interpolates with a monotonic local clock,
+reconciling whenever a new dashboard payload arrives (every 30 s, or as soon as
+a background tab becomes visible). If the snapshot is more than 90 seconds old,
+interpolation stops, the badge reads **State unconfirmed**, and the position is
+labelled "last known" instead of continuing to animate.
 
 Queue snapshots are for dashboard observation, not automatic voice-session restoration. An ordinary Lavalink reconnect can use its short resume window, but a full bot/backend restart or source-adapter change needs a new session. In demo mode all tracks are fictional previews and **no audio is played**.
 
@@ -342,6 +518,69 @@ These demonstrate concrete edge/race defects and protect the installed library c
 Compose and the editor were inspected: the `bot` service owns the gateway, the editor is idle, and registration/doctor processes do not log in. The sandbox cannot inventory separately launched processes on another host or another Compose stack; verify only one intended gateway for this token. No duplicate external process was killed and no global distributed gateway-lease claim is made.
 
 Use [PERMISSIONS.md](PERMISSIONS.md) for installation scopes, exact selected-channel permissions, actor/DJ restrictions and Docker-only setup. The read-only doctor diagnoses backend/track loading, **not** a successful Discord voice join. No live guild credentials or authorized audible test were available for this change set.
+
+## Leaving voice: the disconnect policy
+
+Orbit no longer leaves the channel the instant one track ends. That behaviour made
+a normal queue finish, and every provider-side load failure, look like the bot
+dropping out of the call.
+
+| Situation                                                     | What Orbit does                                                                                                        |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Queue finished, nothing playing                               | Waits `music.idleDisconnectSeconds` (default **60**, `0` = leave at once), then disconnects                            |
+| A track failed to load or was skipped to the end of the queue | Same wait, same timer — one failed item is not treated as a reason to abandon the call                                 |
+| Nobody human is left in the voice channel                     | Waits **15 seconds**, then disconnects **even if audio is still playing**; a human returning cancels the pending leave |
+| Someone queues something during the wait                      | A queue-idle timer is cancelled and playback continues in the same session                                             |
+| Someone queues something in a still-empty channel             | The queue is kept, but the **empty-channel timer is not cancelled** — the bot still leaves after the grace period      |
+| Other bots are the only "listeners" left                      | Counted as empty: bots do not keep Orbit in a call                                                                     |
+| `/stop`, `/disconnect`, node loss, or a closed voice session  | Leaves immediately; any pending timer is cancelled                                                                     |
+
+Details that matter when reading logs:
+
+- One timer per guild, replaced rather than stacked, and every timer is `unref`ed so a
+  pending leave never keeps the process alive.
+- The timer's **reason** decides what is re-checked, always inside the per-guild
+  mutation lock: `queue-finished`/`track-failed` require no playback and no queued
+  tracks, while `alone` requires that no non-bot member is in Orbit's current
+  voice channel. Active playback therefore does not rescue an empty channel, and a
+  full queue does not rescue a finished one.
+- Leaving voice always resets the persisted snapshot for that guild, so an
+  `alone` departure **drops the queued tracks with it**. That is the existing
+  single-session policy, not a new queue-retention rule: nothing is replayed on
+  the next session. Leave a listener in the channel (or `/stop` first) if the
+  queue should be kept.
+- Removing Orbit from a guild cancels its timer, forgets its search menus and
+  leaves voice; shutdown clears every timer.
+- The wait is stored per guild (`music.idleDisconnectSeconds`, 0–1800) and editable on
+  the Music page; the Discord-side behaviour is `/queue` for the current state.
+- Only the bot's own voice channel is watched. Orbit does not add the Presence intent,
+  read other servers, or infer "alone" from a member cache it cannot see.
+
+## Which links are accepted
+
+`/play` and the dashboard's queue field accept a title or a link. A link must be
+HTTPS, resolve to public addresses, and belong to a host in `MUSIC_ALLOWED_HOSTS`.
+Recognized forms (source in brackets):
+
+| Accepted                                                              | Notes                                            |
+| --------------------------------------------------------------------- | ------------------------------------------------ |
+| `https://www.youtube.com/watch?v=<id>` (also `m.`/`music.`/bare host) | `v` is kept; tracking parameters are dropped     |
+| `https://youtu.be/<id>` (with or without `?t=`)                       | Share links                                      |
+| `https://www.youtube.com/shorts/<id>`, `/live/<id>`                   | Resolved by the plugin, not rewritten by Orbit   |
+| `https://www.youtube.com/playlist?list=<id>`                          | Whole playlist; rejected as a whole if too large |
+| `https://soundcloud.com/<artist>/<track>` or `.../sets/<album>`       | SoundCloud source manager                        |
+| `https://on.soundcloud.com/<share-id>`                                | SoundCloud share links                           |
+
+Refused examples: `http://` URLs, URLs containing credentials
+(`https://user:pass@host/...`), lookalike hosts (`youtube.com.evil.example`),
+`https://soundcloud.app.goo.gl/...` (a different domain), and any host that is not
+in the allowlist — an allowlist entry never grants an unrelated adapter.
+
+Embedded and dashboard links are always the provider's **public page**. Query
+strings are stripped except for YouTube's `v`/`list`, so a signed or session-bearing
+URL never reaches Discord or the browser. Artwork is used only when
+`safeImageUrl()` accepts it (HTTPS, public host, image extension); otherwise the
+neutral vinyl placeholder is shown.
 
 ## Optional requester fairness limit
 

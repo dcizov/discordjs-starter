@@ -3,23 +3,18 @@ import {
   commandModuleLabels,
   type CommandCatalog,
 } from "@orbit/core/command-catalog-types";
-import {
-  AlertCircle,
-  BookOpen,
-  RefreshCw,
-  ShieldCheck,
-  Terminal,
-} from "lucide-react";
+import { BookOpen, ShieldCheck, Terminal } from "lucide-react";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { CopyButton } from "./copy-button";
 import { PageHeader } from "./page-header";
-import { Button } from "./ui/button";
 import {
   Badge,
   Card,
   EmptyState,
+  ErrorState,
   SearchInput,
-  Select,
+  FormSelect,
   Skeleton,
 } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
@@ -92,16 +87,23 @@ export function CommandsPage() {
             Same definitions. No guesswork.
           </p>
           <p className="mt-1">
-            Generated from the bot’s registration definitions. This does not
-            verify which commands are currently registered in Discord. Server
-            command overrides and runtime permission checks still apply.
-          </p>
-          <p className="mt-1">
-            After changing definitions, the operator must run{" "}
+            Generated from the registration definitions — it does not check what
+            Discord currently has. After changing definitions, run{" "}
             <code className="rounded bg-muted px-1 py-0.5">
               npm run commands:register
             </code>
-            . This page never registers or executes commands.
+            ; this page never registers or runs anything.
+          </p>
+          <p className="mt-1">
+            Channel types, suggested placement, caller/bot permissions and what
+            happens when setup is incomplete are in{" "}
+            <Link
+              href="/docs/where-to-use"
+              className="text-primary underline-offset-2 hover:underline"
+            >
+              Where to use each module
+            </Link>
+            . Requirements there are enforced; recommendations are not.
           </p>
         </div>
       </Card>
@@ -111,19 +113,19 @@ export function CommandsPage() {
           onChange={setQuery}
           placeholder="Search commands, arguments, or permissions…"
         />
-        <Select
+        <FormSelect
           aria-label="Filter command module"
           value={module}
-          onChange={(e) => setModule(e.target.value)}
+          onValueChange={setModule}
           className="h-9 sm:w-44"
-        >
-          <option value="all">All modules</option>
-          {Object.entries(commandModuleLabels).map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </Select>
+          options={[
+            { value: "all", label: "All modules" },
+            ...Object.entries(commandModuleLabels).map(([key, label]) => ({
+              value: key,
+              label,
+            })),
+          ]}
+        />
       </div>
       {loading ? (
         <div className="grid gap-4 md:grid-cols-2">
@@ -132,21 +134,12 @@ export function CommandsPage() {
           ))}
         </div>
       ) : error ? (
-        <Card className="p-8 text-center" role="alert">
-          <AlertCircle className="mx-auto mb-3 text-amber-400" size={22} />
-          <p className="text-sm font-medium">
-            The command reference couldn’t load.
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground">{error}</p>
-          <Button
-            className="mt-4"
-            variant="outline"
-            size="sm"
-            onClick={() => setRetry((r) => r + 1)}
-          >
-            <RefreshCw size={14} />
-            Try again
-          </Button>
+        <Card>
+          <ErrorState
+            title="The command reference couldn’t load."
+            detail={error}
+            onRetry={() => setRetry((r) => r + 1)}
+          />
         </Card>
       ) : (
         <>

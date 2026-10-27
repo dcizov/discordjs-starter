@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { chooseOption } from "./support/ui";
 const base = "/api/guilds/120000000000000001";
 async function openMusic(page: Page) {
   await page.goto("/dashboard/120000000000000001/music");
@@ -103,4 +104,103 @@ test("an accepted request stays pending until the consumer actually completes it
     })
   ).toBeVisible();
   await expect(page.getByPlaceholder("Set the mood…")).toHaveValue("");
+});
+
+test("an empty or paused player never presents an active pause control", async ({
+  page,
+}) => {
+  await openMusic(page);
+  const progress = page.getByRole("progressbar", { name: "Playback progress" });
+  await expect(progress).toBeVisible();
+  // The primary transport button describes itself honestly for each state.
+  const transport = page.getByRole("button", {
+    name: /Pause playback|Resume playback|Nothing is playing/,
+  });
+  await expect(transport).toBeVisible();
+  const label = await transport.getAttribute("aria-label");
+  if (label === "Nothing is playing") await expect(transport).toBeDisabled();
+});
+
+test("volume moves locally and commits once when the interaction ends", async ({
+  page,
+}) => {
+  const bodies: any[] = [];
+  await page.route(`**${base}/music`, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true, demo: true } });
+  });
+  await openMusic(page);
+  const slider = page.getByRole("slider", { name: "Playback volume" });
+  await expect(slider).toBeEnabled();
+  const before = Number(await slider.inputValue());
+  const target = Math.min(100, before + 1);
+  await slider.focus();
+  await page.keyboard.press("ArrowRight");
+  // Immediate local feedback, before any request is confirmed.
+  await expect(slider).toHaveValue(String(target));
+  // Leaving the control flushes the pending change. This is what a user does
+  // after nudging the volume, and it is deterministic: the commit no longer
+  // depends on whether three key presses happened to fit inside the debounce
+  // window, which is what made this test flaky.
+  await page.keyboard.press("Tab");
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0]).toMatchObject({ action: "volume", volume: target });
+  await expect(slider).toHaveValue(String(bodies[0].volume));
+  // `flush` clears the timer, so the blur cannot send a second, duplicate job;
+  // the live region settles instead of staying on "Saving volume".
+  await expect(page.locator("#volume-status")).toHaveText("Volume queued");
+  expect(bodies).toHaveLength(1);
+});
+
+test("the play form sends the chosen provider and the server default otherwise", async ({
+  page,
+}) => {
+  const bodies: any[] = [];
+  await page.route(`**${base}/music`, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    bodies.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true, demo: true } });
+  });
+  await openMusic(page);
+  const provider = page.getByLabel("Search with");
+  // The default is the server's configured source, not a guess by the dashboard.
+  await expect(provider).toContainText("Server default");
+  // Same option list as the shared provider table, read from the open listbox.
+  await provider.click();
+  const labels = (
+    await page.locator('[role="option"]:visible').allInnerTexts()
+  ).map((text) => text.trim());
+  expect(labels).toEqual([
+    "Server default",
+    "SoundCloud",
+    "YouTube",
+    "YouTube Music",
+    "Bandcamp",
+  ]);
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[role="listbox"]:visible')).toHaveCount(0);
+  await chooseOption(page, "Search with", "Bandcamp");
+  await page
+    .getByRole("button", { name: "Add to the queue", exact: true })
+    .click();
+  await expect.poll(() => bodies.length).toBe(1);
+  expect(bodies[0]).toMatchObject({
+    action: "play",
+    query: "A clean test recording",
+    source: "bandcamp",
+  });
+  // Back to the default: the option is omitted rather than sent as "".
+  const request = page.getByPlaceholder("Set the mood…");
+  // Typing is only safe once the app has cleared the field it clears after an
+  // accepted request; filling earlier could be wiped a moment later.
+  await expect(request).toHaveValue("");
+  await request.fill("A second request");
+  await chooseOption(page, "Search with", "Server default");
+  await page
+    .getByRole("button", { name: "Add to the queue", exact: true })
+    .click();
+  await expect.poll(() => bodies.length).toBe(2);
+  expect(bodies[1]).toMatchObject({ action: "play" });
+  expect(bodies[1]).not.toHaveProperty("source");
 });

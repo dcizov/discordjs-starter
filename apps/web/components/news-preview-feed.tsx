@@ -1,0 +1,171 @@
+"use client";
+import { CalendarDays } from "lucide-react";
+import type { NewsCard } from "@orbit/core/news-presentation";
+import { Badge } from "./ui/primitives";
+import { CoverArt } from "./artwork";
+import {
+  attributionTone,
+  feedMetaLine,
+  newsFeedModel,
+  postedLabel,
+} from "@/lib/news-feed";
+
+/**
+ * One update, laid out like an event card: artwork, the attribution badge and
+ * the posted date are the scannable line, the body is the readable part.
+ *
+ * Every label here is real provider data. Orbit's news adapters expose no event
+ * "type" or community reaction counts, so those are not invented; the badge
+ * says who published the item and the tag row shows the provider's own tags.
+ */
+export function NewsFeatureCard({ card }: { card: NewsCard }) {
+  return (
+    <article className="overflow-hidden rounded-xl border bg-card">
+      {/* 16:9 keeps a wide Steam header from pushing the text off screen. */}
+      <div className="relative">
+        <CoverArt url={card.image ?? ""} className="aspect-[16/9] w-full" />
+        {card.imageKind === "app-artwork" ? (
+          // A caption, not a badge: the artwork is real provider data and the
+          // reader mainly needs to know it is the game's art, not the article's.
+          // Rendered over the image's lower edge so it stays attached to what it
+          // describes, with a scrim for contrast on bright artwork.
+          <p className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-1.5 pt-6 text-[10px] text-white/90">
+            {card.imageAttribution || "Store artwork"}
+          </p>
+        ) : null}
+      </div>
+      <div className="space-y-2 p-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone={attributionTone(card)}>{card.attributionLabel}</Badge>
+          {card.tags.slice(0, 3).map((tag) => (
+            <Badge key={tag} tone="neutral">
+              {tag}
+            </Badge>
+          ))}
+        </div>
+        {card.url ? (
+          <h3 className="text-sm font-semibold leading-snug">
+            <a
+              href={card.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            >
+              {card.title}
+            </a>
+          </h3>
+        ) : (
+          <h3 className="text-sm font-semibold leading-snug">{card.title}</h3>
+        )}
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <CalendarDays aria-hidden className="size-3 shrink-0" />
+          {feedMetaLine(card)}
+        </p>
+        {card.excerpt ? (
+          <p className="line-clamp-4 whitespace-pre-line text-[12px] leading-[1.5] text-muted-foreground">
+            {card.excerpt}
+          </p>
+        ) : (
+          <p className="text-[12px] italic text-muted-foreground">
+            The source supplied no description.
+          </p>
+        )}
+        {card.url ? (
+          <a
+            href={card.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-block text-[11px] font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {card.linkLabel}
+          </a>
+        ) : null}
+        {card.subscriptionLabel ? (
+          // The configured label and the provider feed are different facts;
+          // keep the distinction one click away rather than in the body.
+          <details className="text-[10px] text-muted-foreground">
+            <summary className="cursor-pointer select-none underline-offset-2 hover:underline">
+              Preview details
+            </summary>
+            <p className="mt-1">
+              Configured source: {card.subscriptionLabel} · feed:{" "}
+              {card.sourceLabel}
+            </p>
+          </details>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+/**
+ * Compact row for the "more updates" list: date first, then the title, so a
+ * reader can scan chronology the way an event list is normally read.
+ */
+function NewsFeedRow({ card }: { card: NewsCard }) {
+  return (
+    <li className="flex items-start gap-3 border-b border-border/70 py-2.5 last:border-0">
+      {card.image ? (
+        <CoverArt
+          url={card.image}
+          className="mt-0.5 size-10 shrink-0 rounded-md border"
+        />
+      ) : null}
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] text-muted-foreground">
+          {postedLabel(card.publishedAt)}
+        </p>
+        {card.url ? (
+          <a
+            href={card.url}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-[12px] font-medium leading-snug underline-offset-2 hover:underline"
+          >
+            {card.title}
+          </a>
+        ) : (
+          <span className="text-[12px] font-medium leading-snug">
+            {card.title}
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/**
+ * A news preview laid out as a feed: the newest item gets the artwork and the
+ * body, the rest become a compact dated list under a heading that names the
+ * source (e.g. "More updates from CS2 updates").
+ *
+ * Everything comes from the single poll that produced this preview — the list
+ * is not a second request, and nothing here can deliver a message.
+ */
+export function NewsPreviewFeed({
+  items,
+  sourceName,
+}: {
+  items: NewsCard[];
+  sourceName?: string;
+}) {
+  const { lead, more, moreHeading } = newsFeedModel(items, sourceName);
+  if (!lead) return null;
+  return (
+    <div className="space-y-3">
+      <NewsFeatureCard card={lead} />
+      {more.length ? (
+        <div className="rounded-xl border bg-muted/20 px-3 py-2">
+          <h4 className="pt-1 text-[11px] font-medium text-muted-foreground">
+            {moreHeading}
+          </h4>
+          <ul>
+            {more.map((card) => (
+              <NewsFeedRow key={card.id || card.title} card={card} />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}

@@ -11,6 +11,8 @@ import {
   createDiscordPermissionState,
   DiscordPermissionClient,
   isDiscordPermissionError,
+  PERMISSION_MUTATION_MAX_AGE_MS,
+  PERMISSION_READ_MAX_AGE_MS,
   type DiscordPermissionState,
 } from "@orbit/core/discord-permissions";
 import { logger } from "@orbit/core/logger";
@@ -147,7 +149,7 @@ export async function identity(): Promise<Identity | null> {
   };
 }
 // Share data and in-flight requests between RSC/API bundles and Next dev reloads.
-// No tokens are retained in these keys or successful response snapshots.
+// Cache keys are session ids plus a token hash, never a raw token.
 const globalAuth = globalThis as typeof globalThis & {
   orbitDiscordPermissionsV1?: DiscordPermissionState;
 };
@@ -157,7 +159,20 @@ const permissions = new DiscordPermissionClient({
   onFailure: (info) =>
     logger.warn(info, "Discord guild-permission lookup failed"),
 });
-export async function manageableGuilds(user: Identity, fresh = false) {
+/**
+ * Guilds the signed-in user can administer, from Discord's OAuth guild list.
+ *
+ * `maxAgeMs` is a short, explicit reuse window rather than a per-request
+ * bypass: dashboard controls fire several mutations in a row, and one guild
+ * lookup per click exhausted Discord's bucket for `/users/@me/guilds`.
+ * Reads reuse a 30 s snapshot, mutations 10 s. This snapshot only decides what
+ * the dashboard *offers*; the bot re-reads the member and re-checks module,
+ * role, voice and channel permissions before executing any queued action.
+ */
+export async function manageableGuilds(
+  user: Identity,
+  maxAgeMs: number = PERMISSION_READ_MAX_AGE_MS
+) {
   const installed = await listInstalledGuilds();
   if (isDemo())
     return installed.map((g) => ({
@@ -170,7 +185,9 @@ export async function manageableGuilds(user: Identity, fresh = false) {
     throw new HttpError(401, "Sign in with Discord to continue");
   let guilds;
   try {
-    guilds = await permissions.guilds(user.sessionId, user.accessToken, fresh);
+    guilds = await permissions.guilds(user.sessionId, user.accessToken, {
+      maxAgeMs,
+    });
   } catch (error) {
     if (isDiscordPermissionError(error))
       throw new HttpError(error.status, error.message, error.retryAfterSeconds);
@@ -192,10 +209,26 @@ export class HttpError extends Error {
     super(message);
   }
 }
+/**
+ * The single dashboard authorization boundary. Every guild-scoped route handler
+ * calls this before touching data; it returns the caller's and guild's Discord
+ * state or throws an `HttpError` the route turns into a JSON response.
+ *
+ * `mutating` shortens the permission cache window (`PERMISSION_MUTATION_MAX_AGE_MS`
+ * versus `PERMISSION_READ_MAX_AGE_MS`): a write re-reads permissions much closer
+ * to the request, so a revoked role stops working quickly. Pass `true` for
+ * anything that changes state, including "harmless" toggles.
+ *
+ * This checks the *dashboard*. It grants no bot ability and is not a substitute
+ * for the runtime checks Discord performs when a command runs.
+ */
 export async function authorize(guildId: string, mutating = false) {
   const user = await identity();
   if (!user) throw new HttpError(401, "Sign in with Discord to continue");
-  const guilds = await manageableGuilds(user, mutating);
+  const guilds = await manageableGuilds(
+    user,
+    mutating ? PERMISSION_MUTATION_MAX_AGE_MS : PERMISSION_READ_MAX_AGE_MS
+  );
   const guild = guilds.find((g) => g.id === guildId);
   if (!guild)
     throw new HttpError(

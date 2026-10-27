@@ -61,6 +61,8 @@ export type GuildConfig = {
     defaultVolume: number;
     maxQueue: number;
     maxPerMember: number;
+    /** Seconds to stay in voice after the queue empties; 0 leaves at once. */
+    idleDisconnectSeconds: number;
   };
   moderation: {
     exemptRoleIds: string[];
@@ -86,9 +88,16 @@ export type AuditEntry = {
   guildId: string;
   actorId: string;
   actorName: string;
+  /** Avatar hash recorded with the action, if the actor's metadata was known then. */
+  actorAvatar?: string | null;
+  /** Server-derived display URL for the recorded avatar; never fetched per row. */
+  actorAvatarUrl?: string | null;
   action: string;
   target: string;
+  /** One-line summary shown in the history table. */
   detail: string;
+  /** Full diagnostic (multi-line) revealed on demand; older rows have none. */
+  details?: string | null;
   createdAt: string;
 };
 export type LedgerEntry = {
@@ -102,10 +111,100 @@ export type LedgerEntry = {
   note: string;
   createdAt: string;
 };
+/**
+ * A Discord guild member as the bot last synchronized them.
+ *
+ * Deliberately separate from `Account` (an Orbit economy record) and from
+ * anything derived from activity: a member who has never earned anything is
+ * still a member, and an account whose member left is still an account. The
+ * dashboard must never present one dataset as the other.
+ */
+export type Member = {
+  guildId: string;
+  userId: string;
+  /** Unique Discord handle. */
+  username: string | null;
+  /** Discord global display name. */
+  globalName: string | null;
+  /** Guild nickname, when this member has one in this guild. */
+  nickname: string | null;
+  /** Resolved guild display name, stored at sync time (policy: @orbit/core/identity). */
+  displayName: string;
+  /** Global avatar hash. */
+  avatar: string | null;
+  /** Guild-specific avatar hash; preferred over the global one when present. */
+  guildAvatar: string | null;
+  /** Server-derived display URL: guild avatar, else global avatar, else null. */
+  avatarUrl?: string | null;
+  bot: boolean;
+  joinedAt: string | null;
+  /** Role ids held in this guild at the last sync. */
+  roles: string[];
+  /** False once a *complete* sweep (or a removal event) confirmed the departure. */
+  present: boolean;
+  departedAt?: string | null;
+  syncedAt: string;
+};
+export type RosterSyncStatus =
+  "never" | "running" | "complete" | "partial" | "failed";
+/**
+ * What the bot knows about its own copy of the roster.
+ *
+ * `expectedCount` is Discord's `guild.memberCount`, `syncedCount` is how many
+ * rows this guild actually holds. They are reported side by side and never
+ * merged: a partial sync must not be able to claim it is the whole guild.
+ */
+export type RosterSync = {
+  guildId: string;
+  status: RosterSyncStatus;
+  startedAt: string | null;
+  completedAt: string | null;
+  lastAttemptAt: string | null;
+  pagesFetched: number;
+  syncedCount: number;
+  expectedCount: number;
+  lastError: string | null;
+};
+export type MembersPage = {
+  rows: Member[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sync: RosterSync;
+  counts: {
+    /** Discord's own number for the guild, as last reported to the bot. */
+    guildMemberCount: number;
+    /** Rows this guild holds in Orbit's database. */
+    syncedMembers: number;
+    /** Members with an Orbit economy record — a subset, never the roster. */
+    economyAccounts: number;
+    bots: number;
+    departed: number;
+  };
+};
 export type Account = {
   guildId: string;
   userId: string;
   name: string;
+  /** Unique handle and global name, when the roster knows them. */
+  username?: string | null;
+  globalName?: string | null;
+  /**
+   * Avatar hash as last captured by the bot when this member earned, spent or
+   * received something. Current-ish identity from an already-authorized
+   * interaction, not historical evidence and not a per-row API lookup.
+   */
+  avatar: string | null;
+  /** Guild avatar hash, preferred over `avatar` when the roster has one. */
+  guildAvatar?: string | null;
+  /**
+   * Best current guild identity from the synchronized roster, when one exists.
+   * The name to display is resolved in the UI by `@orbit/core/identity`, so no
+   * surface re-implements the precedence.
+   */
+  nickname?: string | null;
+  /** Server-derived display URL for that hash; null when none was captured. */
+  avatarUrl?: string | null;
   balance: number;
   lastDaily: string | null;
 };
@@ -122,6 +221,8 @@ export type Delivery = {
   error: string | null;
   createdAt: string;
   deliveredAt: string | null;
+  /** Discord message id, when the send was confirmed. Never invented. */
+  messageId?: string | null;
   payload?: Record<string, any>;
 };
 export type Track = {
@@ -129,10 +230,15 @@ export type Track = {
   title: string;
   author: string;
   duration: number;
+  /** Public track page (provider URL), never an internal stream endpoint. */
   uri: string;
   encoded?: string;
   requestedBy: string;
   requestedById?: string;
+  /** Provider source name, e.g. "youtube"; used for failures, never for fetching. */
+  source?: string;
+  /** Validated public artwork URL supplied by the provider, if any. */
+  artwork?: string | null;
 };
 export type MusicState = {
   tracks: Track[];
@@ -177,6 +283,12 @@ export type DashboardData = {
     name: string;
     avatar: string | null;
     avatarUrl?: string | null;
+    /** Roster identity, when the bot has synchronized this account's member. */
+    username?: string | null;
+    globalName?: string | null;
+    nickname?: string | null;
+    /** The handle, when it differs from `name`. Resolved by @orbit/core/identity. */
+    secondaryName?: string | null;
   };
   guilds: {
     id: string;
@@ -186,6 +298,13 @@ export type DashboardData = {
     installed: boolean;
   }[];
 };
+/** Attribution inferred from provider metadata; "unknown" is never rendered as official. */
+/**
+ * `official` = posted on the app's own Steam announcement hub (feed_type 1),
+ * `syndicated` = a named third-party feed the app republishes, `unknown` = the
+ * provider did not supply enough metadata to tell.
+ */
+export type NewsAttribution = "official" | "syndicated" | "unknown";
 export type FeedItem = {
   id: string;
   title: string;
@@ -193,6 +312,21 @@ export type FeedItem = {
   summary: string;
   publishedAt: string;
   tags: string[];
+  /** Provider-supplied lead image. Never fetched or guessed by Orbit. */
+  image?: string | null;
+  /**
+   * Where `image` came from. `article` is a picture the article itself carried;
+   * `app-artwork` is a store image for the game the article is about (a
+   * labelled fallback, never presented as article imagery).
+   */
+  imageKind?: "article" | "app-artwork";
+  /** Human-readable credit for a fallback image, e.g. "Dota 2 · Steam store artwork". */
+  imageAttribution?: string;
+  attribution?: NewsAttribution;
+  /** Producer of the item as named by the provider, e.g. "Community Announcements". */
+  sourceLabel?: string;
+  /** Outlet name when the item is syndicated; empty for app announcements. */
+  publisher?: string;
   price?: number;
   currency?: string;
   discount?: number;

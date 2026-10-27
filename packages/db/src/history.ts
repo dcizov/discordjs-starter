@@ -1,8 +1,23 @@
-import { and, desc, eq, getTableColumns, ilike, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  ilike,
+  or,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 import { isDemo } from "@orbit/core/environment";
 import { database } from "./client";
 import { demoRead } from "./demo";
+import {
+  compareHistoryRows,
+  parseHistorySort,
+  type HistorySort,
+  type HistorySortField,
+} from "./history-sort";
 import { serialize } from "./store";
 import * as s from "./schema";
 export type HistoryKind = "audit" | "ledger" | "deliveries" | "cases";
@@ -12,6 +27,45 @@ export type HistoryResult = {
   page: number;
   pageSize: number;
 };
+/** Drizzle column for a validated sort field, per history kind. */
+function sortColumn(kind: HistoryKind, field: HistorySortField) {
+  const columns: Record<HistoryKind, Partial<Record<HistorySortField, any>>> = {
+    audit: {
+      createdAt: s.auditLogs.createdAt,
+      actorName: s.auditLogs.actorName,
+      action: s.auditLogs.action,
+    },
+    ledger: {
+      createdAt: s.ledger.createdAt,
+      amount: s.ledger.amount,
+      type: s.ledger.type,
+    },
+    deliveries: {
+      createdAt: s.deliveries.createdAt,
+      status: s.deliveries.status,
+    },
+    cases: { createdAt: s.resources.createdAt, name: s.resources.name },
+  };
+  return columns[kind][field]!;
+}
+
+function idColumn(kind: HistoryKind) {
+  return kind === "audit"
+    ? s.auditLogs.id
+    : kind === "ledger"
+      ? s.ledger.id
+      : kind === "deliveries"
+        ? s.deliveries.id
+        : s.resources.id;
+}
+
+function orderBy(kind: HistoryKind, order: HistorySort) {
+  const column = sortColumn(kind, order.field);
+  const primary = order.dir === "asc" ? asc(column) : desc(column);
+  // Equal timestamps must not reorder between pages.
+  return [primary, desc(idColumn(kind))];
+}
+
 export async function queryHistory(
   guildId: string,
   kind: HistoryKind,
@@ -21,9 +75,12 @@ export async function queryHistory(
     query: string;
     filter: string;
     userId?: string;
+    /** Server-side ordering; validated against the kind's allow-list below. */
+    sort?: HistorySortField;
+    dir?: "asc" | "desc";
   }
 ): Promise<HistoryResult> {
-  const { page, pageSize, query, filter, userId } = z
+  const { page, pageSize, query, filter, userId, sort, dir } = z
     .object({
       page: z.number().int().min(1).max(100000),
       pageSize: z.number().int().min(1).max(100),
@@ -33,8 +90,11 @@ export async function queryHistory(
         .string()
         .regex(/^\d{17,20}$/)
         .optional(),
+      sort: z.string().max(30).optional(),
+      dir: z.enum(["asc", "desc"]).optional(),
     })
     .parse(options);
+  const order = parseHistorySort(kind, { sort, dir });
   if (userId && kind !== "ledger")
     throw new Error("Owner scoping applies to ledger history only.");
   const offset = (page - 1) * pageSize;
@@ -82,11 +142,7 @@ export async function queryHistory(
                       : r.data.type === filter))
         );
       })
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() ||
-          b.id.localeCompare(a.id)
-      );
+      .sort(compareHistoryRows(order));
     return {
       rows: rows.slice(offset, offset + pageSize),
       total: rows.length,
@@ -113,7 +169,7 @@ export async function queryHistory(
         .select()
         .from(s.auditLogs)
         .where(condition)
-        .orderBy(desc(s.auditLogs.createdAt), desc(s.auditLogs.id))
+        .orderBy(...orderBy("audit", order))
         .limit(pageSize)
         .offset(offset),
       db
@@ -147,7 +203,7 @@ export async function queryHistory(
         .from(s.ledger)
         .leftJoin(s.accounts, join)
         .where(condition)
-        .orderBy(desc(s.ledger.createdAt), desc(s.ledger.id))
+        .orderBy(...orderBy("ledger", order))
         .limit(pageSize)
         .offset(offset),
       db
@@ -180,7 +236,7 @@ export async function queryHistory(
         .select()
         .from(s.deliveries)
         .where(condition)
-        .orderBy(desc(s.deliveries.createdAt), desc(s.deliveries.id))
+        .orderBy(...orderBy("deliveries", order))
         .limit(pageSize)
         .offset(offset),
       db
@@ -212,7 +268,7 @@ export async function queryHistory(
       .select()
       .from(s.resources)
       .where(condition)
-      .orderBy(desc(s.resources.createdAt), desc(s.resources.id))
+      .orderBy(...orderBy("cases", order))
       .limit(pageSize)
       .offset(offset),
     db

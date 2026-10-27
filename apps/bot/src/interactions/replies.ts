@@ -1,6 +1,14 @@
-import type { Account, GuildConfig, MusicState } from "@orbit/core";
+import type { Account, GuildConfig, MusicState, Track } from "@orbit/core";
+import {
+  commandModuleLabels,
+  type CommandCatalog,
+  type CommandModule,
+  type CommandReference,
+} from "@orbit/core/command-catalog-types";
 import { safeText } from "@orbit/core";
+import { safePublicLink } from "@orbit/core/public-url";
 import { diagnosticText } from "@orbit/core/diagnostics";
+import { safeImageUrl } from "@orbit/core/feed-content";
 import {
   EmbedBuilder,
   escapeMarkdown,
@@ -15,6 +23,10 @@ export type ReplyCard = {
   fields?: ReplyField[];
   tone?: keyof typeof colors;
   footer?: string;
+  /** Public page this card is about, e.g. the track's provider page. */
+  url?: string;
+  /** Validated public artwork; never a signed or stream URL. */
+  thumbnail?: string;
 };
 const titles: Record<string, string> = {
   ping: "Orbit is online",
@@ -85,6 +97,12 @@ export function commandReply(command: string, input: string | ReplyCard) {
     .setFooter({ text: footer || "Orbit" });
   const description = shorten(displayText(card.description), 3800);
   if (description) embed.setDescription(description);
+  // A link is only ever the provider's public page; safeLink refuses anything
+  // that is not plain http(s) or that carries credentials.
+  const link = card.url ? safePublicLink(card.url) : "";
+  if (link) embed.setURL(link);
+  const thumbnail = card.thumbnail ? safeImageUrl(card.thumbnail) : "";
+  if (thumbnail) embed.setThumbnail(thumbnail);
   let remaining =
     5800 - (title.length || 5) - (footer.length || 5) - description.length;
   for (const field of (card.fields ?? []).slice(0, 25)) {
@@ -175,7 +193,66 @@ function duration(ms: number) {
   const seconds = Math.floor(Math.max(0, ms) / 1000);
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 }
-export function queueCard(state: MusicState): ReplyCard {
+const SOURCE_LABELS: Record<string, string> = {
+  youtube: "YouTube",
+  soundcloud: "SoundCloud",
+  bandcamp: "Bandcamp",
+  twitch: "Twitch",
+  vimeo: "Vimeo",
+  http: "Provider",
+  local: "Upload",
+};
+/**
+ * The provider's public page, as a masked link. `Track.uri` is already the
+ * public page (never the stream endpoint) and `safeLink` refuses anything that
+ * is not plain http(s) without credentials, so a hostile provider cannot turn
+ * this into a redirector or leak a token.
+ */
+function publicTrackUrl(value: string) {
+  const safe = value ? safePublicLink(value) : "";
+  if (!safe) return "";
+  try {
+    const url = new URL(safe);
+    const host = url.hostname.replace(/^www\./, "").toLowerCase();
+    // Query strings on provider pages routinely carry tracking, session or
+    // signature values. Keep only the two parameters a YouTube watch page needs
+    // to resolve, and drop everything else (including the fragment).
+    const keep = /(^|\.)youtube\.com$/.test(host) ? ["v", "list"] : [];
+    const params = new URLSearchParams();
+    for (const key of keep) {
+      const found = url.searchParams.get(key);
+      if (found) params.set(key, found);
+    }
+    url.search = params.toString();
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return "";
+  }
+}
+export function trackSourceLink(track: Pick<Track, "uri" | "source">) {
+  const url = publicTrackUrl(track.uri);
+  if (!url) return null;
+  const host = (() => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  })();
+  const provider = SOURCE_LABELS[track.source ?? ""] ?? (host || "Source");
+  return { url, label: `Open on ${provider}` };
+}
+function progress(position: number, total: number) {
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const at = Math.min(Math.max(0, Math.floor(position)), Math.floor(total));
+  return `${duration(at)} / ${duration(total)} · ${duration(Math.max(0, total - at))} remaining`;
+}
+export function queueCard(
+  state: MusicState,
+  context: { voiceChannel?: string | null; queueLimit?: number } = {}
+): ReplyCard {
+  const source = state.current ? trackSourceLink(state.current) : null;
   const current = state.current
     ? `**Current track${state.paused ? " · paused" : ""}**\n${replyLabel(state.current.title)} — ${replyLabel(state.current.author, 80)}`
     : "Nothing is playing right now. Add some music with `/play`.";
@@ -186,12 +263,37 @@ export function queueCard(state: MusicState): ReplyCard {
       (track, index) =>
         `**${index + 1}.** ${replyLabel(track.title, 42)} — ${replyLabel(track.author, 20)} · ${duration(track.duration)}`
     );
+  const track = state.current;
+  const fields: ReplyField[] = [];
+  if (source)
+    fields.push({ name: "Source", value: `[${source.label}](${source.url})` });
+  if (track)
+    fields.push({
+      name: "Requested by",
+      value: replyLabel(track.requestedBy, 80),
+      inline: true,
+    });
+  const position = track ? progress(state.position, track.duration) : null;
+  if (position) fields.push({ name: "Progress", value: position });
+  fields.push(
+    {
+      name: "Voice",
+      value: context.voiceChannel
+        ? replyLabel(context.voiceChannel, 80)
+        : "Not connected",
+      inline: true,
+    },
+    { name: "Volume", value: `${state.volume}%`, inline: true },
+    { name: "Repeat", value: replyLabel(state.repeat), inline: true }
+  );
+  const limit = context.queueLimit;
   return {
-    description: `${current}\n\n**Up next · ${state.tracks.length}**\n${upcoming.join("\n") || "The queue is clear."}${state.tracks.length > 15 ? "\n… showing the next 15 tracks." : ""}`,
-    fields: [
-      { name: "Volume", value: `${state.volume}%`, inline: true },
-      { name: "Repeat", value: replyLabel(state.repeat), inline: true },
-    ],
+    title: "Listening room · queue",
+    url: source?.url,
+    thumbnail: track?.artwork ?? undefined,
+    description: `${current}\n\n**Up next · ${state.tracks.length}${limit ? ` of ${limit}` : ""}**\n${upcoming.join("\n") || "The queue is clear."}${state.tracks.length > 15 ? "\n… showing the next 15 tracks." : ""}`,
+    fields,
+    footer: "Orbit · Progress follows the position the backend reports.",
   };
 }
 export function musicActionCard(action: string, state: MusicState): ReplyCard {
@@ -204,18 +306,24 @@ export function musicActionCard(action: string, state: MusicState): ReplyCard {
     volume: "Volume updated",
     shuffle: "Queue shuffled",
     repeat: "Repeat updated",
+    seek: "Seek requested",
   };
+  const source = state.current ? trackSourceLink(state.current) : null;
   return {
     title: messages[action] ?? "Listening room updated",
     tone: "success",
+    url: source?.url,
+    thumbnail: state.current?.artwork ?? undefined,
     description:
       action === "stop"
         ? "Disconnected from voice and cleared the queue."
         : action === "skip"
           ? "The skip request was sent. Use `/queue` to see the updated track."
-          : state.current
-            ? `**Current track**\n${replyLabel(state.current.title)} — ${replyLabel(state.current.author, 80)}`
-            : "Use `/play` to add a track to the listening room.",
+          : action === "seek"
+            ? "The seek was sent to the backend. The progress bar follows the position the server reports next; it is not proof of audible playback."
+            : state.current
+              ? `**Current track**\n${replyLabel(state.current.title)} — ${replyLabel(state.current.author, 80)}`
+              : "Use `/play` to add a track to the listening room.",
     fields:
       action === "stop"
         ? []
@@ -227,10 +335,142 @@ export function musicActionCard(action: string, state: MusicState): ReplyCard {
             },
             { name: "Volume", value: `${state.volume}%`, inline: true },
             { name: "Repeat", value: replyLabel(state.repeat), inline: true },
+            ...(source
+              ? [{ name: "Source", value: `[${source.label}](${source.url})` }]
+              : []),
           ],
     footer:
       action === "play"
         ? "Orbit · Request accepted by the backend; this does not verify audible playback."
         : `Orbit · /${action}`,
+  };
+}
+
+const HELP_ORDER: CommandModule[] = [
+  "general",
+  "roles",
+  "music",
+  "economy",
+  "deals",
+  "news",
+  "moderation",
+  "polls",
+  "announcements",
+];
+
+/**
+ * `/help` overview.
+ *
+ * Built from `getCommandCatalog()`, which is derived from the same builders the
+ * registration script uploads — there is no second command list to drift. The
+ * body stays short: root commands per module, with a marker for commands Discord
+ * or the runtime restricts, and a marker for a module this server has paused.
+ */
+export function helpOverviewCard(
+  catalog: CommandCatalog,
+  docsUrl: string
+): ReplyCard {
+  // A command with subcommands only exists as its leaf paths, so the overview
+  // groups by root and folds each root's references back together. Restricted is
+  // true when *any* invocation of that root is restricted.
+  const roots = new Map<
+    string,
+    { module: CommandModule; enabled: boolean; restricted: boolean }
+  >();
+  for (const command of catalog.commands) {
+    const entry = roots.get(command.root) ?? {
+      module: command.module,
+      enabled: command.moduleEnabled,
+      restricted: false,
+    };
+    entry.restricted =
+      entry.restricted ||
+      command.defaultPermissions.bitfield !== null ||
+      command.runtimePermissions.length > 0;
+    entry.enabled = entry.enabled || command.moduleEnabled;
+    roots.set(command.root, entry);
+  }
+  const fields = HELP_ORDER.map((module) => ({
+    module,
+    commands: [...roots.entries()].filter(
+      ([, entry]) => entry.module === module
+    ),
+  }))
+    .filter((group) => group.commands.length)
+    .map((group) => ({
+      name: `${commandModuleLabels[group.module]}${group.commands.every(([, entry]) => !entry.enabled) ? " (paused)" : ""}`,
+      value: group.commands
+        .map(
+          ([root, entry]) =>
+            `\`/${root}\`${entry.restricted ? " 🔒" : ""}${entry.enabled ? "" : " · paused"}`
+        )
+        .join(" · "),
+    }));
+  return {
+    title: "Orbit commands",
+    description: `${roots.size} commands, read from the catalog the bot registers. 🔒 = permission-restricted, paused = this server has the module off.`,
+    fields,
+    url: docsUrl,
+    footer:
+      "Orbit · /help command:<name> for options, permissions and setup · Modules are configured in the dashboard",
+  };
+}
+
+/** `/help command:<name>` — one command, from its real definition and runtime rules. */
+export function helpCommandCard(
+  command: CommandReference,
+  docsUrl: string
+): ReplyCard {
+  const fields: ReplyField[] = [
+    { name: "Usage", value: `\`${command.usage}\`` },
+  ];
+  if (command.arguments.length)
+    fields.push({
+      name: "Options",
+      value: command.arguments
+        .map((argument) => {
+          const constraints = [
+            argument.required ? "required" : "optional",
+            argument.choices.length
+              ? `one of ${argument.choices.map((choice) => choice.name).join(", ")}`
+              : "",
+            argument.minValue !== null || argument.maxValue !== null
+              ? `${argument.minValue ?? "…"}–${argument.maxValue ?? "…"}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `\`${argument.name}\` (${constraints}) — ${replyLabel(argument.description, 90)}`;
+        })
+        .join("\n"),
+    });
+  const permissions = [
+    ...command.defaultPermissions.names,
+    ...command.runtimePermissions,
+  ];
+  fields.push({
+    name: "Who can use it",
+    value: permissions.length
+      ? `Discord restricts this command to **${permissions
+          .map((name) => name.replace(/([a-z])([A-Z])/g, "$1 $2"))
+          .join(", ")}**; Orbit re-checks the permission when it runs.`
+      : "Any member who can see the channel can run it; Orbit still applies the module and channel rules when it runs.",
+  });
+  if (!command.moduleEnabled)
+    fields.push({
+      name: "On this server",
+      value: `${commandModuleLabels[command.module]} is paused, so this command will refuse to act until it is enabled in the dashboard.`,
+    });
+  if (command.notes.length)
+    fields.push({
+      name: "Setup and limits",
+      value: command.notes.map((note) => replyLabel(note, 700)).join("\n"),
+    });
+  return {
+    title: `/${command.path}`,
+    description: replyLabel(command.description, 300),
+    fields,
+    url: docsUrl,
+    footer: "Orbit · /help for the full list",
   };
 }

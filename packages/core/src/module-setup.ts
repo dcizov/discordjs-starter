@@ -223,6 +223,12 @@ export function moduleSetup(data: Context, module: ModuleKey): ModuleSetup {
         ),
         "Choose an accessible normal voice channel."
       );
+    const djRoleId = guild.config.music.djRoleId;
+    if (djRoleId && !guild.roles.some((role) => role.id === djRoleId))
+      return result(
+        "needs-setup",
+        "The configured DJ role no longer exists in this server. Playback controls are limited to Manage Server members until a manager selects another role in Music settings."
+      );
     if (
       !data.demo &&
       data.health.find((health) => health.name === "Music backend")?.status !==

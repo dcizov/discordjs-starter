@@ -4,8 +4,22 @@ export { searchGames, pollDeals } from "./deals";
 import { XMLParser } from "fast-xml-parser";
 import { lookup } from "node:dns/promises";
 import { Agent, request } from "undici";
-import { assertFeedUrl, isPublicAddress, safeText } from "./safety";
+import { assertFeedUrl, isPublicAddress, safeLink } from "./safety";
+import {
+  excerpt,
+  imageFromMarkup,
+  normalizeFeedText,
+  plainText,
+  safeImageUrl,
+  steamIdentity,
+} from "./feed-content";
+import type { NewsAttribution } from "./news-presentation";
 import type { FeedItem, Resource } from "./types";
+import {
+  steamArtwork,
+  steamArtworkEnabled,
+  type SteamArtworkCache,
+} from "./steam-artwork";
 const MAX_BYTES = 1024 * 1024;
 
 export async function fetchFeedText(
@@ -92,16 +106,34 @@ const string = (v: any): string =>
       : v?.["#text"]
         ? String(v["#text"])
         : "";
-export function safeLink(value: string) {
-  try {
-    const u = new URL(value);
-    if (!["https:", "http:"].includes(u.protocol) || u.username || u.password)
-      return "";
-    return u.toString().slice(0, 2000);
-  } catch {
-    return "";
+export { safeLink } from "./safety";
+export type FeedPollResult = { items: FeedItem[]; notices: string[] };
+
+/** Provider-supplied lead image from the common RSS/Atom image carriers. */
+function feedEntryImage(entry: any) {
+  const candidates: string[] = [];
+  for (const media of [
+    ...array(entry.enclosure),
+    ...array(entry["media:content"]),
+    ...array(entry["media:thumbnail"]),
+    ...array(entry["itunes:image"]),
+  ]) {
+    const url = String(media?.["@_url"] ?? media?.["@_href"] ?? "");
+    const type = String(media?.["@_type"] ?? "");
+    if (url && (!type || type.startsWith("image/"))) candidates.push(url);
   }
+  const markup = string(
+    entry["content:encoded"] ?? entry.description ?? entry.summary
+  );
+  const inline = imageFromMarkup(markup);
+  if (inline) candidates.push(inline);
+  for (const candidate of candidates) {
+    const safe = safeImageUrl(candidate);
+    if (safe) return safe;
+  }
+  return "";
 }
+
 export function parseFeed(xml: string): FeedItem[] {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml))
     throw new Error("XML entities and DTDs are not supported");
@@ -125,55 +157,214 @@ export function parseFeed(xml: string): FeedItem[] {
           : (array(e.link).find(
               (l: any) => !l["@_rel"] || l["@_rel"] === "alternate"
             )?.["@_href"] ?? "");
-      const date = new Date(string(e.pubDate ?? e.published ?? e.updated));
-      const title = safeText(string(e.title), 256);
+      const rawDate = string(e.pubDate ?? e.published ?? e.updated);
+      const date = new Date(rawDate);
+      const title = plainText(string(e.title), 256);
       const url = safeLink(link);
-      const id =
-        string(e.guid ?? e.id) ||
-        url ||
-        `${title}:${string(e.pubDate ?? e.published)}`;
+      const id = string(e.guid ?? e.id) || url || `${title}:${rawDate}`;
+      // Publisher feeds are HTML or already plain text; both are handled by the
+      // same block-aware normalizer before anything is stored or rendered.
+      const content = string(
+        e["content:encoded"] ?? e.description ?? e.summary ?? e.content
+      );
+      const text = excerpt(
+        normalizeFeedText(
+          content,
+          /<[a-z][\s\S]*>/i.test(content) ? "html" : "plain"
+        ),
+        1200
+      );
       return {
         id,
         title,
         url,
-        summary: safeText(
-          string(
-            e.description ?? e.summary ?? e.content ?? e["content:encoded"]
-          ),
-          1000
-        ),
-        publishedAt: Number.isNaN(date.getTime())
-          ? new Date().toISOString()
-          : date.toISOString(),
+        summary: text,
+        publishedAt: Number.isNaN(date.getTime()) ? "" : date.toISOString(),
         tags: array(e.category)
-          .map((c: any) => safeText(string(c) || c?.["@_term"] || "", 30))
+          .map((c: any) => plainText(string(c) || c?.["@_term"] || "", 30))
           .filter(Boolean),
+        image: feedEntryImage(e),
+        attribution: "unknown" as NewsAttribution,
+        sourceLabel: "",
       };
     })
     .filter((i) => i.id && i.title);
 }
 
-export async function pollSource(source: Resource): Promise<FeedItem[]> {
-  const d = source.data;
-  if (d.adapter === "webhook") return [];
-  if (d.adapter === "steam") {
-    if (!d.appId) throw new Error("A Steam application ID is required");
-    const json = await officialJson(
-      `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?appid=${d.appId}&count=10&maxlength=1000`
+function steamItem(item: any, tags: string[]) {
+  const contents = String(item?.contents ?? "");
+  const identity = steamIdentity(item ?? {});
+  // Article imagery only comes from the article body; Steam's news payload has
+  // no image field. The store-artwork fallback is applied later and labelled.
+  const articleImage = imageFromMarkup(contents);
+  return {
+    id: String(item?.gid ?? ""),
+    title: plainText(String(item?.title ?? ""), 256),
+    url: safeLink(String(item?.url ?? "")),
+    summary: normalizeFeedText(contents, "bbcode"),
+    publishedAt:
+      Number(item?.date) > 0
+        ? new Date(Number(item.date) * 1000).toISOString()
+        : "",
+    tags: ["Steam", ...tags],
+    image: articleImage,
+    ...(articleImage ? { imageKind: "article" as const } : {}),
+    attribution: identity.attribution,
+    sourceLabel: identity.feedLabel,
+    publisher: identity.publisher,
+  } satisfies FeedItem;
+}
+
+/**
+ * Poll a source and report what the adapter could not represent. Notices are
+ * shown in the dashboard preview so a partial result is never presented as a
+ * complete one.
+ */
+/**
+ * The official-only filter asks Steam for the app's announcement feed instead of
+ * filtering a mixed page of ten items locally (which silently hides older
+ * matching posts). `feeds` is not in Valve's published parameter list; it is
+ * used only for this filter and the caller falls back to local filtering if the
+ * response still contains other feeds.
+ */
+export const STEAM_ANNOUNCEMENT_FEED = "steam_community_announcements";
+
+export function steamNewsUrl(appId: number, officialOnly = false) {
+  const params = new URLSearchParams({
+    appid: String(appId),
+    count: "10",
+    // Full content: upstream truncation (`maxlength`) appends an ellipsis and
+    // cuts mid-paragraph, which cannot be re-shaped into readable bullets.
+    maxlength: "0",
+    format: "json",
+  });
+  if (officialOnly) params.set("feeds", STEAM_ANNOUNCEMENT_FEED);
+  return `https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/?${params}`;
+}
+
+/** Normalize an `ISteamNews` payload. Pure, so filtering is testable offline. */
+export function mapSteamNews(
+  newsitems: unknown,
+  options: { tags?: string[]; officialOnly?: boolean } = {}
+): FeedPollResult {
+  const raw = Array.isArray(newsitems) ? newsitems : [];
+  const mapped = raw
+    .map((n: any) => steamItem(n, options.tags ?? []))
+    .filter((i: FeedItem) => i.id && i.title);
+  const items = options.officialOnly
+    ? mapped.filter((i: FeedItem) => i.attribution === "official")
+    : mapped;
+  const notices: string[] = [];
+  const truncated = raw.filter((n: any) =>
+    /…\s*$/.test(String(n?.contents ?? ""))
+  ).length;
+  if (truncated)
+    notices.push(
+      `${truncated} item${truncated === 1 ? " was" : "s were"} truncated upstream by Steam (the API's maxlength limit). Orbit requests full content, so this means the stored feed was cut before it reached us.`
     );
-    return (json.appnews?.newsitems ?? []).map((n: any) => ({
-      id: String(n.gid),
-      title: safeText(n.title, 256),
-      url: safeLink(n.url),
-      summary: safeText(n.contents, 1000),
-      publishedAt: new Date(n.date * 1000).toISOString(),
-      tags: ["Steam", ...(d.tags ?? [])],
-    }));
+  if (options.officialOnly) {
+    const hidden = mapped.length - items.length;
+    if (hidden > 0)
+      notices.push(
+        `${hidden} of ${mapped.length} item${mapped.length === 1 ? "" : "s"} ${mapped.length === 1 ? "was" : "were"} not in Steam's app announcement feed, so the official-only filter hid ${hidden === 1 ? "it" : "them"}.`
+      );
+  }
+  if (
+    items.length &&
+    !items.some((i: FeedItem) => i.attribution === "official")
+  )
+    notices.push(
+      "None of these items is posted on this app's Steam announcement hub; they come from publisher feeds."
+    );
+  return { items, notices };
+}
+
+/**
+ * Add Steam's **app** artwork to items that have no image of their own.
+ *
+ * Order of preference: an image inside the article body wins; otherwise the
+ * game's store header/capsule image is used and explicitly labelled as app
+ * artwork. At most one store lookup happens per poll (cached per app id), and a
+ * failed lookup leaves the item without an image instead of inventing one.
+ *
+ * Exported for tests; the worker calls it through `pollSourceDetailed`.
+ */
+export async function withSteamAppArtwork(
+  items: FeedItem[],
+  appId: number,
+  options: {
+    cache?: Pick<SteamArtworkCache, "get">;
+    enabled?: boolean;
+  } = {}
+): Promise<{ items: FeedItem[]; used: boolean; appName: string }> {
+  const enabled = options.enabled ?? steamArtworkEnabled();
+  if (!items.length || !enabled || items.every((item) => item.image))
+    return { items, used: false, appName: "" };
+  const art = await (options.cache ?? steamArtwork).get(appId);
+  if (!art) return { items, used: false, appName: "" };
+  const itemsWithArt = items.map((item) =>
+    item.image
+      ? item
+      : {
+          ...item,
+          image: art.url,
+          imageKind: "app-artwork" as const,
+          imageAttribution: art.appName
+            ? `${art.appName} · Steam store artwork`
+            : "Steam store artwork",
+        }
+  );
+  return { items: itemsWithArt, used: true, appName: art.appName };
+}
+
+export async function pollSourceDetailed(
+  source: Resource
+): Promise<FeedPollResult> {
+  const d = source.data;
+  if (d.adapter === "webhook") return { items: [], notices: [] };
+  if (d.adapter === "steam") {
+    if (!d.appId || !Number.isSafeInteger(d.appId) || d.appId <= 0)
+      throw new Error("A Steam application ID is required");
+    const json = (await officialJson(
+      steamNewsUrl(d.appId, !!d.officialOnly)
+    )) as { appnews?: { newsitems?: unknown } };
+    const mapped = mapSteamNews(json?.appnews?.newsitems, {
+      tags: d.tags ?? [],
+      officialOnly: !!d.officialOnly,
+    });
+    const artwork = await withSteamAppArtwork(mapped.items, d.appId);
+    const notices = [...mapped.notices];
+    if (artwork.used)
+      notices.push(
+        "Items without their own image show the game's Steam store artwork, which is app artwork rather than a picture supplied by the article. Set STEAM_APP_ARTWORK=false on the worker to leave those items text-only."
+      );
+    else if (!mapped.items.some((item) => item.image))
+      notices.push(
+        "No article image and no store artwork were available for these items, so the cards are text-only."
+      );
+    return {
+      items: artwork.items,
+      notices: [...new Set(notices)],
+    };
   }
   if (!d.url)
     throw new Error(
       "Setup required: add a verified RSS/Atom feed URL, or choose an incoming webhook. Orbit does not scrape sites."
     );
-  return parseFeed(await fetchFeedText(d.url));
+  const items = parseFeed(await fetchFeedText(d.url));
+  const notices: string[] = [];
+  if (!items.some((i) => i.image))
+    notices.push(
+      "No feed supplied an image carrier (enclosure, media:content or inline image). Orbit does not fetch Open Graph images."
+    );
+  if (!items.some((i) => i.summary))
+    notices.push(
+      "Some entries had no description; their cards show the title only."
+    );
+  return { items, notices };
+}
+
+export async function pollSource(source: Resource): Promise<FeedItem[]> {
+  return (await pollSourceDetailed(source)).items;
 }
 export { matchesFilters } from "./feed-routing";

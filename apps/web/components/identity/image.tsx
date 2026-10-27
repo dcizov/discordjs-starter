@@ -8,7 +8,8 @@ type Props = {
   name: string;
   src?: string | null;
   kind: "guild" | "user";
-  size: 28 | 30 | 33;
+  /** 24 is the compact table size; 28–33 are header/profile sizes. */
+  size: 24 | 28 | 30 | 33;
 };
 export function IdentityImage(props: Props) {
   // A different identity or metadata URL gets a fresh load/error lifecycle.
@@ -34,7 +35,8 @@ function ImageWithFallback({ name, src, kind, size }: Props) {
         "relative inline-flex shrink-0 items-center justify-center overflow-hidden border text-[11px] font-semibold",
         kind === "guild"
           ? "rounded-[9px] border-violet-200/60 bg-[#ece6fb] text-violet-700"
-          : "rounded-full border-[#e6d5bb] bg-[#f3e7d4] text-[#795d3d]"
+          : "rounded-full border-amber-200 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-300",
+        size === 24 && "text-[10px]"
       )}
     >
       <span>{initials}</span>

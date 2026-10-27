@@ -32,6 +32,11 @@ CMD ["npm","run","dev"]
 FROM deps AS builder
 COPY . .
 ENV DEMO_MODE=true
+# Ref used by the docs pages' "view the source" links. Pass a commit id for a
+# deployment (`--build-arg ORBIT_SOURCE_REF=$(git rev-parse HEAD)`); unset means
+# the code falls back to `main`.
+ARG ORBIT_SOURCE_REF
+ENV ORBIT_SOURCE_REF=${ORBIT_SOURCE_REF}
 RUN npm run build
 
 FROM manifests AS production-deps

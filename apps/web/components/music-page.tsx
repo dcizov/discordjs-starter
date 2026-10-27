@@ -18,11 +18,19 @@ import {
   SkipForward,
   Square,
   Trash2,
-  Volume2,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "./page-header";
+import { VolumeControl } from "./features/music/volume-control";
+import { SeekControl } from "./features/music/seek-control";
+import { usePlaybackNow } from "./features/music/playback-clock";
+import { playbackProgress } from "@orbit/core/music-progress";
+import { safeImageUrl } from "@orbit/core/feed-content";
+import { safePublicLink } from "@orbit/core/public-url";
+import { MUSIC_SEARCH_PROVIDERS } from "@orbit/core/music-sources";
+import { CoverArt } from "./artwork";
+import { IdentityCell } from "./identity/identity-cell";
 import { Button } from "./ui/button";
 import {
   Dialog,
@@ -37,37 +45,93 @@ import {
   EmptyState,
   Field,
   Input,
-  Select,
+  SectionHeader,
+  FormSelect,
   Spinner,
 } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
+import { Combobox } from "./ui/combobox";
+const SOURCE_NAMES: Record<string, string> = {
+  youtube: "YouTube",
+  soundcloud: "SoundCloud",
+  bandcamp: "Bandcamp",
+  twitch: "Twitch",
+  vimeo: "Vimeo",
+};
 export function MusicPage() {
   const { data, api, refresh, saveConfig } = useWorkspace();
   const [query, setQuery] = useState("");
+  // "" means "whatever this server configured" — the dashboard never guesses a
+  // provider, and it never applies `source` to a pasted URL (those route by host).
+  const [source, setSource] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  // Survives the same tick, where `busy` state has not been applied yet.
+  const inflight = useRef(false);
   const [settings, setSettings] = useState(false);
   const [config, setConfig] = useState(data.guild.config.music);
   const [stop, setStop] = useState(false);
-  const [volume, setVolume] = useState<number | null>(null);
   const m = data.music;
+  // The clock only runs while a player is actually advancing; the first paint
+  // always uses the persisted snapshot (no hydration drift).
+  const playback = usePlaybackNow(
+    !!m.current && !m.paused,
+    data.presentation.referenceAt
+  );
+  // `now` is null on the first render, so the server and client agree; after
+  // mount the position interpolates from the last backend snapshot only.
+  const progress = playbackProgress(m, playback.now ?? NaN, {
+    clockOffsetMs: playback.offset,
+  });
+  // Provider data only: a missing or unsafe artwork URL renders the vinyl
+  // illustration, and a missing public page renders plain text. Neither is a
+  // fallback to a signed/stream URL.
+  const artwork = m.current?.artwork ? safeImageUrl(m.current.artwork) : "";
+  const sourceUrl = m.current?.uri ? safePublicLink(m.current.uri) : "";
+  // Requester identity comes from the same authorized account snapshot as the
+  // leaderboard. Missing means "not captured", never a guessed picture.
+  const requester = (id?: string) =>
+    id ? data.accounts.find((a) => a.userId === id) : undefined;
+  const sourceLabel = m.current?.source
+    ? (SOURCE_NAMES[m.current.source] ?? "source")
+    : "source";
+  const playingLabel =
+    progress.status === "stale"
+      ? "State unconfirmed"
+      : progress.status === "playing"
+        ? "Now playing"
+        : progress.status === "paused"
+          ? "Taking a breath"
+          : "Ready when you are";
+  // One music action at a time: a second click while a job is pending would
+  // submit a duplicate Discord action (skip especially must not be replayed
+  // blindly when the first execution is unconfirmed).
   async function action(action: string, extra: Record<string, any> = {}) {
+    if (inflight.current) return;
+    inflight.current = true;
     setBusy(action);
     try {
       await api("/music", "POST", { action, ...extra });
+      // Clear the request as soon as the bot has it, before the snapshot
+      // refresh. Clearing after the refresh empties a field the person may
+      // already have typed into again, and silently drops that request.
+      // A failed request keeps the text, so it can be retried.
+      if (action === "play") setQuery("");
       await refresh();
       if (action === "play") {
-        setQuery("");
         toast.success(
           data.demo
             ? "Added to the preview queue. No audio is played."
-            : "The bot processed your request. Check Now playing/queue; audio plays in Discord."
+            : "Request sent to the bot. Audio plays in Discord; check the playing state for confirmation."
         );
-      } else if (!data.demo)
-        toast.success("The bot completed the music command");
+      } else if (!data.demo && action !== "volume")
+        toast.success(
+          "Request sent to the bot. Nothing is confirmed until the playing state updates."
+        );
     } catch (e: any) {
       if (e instanceof BotActionPendingError) toast.warning(e.message);
       else toast.error(e.message);
     } finally {
+      inflight.current = false;
       setBusy(null);
     }
   }
@@ -87,7 +151,7 @@ export function MusicPage() {
         className={cn(
           "mb-5 flex items-center gap-2 rounded-lg border px-4 py-3 text-[11px]",
           data.demo
-            ? "border-violet-200/50 bg-violet-50/70 text-violet-500 dark:border-violet-500/20 dark:bg-violet-500/10"
+            ? "border-violet-200/50 bg-violet-50/70 text-violet-700 dark:text-violet-300 dark:border-violet-500/20 dark:bg-violet-500/10"
             : "bg-card text-muted-foreground"
         )}
       >
@@ -98,29 +162,44 @@ export function MusicPage() {
       </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_310px]">
         <Card className="overflow-hidden">
-          <div className="flex items-center justify-between border-b px-5 py-4">
-            <span className="flex items-center gap-2 text-xs font-semibold">
-              <AudioLines size={15} className="text-primary" />
-              The listening room
-            </span>
-            <Badge tone={m.current ? "green" : "neutral"}>
-              <span
-                className={cn(
-                  "size-1 rounded-full",
-                  m.current ? "bg-emerald-500" : "bg-slate-400"
-                )}
-              />
-              {m.current
-                ? m.paused
-                  ? "Taking a breath"
-                  : "Now playing"
-                : "Ready when you are"}
-            </Badge>
-          </div>
+          <SectionHeader
+            icon={AudioLines}
+            title="The listening room"
+            aside={
+              <Badge
+                tone={
+                  progress.status === "playing"
+                    ? "green"
+                    : progress.status === "stale"
+                      ? "amber"
+                      : "neutral"
+                }
+              >
+                <span
+                  className={cn(
+                    "size-1 rounded-full",
+                    progress.status === "playing"
+                      ? "bg-emerald-500"
+                      : progress.status === "stale"
+                        ? "bg-amber-500"
+                        : "bg-slate-400"
+                  )}
+                />
+                {playingLabel}
+              </Badge>
+            }
+          />
           <div className="relative flex min-h-[285px] flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-[#f2edf9] to-card px-6 py-8 dark:from-violet-500/10 dark:to-card">
             <div className="absolute -top-14 size-64 rounded-full border border-violet-200/30" />
             <div className="absolute -top-28 size-96 rounded-full border border-violet-200/20" />
-            <div className="relative flex size-36 items-center justify-center rounded-full bg-gradient-to-br from-[#ba9bdd] via-[#9d7ac6] to-[#7c5ea4] shadow-xl shadow-violet-200/30">
+            <div className="relative flex size-36 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#ba9bdd] via-[#9d7ac6] to-[#7c5ea4] shadow-xl shadow-violet-200/30">
+              {artwork && (
+                <CoverArt
+                  url={artwork}
+                  failureLabel="Track artwork unavailable"
+                  className="absolute inset-0 size-full"
+                />
+              )}
               <div className="absolute inset-3 rounded-full border border-white/10" />
               <div className="absolute inset-5 rounded-full border border-white/10" />
               <div className="absolute inset-7 rounded-full border border-white/10" />
@@ -129,31 +208,105 @@ export function MusicPage() {
                 <span className="size-2 rounded-full bg-[#9675b3]" />
               </div>
             </div>
-            <h2 className="relative mt-6 text-lg font-semibold">
-              {m.current?.title ?? "A little quiet, for now."}
+            <h2 className="relative mt-6 text-center text-lg font-semibold">
+              {m.current && sourceUrl ? (
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                >
+                  {m.current.title}
+                  <span className="sr-only"> (opens on {sourceLabel})</span>
+                </a>
+              ) : (
+                (m.current?.title ?? "A little quiet, for now.")
+              )}
             </h2>
             <p className="relative mt-1.5 text-[12px] text-muted-foreground">
               {m.current?.author ?? "Add a track and set the mood."}
             </p>
             {m.current && (
-              <span className="relative mt-3 text-[10px] text-muted-foreground">
-                Requested by {m.current.requestedBy}
+              <span className="relative mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  Requested by
+                  <IdentityCell
+                    id={m.current.requestedById ?? ""}
+                    name={m.current.requestedBy}
+                    src={requester(m.current.requestedById)?.avatarUrl}
+                    // The queue payload records a name from request time; the
+                    // roster's current identity is what this server shows now.
+                    person={requester(m.current.requestedById)}
+                    size={24}
+                  />
+                </span>
+                {sourceUrl && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <a
+                      href={sourceUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="underline-offset-2 hover:underline"
+                    >
+                      Open on {sourceLabel}
+                    </a>
+                  </>
+                )}
               </span>
             )}
           </div>
           <div className="px-7 pb-6">
-            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              role="progressbar"
+              aria-label="Playback progress"
+              aria-valuemin={0}
+              aria-valuemax={progress.duration ?? 0}
+              aria-valuenow={
+                progress.duration === null ? undefined : progress.position
+              }
+              aria-valuetext={
+                progress.status === "idle"
+                  ? "Nothing is playing"
+                  : `${
+                      progress.status === "stale" ? "Last known position " : ""
+                    }${duration(progress.position)}${
+                      progress.duration === null
+                        ? "; duration unknown"
+                        : ` of ${duration(progress.duration)}`
+                    }`
+              }
+              className="h-1 w-full overflow-hidden rounded-full bg-muted"
+            >
               <div
-                className="h-full rounded-full bg-primary/60"
-                style={{
-                  width: `${m.current ? Math.min(100, (m.position / m.current.duration) * 100) : 0}%`,
-                }}
+                className="h-full rounded-full bg-primary/60 transition-[width] duration-500 ease-linear motion-reduce:transition-none"
+                style={{ width: `${progress.percent ?? 0}%` }}
               />
             </div>
             <div className="mt-2 flex justify-between text-[9px] tabular-nums text-muted-foreground">
-              <span>{duration(m.position)}</span>
-              <span>{duration(m.current?.duration ?? 0)}</span>
+              <span>
+                {progress.status === "idle"
+                  ? "0:00"
+                  : duration(progress.position)}
+              </span>
+              <span>
+                {progress.duration === null
+                  ? progress.status === "idle"
+                    ? "0:00"
+                    : "Live / duration unknown"
+                  : `${progress.status === "stale" ? "last known " : ""}${duration(
+                      progress.duration
+                    )}`}
+              </span>
             </div>
+            {progress.status === "stale" && (
+              <p className="mt-3 flex items-start gap-1.5 rounded-lg bg-amber-50/70 px-3 py-2 text-[10px] leading-relaxed text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                <Info size={12} className="mt-px shrink-0" />
+                {m.paused
+                  ? "This is the last reported state; it has not been updated recently."
+                  : "Orbit has not reported progress recently, so playback is not confirmed. The bar is frozen at the last known position. Check the bot logs or the Audit log before assuming audio is still playing."}
+              </p>
+            )}
             <div className="mt-4 flex items-center justify-center gap-6">
               <Button
                 variant="ghost"
@@ -174,10 +327,21 @@ export function MusicPage() {
                 <Square size={15} />
               </Button>
               <Button
-                className="size-11 rounded-full"
+                className={cn(
+                  "size-11 rounded-full",
+                  !m.current && "bg-muted text-muted-foreground hover:bg-muted"
+                )}
+                variant={m.current ? "default" : "outline"}
                 size="icon"
                 disabled={!!busy || !m.current}
-                aria-label={m.paused ? "Resume playback" : "Pause playback"}
+                aria-label={
+                  !m.current
+                    ? "Nothing is playing"
+                    : m.paused
+                      ? "Resume playback"
+                      : "Pause playback"
+                }
+                title={!m.current ? "Add a track to start playing" : undefined}
                 onClick={() => action(m.paused ? "resume" : "pause")}
               >
                 {busy === "pause" || busy === "resume" ? (
@@ -224,32 +388,51 @@ export function MusicPage() {
                 </span>
               </Button>
             </div>
-            <div className="mx-auto mt-5 flex max-w-48 items-center gap-2.5">
-              <Volume2 size={13} className="text-muted-foreground" />
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={volume ?? m.volume}
-                aria-label="Playback volume"
-                className="h-1 w-full"
-                onChange={(e) => setVolume(Number(e.target.value))}
-                onPointerUp={(e) => {
-                  action("volume", {
-                    volume: Number(e.currentTarget.value),
-                  }).then(() => setVolume(null));
-                }}
-                onKeyUp={(e) => {
-                  if (e.key.startsWith("Arrow"))
-                    action("volume", {
-                      volume: Number(e.currentTarget.value),
-                    }).then(() => setVolume(null));
-                }}
-              />
-              <span className="w-6 text-[10px] tabular-nums text-muted-foreground">
-                {volume ?? m.volume}%
-              </span>
-            </div>
+            <SeekControl
+              position={progress.position}
+              duration={progress.duration}
+              disabled={
+                !!busy ||
+                !m.current ||
+                progress.duration === null ||
+                progress.status === "stale"
+              }
+              disabledReason={
+                !m.current
+                  ? "Seek needs something playing."
+                  : "This source has no known duration, so seeking is unavailable."
+              }
+              onSeek={(seconds) => action("seek", { position: seconds })}
+            />
+            <VolumeControl
+              value={m.volume}
+              live={!data.demo}
+              disabled={!!busy || (!data.demo && !m.current)}
+              disabledReason={
+                !m.current
+                  ? "Volume needs an active player. Add a track first."
+                  : "Another music action is in progress."
+              }
+              onCommit={async (next) => {
+                try {
+                  const result = await api<{
+                    completed?: boolean;
+                    accepted?: boolean;
+                  }>("/music", "POST", { action: "volume", volume: next });
+                  // The action API waits for the bot's job. `completed` means
+                  // the bot applied it; a bare acceptance is still only queued.
+                  await refresh();
+                  return result.completed ? "applied" : "queued";
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error
+                      ? error.message
+                      : "Volume change failed"
+                  );
+                  throw error;
+                }
+              }}
+            />
           </div>
         </Card>
         <div className="space-y-5">
@@ -264,7 +447,7 @@ export function MusicPage() {
               className="space-y-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                action("play", { query });
+                action("play", { query, source: source || undefined });
               }}
             >
               <Input
@@ -273,8 +456,25 @@ export function MusicPage() {
                 maxLength={200}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                aria-label="Track title or source URL"
                 required
               />
+              <Field
+                label="Search with"
+                hint="Direct links are always routed by their hostname; this choice only applies to a text search."
+              >
+                <FormSelect
+                  value={source}
+                  onValueChange={setSource}
+                  options={[
+                    { value: "", label: "Server default" },
+                    ...MUSIC_SEARCH_PROVIDERS.map((provider) => ({
+                      value: provider.id,
+                      label: provider.label,
+                    })),
+                  ]}
+                />
+              </Field>
               <Button
                 className="w-full"
                 disabled={!!busy || !data.guild.config.modules.music}
@@ -286,7 +486,10 @@ export function MusicPage() {
           </Card>
           <Card className="p-5">
             <h2 className="flex items-center gap-2 text-xs font-semibold">
-              <Headphones size={15} className="text-[#c895a7]" />
+              <Headphones
+                size={15}
+                className="text-rose-700 dark:text-rose-300"
+              />
               Room for everyone’s favorites.
             </h2>
             <div className="mt-5 space-y-4 text-[11px]">
@@ -314,31 +517,34 @@ export function MusicPage() {
               </div>
             </div>
             <p className="mt-5 border-t pt-4 text-[10px] leading-relaxed text-muted-foreground">
-              Approved adapters: SoundCloud, Bandcamp, YouTube and OC ReMix. Use
-              clean recordings you are authorized to play. Adult adapters,
-              arbitrary files and Spotify mirroring are disabled. Public
-              catalogs and lyrics are not automatically SFW-rated; availability
-              varies.
+              Approved adapters: SoundCloud, Bandcamp, YouTube, YouTube Music,
+              OC ReMix. “Server default” uses whichever search source this
+              deployment configured; a provider that the Lavalink node has not
+              enabled is reported instead of being substituted. Play only what
+              you are authorized to play. Adult adapters, arbitrary files and
+              Spotify mirroring are disabled, and catalogues are not
+              automatically SFW-rated.
             </p>
           </Card>
         </div>
       </div>
       <Card className="mt-5">
-        <div className="flex items-center justify-between border-b px-5 py-4">
-          <h2 className="flex items-center gap-2 text-xs font-semibold">
-            <ListMusic size={15} className="text-primary" />A little further
-            down the queue <Badge>{m.tracks.length} tracks</Badge>
-          </h2>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => action("shuffle")}
-            disabled={!!busy || m.tracks.length < 2}
-          >
-            <Shuffle size={12} />
-            Shuffle
-          </Button>
-        </div>
+        <SectionHeader
+          icon={ListMusic}
+          title="A little further down the queue"
+          badge={<Badge>{m.tracks.length} tracks</Badge>}
+          aside={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => action("shuffle")}
+              disabled={!!busy || m.tracks.length < 2}
+            >
+              <Shuffle size={12} />
+              Shuffle
+            </Button>
+          }
+        />
         {m.tracks.length ? (
           <div className="divide-y">
             {m.tracks.map((t, i) => (
@@ -346,17 +552,46 @@ export function MusicPage() {
                 <span className="w-4 text-center text-[11px] text-muted-foreground">
                   {i + 1}
                 </span>
-                <div className="flex size-9 items-center justify-center rounded-lg bg-violet-50 text-violet-300 dark:bg-violet-500/10">
-                  <Music2 size={15} />
+                <div className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-violet-50 text-violet-300 dark:bg-violet-500/10">
+                  {t.artwork && safeImageUrl(t.artwork) ? (
+                    <CoverArt
+                      url={safeImageUrl(t.artwork)}
+                      failureLabel="Track artwork unavailable"
+                      className="size-full"
+                    />
+                  ) : (
+                    <Music2 size={15} />
+                  )}
                 </div>
-                <div className="flex-1">
-                  <p className="text-[12px] font-medium">{t.title}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12px] font-medium">
+                    {t.uri && safePublicLink(t.uri) ? (
+                      <a
+                        href={safePublicLink(t.uri)}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="hover:underline"
+                      >
+                        {t.title}
+                      </a>
+                    ) : (
+                      t.title
+                    )}
+                  </p>
                   <p className="mt-1 text-[10px] text-muted-foreground">
                     {t.author}
+                    {t.source ? ` · ${SOURCE_NAMES[t.source] ?? t.source}` : ""}
                   </p>
                 </div>
-                <span className="hidden text-[10px] text-muted-foreground sm:block">
-                  Added by {t.requestedBy}
+                <span className="hidden items-center gap-1.5 text-[10px] text-muted-foreground sm:flex">
+                  Added by
+                  <IdentityCell
+                    id={t.requestedById ?? ""}
+                    name={t.requestedBy}
+                    src={requester(t.requestedById)?.avatarUrl}
+                    person={requester(t.requestedById)}
+                    size={24}
+                  />
                 </span>
                 <span className="ml-4 text-[11px] tabular-nums text-muted-foreground">
                   {duration(t.duration)}
@@ -410,21 +645,20 @@ export function MusicPage() {
               label="DJ role"
               hint="Members with Manage Server can always control playback."
             >
-              <Select
+              <Combobox
                 value={config.djRoleId}
-                onChange={(e) =>
-                  setConfig({ ...config, djRoleId: e.target.value })
+                onValueChange={(next) =>
+                  setConfig({ ...config, djRoleId: next })
                 }
-              >
-                <option value="">Everyone in the voice channel</option>
-                {data.guild.roles
-                  .filter((r) => !r.managed)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}
-                    </option>
-                  ))}
-              </Select>
+                placeholder="Everyone in the voice channel"
+                searchPlaceholder="Search roles…"
+                options={[
+                  { value: "", label: "Everyone in the voice channel" },
+                  ...data.guild.roles
+                    .filter((r) => !r.managed)
+                    .map((r) => ({ value: r.id, label: r.name })),
+                ]}
+              />
             </Field>
             <div className="grid grid-cols-2 gap-4">
               <Field label="Default volume (%)">
@@ -468,9 +702,31 @@ export function MusicPage() {
                 }
               />
             </Field>
+            <Field
+              label="Stay in voice after the queue ends (seconds)"
+              hint="0 disconnects as soon as the last track ends. A track that fails to load uses the same wait, so one provider error does not look like Orbit dropping out. An empty voice channel is left after 15 seconds regardless. Stop and disconnect always leave immediately."
+            >
+              <Input
+                type="number"
+                min={0}
+                max={1800}
+                step={5}
+                value={config.idleDisconnectSeconds ?? 60}
+                onChange={(e) => {
+                  // Clamp here as well as in the schema so the form cannot submit
+                  // a value that the server would reject for a different reason.
+                  const next = Number(e.target.value);
+                  setConfig({
+                    ...config,
+                    idleDisconnectSeconds: Number.isFinite(next)
+                      ? Math.min(1800, Math.max(0, Math.round(next)))
+                      : 60,
+                  });
+                }}
+              />
+            </Field>
             <p className="rounded-lg bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
-              Lavalink connection settings and search-source prefixes are
-              configured server-side. They never appear in the browser.
+              Lavalink settings live on the server and never reach the browser.
             </p>
             <Button className="w-full" disabled={!!busy}>
               {busy === "settings" ? <Spinner /> : <Check size={14} />}Save

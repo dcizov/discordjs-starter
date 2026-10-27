@@ -2,8 +2,9 @@
 import { useState } from "react";
 import type { NewsRoutingPreview as Preview } from "@orbit/core/feed-routing";
 import { useWorkspace } from "./workspace";
-import { Card, Field, Input, Select, Textarea } from "./ui/primitives";
+import { Card, Field, Input, Textarea } from "./ui/primitives";
 import { Button } from "./ui/button";
+import { Combobox } from "./ui/combobox";
 export function NewsRoutingPreview() {
   const { data, api } = useWorkspace(),
     sources = data.resources.filter((r) => r.kind === "source");
@@ -25,11 +26,9 @@ export function NewsRoutingPreview() {
           Preview news routing — no fetch, no send
         </summary>
         <p className="mb-4 mt-3 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-          Use sample text against this server's saved source keywords, source
-          tags and enabled routes. This is the same matcher used by the delivery
-          outbox. It does not fetch a feed, test credentials, ping a role,
-          contact Discord, enqueue a delivery or store the sample. Saved/synced
-          metadata is not proof of live access.
+          Runs sample text through the saved keywords, tags and routes with the
+          same matcher delivery uses. No feed is fetched, nothing is sent, and
+          nothing is stored. Saved metadata is not proof of live access.
         </p>
         <form
           className="grid gap-4 sm:grid-cols-2"
@@ -55,23 +54,24 @@ export function NewsRoutingPreview() {
           }}
         >
           <Field label="Preview source" required>
-            <Select
+            <Combobox
               disabled={busy}
-              required
               value={sourceId}
-              onChange={(e) => {
-                setSource(e.target.value);
+              onValueChange={(next) => {
+                setSource(next);
                 invalidate();
               }}
-            >
-              <option value="">Choose a source</option>
-              {sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                  {source.enabled ? "" : " (disabled)"}
-                </option>
-              ))}
-            </Select>
+              placeholder="Choose a source"
+              searchPlaceholder="Search sources…"
+              options={[
+                { value: "", label: "Choose a source" },
+                ...sources.map((source) => ({
+                  value: source.id,
+                  label: source.name,
+                  hint: source.enabled ? undefined : "disabled",
+                })),
+              ]}
+            />
           </Field>
           <Field label="Sample headline" required>
             <Input

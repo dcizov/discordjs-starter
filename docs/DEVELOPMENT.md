@@ -1,5 +1,7 @@
 # Full-stack development in Docker
 
+This is one of the three supported workflows — the other two are the host-Node workflow in the README and the Dev Container. [Development workflows](WORKFLOWS.md) compares them; this page owns the Docker commands.
+
 This runs the **dashboard, Discord bot, background worker, PostgreSQL, Redis, and Lavalink** together. The web app uses Next development mode; the bot and worker use `tsx watch`. Source changes are bind-mounted, so ordinary code edits do not need an image rebuild. Use a dedicated Discord application/test server: **development mode is not demo mode**, and real messages/moderation/audio actions are possible.
 
 The base `docker-compose.yml` still uses production builds. `docker-compose.dev.yml` is an explicit override; do not use it for public production deployment.
@@ -87,6 +89,75 @@ Wait for Next to report ready, then open **http://localhost:3000**. The web cont
 If `web` exits or restarts, read its logs and migration status rather than resetting the database. If Docker reports port 3000 already allocated, stop the conflicting host process/project; do not delete volumes. For remote Docker, `localhost` in your browser is your own computer, so use SSH/editor port forwarding to the Docker host. The Next dev command already binds `0.0.0.0:3000` inside the container.
 
 For editor-based development, use the checked-in [Dev Container setup](DEVCONTAINER.md): it starts `web` and infrastructure automatically, and opens a separate persistent workspace without automatically logging in a second bot.
+
+### `Module not found: Can't resolve '<package>'` after an update
+
+All third-party dependencies are declared **once** in the root `package.json`
+(the workspaces `apps/*` and `packages/*` deliberately have no dependency
+blocks). That keeps one hoisted tree and one lockfile, but two provisioning
+paths can end up behind the manifest:
+
+- a host checkout that has not run `npm ci` since the manifest changed;
+- the Docker dev stack, where `dev_node_modules` is mounted at
+  `/app/node_modules`. Docker seeds a named volume from the image **only on its
+  first use**, so a volume created by an older image keeps the old tree while the
+  image underneath is rebuilt.
+
+The only symptom is a deep build error:
+
+```text
+Module not found: Can't resolve 'marked'
+Import trace: ./lib/docs-content.ts → ./app/docs/layout.tsx
+```
+
+`scripts/check-dependencies.mjs` runs before `dev`, `build:web` and `start`
+(about 50 ms), names the missing packages and prints the remedy. It installs
+nothing and never edits the lockfile, and it is not a package-manager
+replacement: `npm ci` remains the install command.
+
+#### The fix, in order
+
+**Host or CI checkout:**
+
+```sh
+npm ci
+```
+
+**Docker Compose / Dev Container:** run the same command _inside_ the running
+container:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec web npm ci
+# Dev Container: `npm ci` in the workspace terminal
+```
+
+This does repair the volume, and the reason is structural rather than
+incidental: Compose mounts `dev_node_modules` at **`/app/node_modules`**, which is
+exactly the directory `npm ci` installs into, and the bind-mounted checkout
+supplies the current `package-lock.json`. There is no separate hidden
+`node_modules` for the volume to mask; the volume _is_ the install location.
+(Rebuilding the image alone still does nothing to an existing volume — only the
+install command does.)
+
+Verified in this repository: a volume-equivalent tree installed from `eeb0e68`
+(before `marked` existed) was mounted over a fully installed checkout, which
+reproduced `Module not found: 'marked'`; running `npm ci` there installed 628
+packages into that tree and the build then compiled. Re-check with
+`docs/CONTINUATION.md` before relying on it in a new environment.
+
+**Only if `npm ci` cannot write to the volume** (for example `EACCES`, because a
+volume was created by a different user) recreate that one volume:
+
+```sh
+docker volume ls | grep dev_node_modules
+docker volume rm <compose-project>_dev_node_modules
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+```
+
+The volume name is `<project>_dev_node_modules`, where the Compose project name
+defaults to the directory name (or `COMPOSE_PROJECT_NAME`). The new volume is
+seeded from the freshly built image. Never delete the database, Redis, demo-data
+or Next-cache volumes, and never use `docker compose down -v` for this.
 
 ## Run just the main bot
 

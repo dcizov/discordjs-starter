@@ -28,11 +28,21 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { CopyButton } from "./copy-button";
+import { IdentityCell } from "./identity/identity-cell";
+import { personFields } from "@/lib/person";
+import { ActorAvatar } from "./identity/actor-avatar";
+import {
+  AUDIT_ACTIONS,
+  auditActionLabel,
+  auditActionTone,
+} from "@orbit/core/audit-actions";
 import { DataTable } from "./data-table";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { RolePicker } from "./resource-editor";
 import { Button } from "./ui/button";
+import { Combobox } from "./ui/combobox";
+import { TabBar } from "./ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -44,9 +54,9 @@ import {
   Badge,
   Card,
   Field,
+  FormSelect,
   Input,
-  SearchInput,
-  Select,
+  NativeSelect,
   Spinner,
 } from "./ui/primitives";
 import { Switch } from "./ui/switch";
@@ -64,6 +74,13 @@ export function ChannelsPage() {
   const roles = data.guild.roles.filter((r) =>
     r.name.toLowerCase().includes(q.toLowerCase())
   );
+  // Built once instead of scanning every resource for every channel row.
+  const channelUsage = new Map<string, number>();
+  for (const resource of data.resources) {
+    const id = resource.data.channelId;
+    if (typeof id === "string")
+      channelUsage.set(id, (channelUsage.get(id) ?? 0) + 1);
+  }
   async function copy(id: string) {
     try {
       await copyText(id);
@@ -86,72 +103,70 @@ export function ChannelsPage() {
               A little power, thoughtfully given.
             </p>
             <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-              Orbit never needs Administrator. Keep its role above the roles it
-              manages, and give it access only to the channels it needs. Channel
-              and role changes are managed in Discord and synced here.
+              Orbit never needs Administrator: keep its role above the roles it
+              manages. Channel and role changes happen in Discord and are synced
+              here.
             </p>
           </div>
         </div>
       </div>
-      <div className="mb-5 flex gap-6 border-b">
-        {["channels", "roles", "permissions"].map((t) => (
-          <button
-            key={t}
-            className={cn(
-              "-mb-px border-b-2 pb-3 pt-1 text-[12px] font-medium capitalize",
-              tab === t
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground"
-            )}
-            onClick={() => {
-              setTab(t);
-              setQ("");
-              setFilter("all");
-            }}
-          >
-            {t}
-            {t !== "permissions" && (
-              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                {t === "roles"
-                  ? data.guild.roles.length
-                  : data.guild.channels.length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        id="server"
+        label="Server sections"
+        controls={false}
+        value={tab}
+        onChange={(next) => {
+          setTab(next);
+          setQ("");
+          setFilter("all");
+        }}
+        tabs={[
+          {
+            id: "channels",
+            label: "Channels",
+            badge: data.guild.channels.length,
+          },
+          { id: "roles", label: "Roles", badge: data.guild.roles.length },
+          { id: "permissions", label: "Permissions" },
+        ]}
+      />
       {tab !== "permissions" ? (
         <>
-          <div className="mb-4 flex justify-between gap-3">
-            <SearchInput
-              value={q}
-              onChange={setQ}
-              placeholder={`Search ${tab}…`}
-            />
-            {tab === "channels" && (
-              <Select
-                className="h-9 w-32 text-[11px]"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value)}
-                aria-label="Channel type"
-              >
-                <option value="all">All channels</option>
-                <option value="text">Text</option>
-                <option value="voice">Voice</option>
-                <option value="category">Categories</option>
-                <option value="stage">Stage (unsupported)</option>
-                <option value="forum">Forums</option>
-              </Select>
-            )}
-          </div>
           <Card>
             {tab === "channels" ? (
               <DataTable
+                label="Channels"
                 rows={channels}
+                search={{
+                  value: q,
+                  onChange: setQ,
+                  placeholder: "Search channels…",
+                  label: "Search channels",
+                }}
+                filters={[
+                  {
+                    key: "channel-type",
+                    label: "Filter channel type",
+                    title: "Channel type",
+                    value: filter,
+                    allValue: "all",
+                    onChange: setFilter,
+                    searchable: false,
+                    options: [
+                      { value: "all", label: "All channels" },
+                      { value: "text", label: "Text" },
+                      { value: "voice", label: "Voice" },
+                      { value: "category", label: "Categories" },
+                      { value: "stage", label: "Stage (unsupported)" },
+                      { value: "forum", label: "Forums" },
+                    ],
+                  },
+                ]}
                 columns={[
                   {
                     key: "name",
                     label: "Channel",
+                    sortValue: (r) => r.name,
                     render: (r) => (
                       <span className="flex items-center gap-2.5 font-medium">
                         {r.type === "voice" ? (
@@ -171,6 +186,7 @@ export function ChannelsPage() {
                   {
                     key: "type",
                     label: "Type",
+                    sortValue: (r) => r.type,
                     render: (r) => <Badge>{r.type}</Badge>,
                   },
                   {
@@ -202,14 +218,10 @@ export function ChannelsPage() {
                   {
                     key: "route",
                     label: "Used by",
+                    sortValue: (r) => channelUsage.get(r.id) ?? 0,
                     render: (r) => (
                       <span className="text-muted-foreground">
-                        {
-                          data.resources.filter(
-                            (s) => s.data.channelId === r.id
-                          ).length
-                        }{" "}
-                        configurations
+                        {channelUsage.get(r.id) ?? 0} configurations
                       </span>
                     ),
                   },
@@ -231,12 +243,22 @@ export function ChannelsPage() {
                 emptyDescription="Try a different filter. In live mode, Orbit syncs channels from Discord."
               />
             ) : (
+              // A sorted copy: sorting the prop array in place mutated data
+              // shared with the rest of the dashboard.
               <DataTable
-                rows={roles.sort((a, b) => b.position - a.position)}
+                label="Roles"
+                rows={[...roles].sort((a, b) => b.position - a.position)}
+                search={{
+                  value: q,
+                  onChange: setQ,
+                  placeholder: "Search roles…",
+                  label: "Search roles",
+                }}
                 columns={[
                   {
                     key: "name",
                     label: "Role",
+                    sortValue: (r) => r.name,
                     render: (r) => (
                       <span className="flex items-center gap-2 font-medium">
                         <span
@@ -349,7 +371,12 @@ export function AuditPage() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("all");
   const [detail, setDetail] = useState<AuditEntry | null>(null);
-  const actions = [...new Set(data.audit.map((a) => a.action))];
+  // The canonical verbs, plus anything this page actually returned, so a filter
+  // can never offer a value the log does not contain — and never hide one it
+  // does because it happened to be on a later page.
+  const actions = [
+    ...new Set([...AUDIT_ACTIONS, ...data.audit.map((a) => a.action)]),
+  ];
   return (
     <>
       <PageHeader
@@ -357,58 +384,51 @@ export function AuditPage() {
         description="A clear, lasting record of the changes that shape your community."
         badge="Append-only"
       />
-      <div className="mb-4 flex justify-between gap-3">
-        <SearchInput
-          value={q}
-          onChange={setQ}
-          placeholder="Search people, changes, and settings…"
-        />
-        <Select
-          aria-label="Filter audit action"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="h-9 w-36 text-[11px]"
-        >
-          <option value="all">All actions</option>
-          {actions.map((a) => (
-            <option key={a}>{a}</option>
-          ))}
-        </Select>
-      </div>
+      <p className="mb-4 text-[11px] leading-relaxed text-muted-foreground">
+        Names and avatars here are the ones recorded when the action happened
+        and are never refreshed, so an entry shows who acted then. Where this
+        server’s roster currently knows that person, their present profile is
+        shown separately in the detail view and labelled as current.
+      </p>
       <Card>
         <HistoryTable<AuditEntry>
           kind="audit"
           query={q}
           filter={filter}
+          onQueryChange={setQ}
+          onFilterChange={setFilter}
+          searchLabel="Search the audit log"
+          searchPlaceholder="Search people, changes, and settings…"
+          facetLabel="Filter audit action"
+          facetTitle="Action"
+          facetOptions={[
+            { value: "all", label: "All actions" },
+            ...actions.map((a) => ({ value: a, label: auditActionLabel(a) })),
+          ]}
           columns={[
             {
               key: "person",
               label: "Who",
+              sortKey: "actorName",
+              canHide: false,
+              // The avatar recorded with the action, not the actor's current
+              // picture: audit rows are evidence, so they are never refreshed.
               render: (r) => (
-                <span className="flex items-center gap-2.5">
-                  <span className="flex size-7 items-center justify-center rounded-full bg-violet-50 text-violet-400 dark:bg-violet-500/10">
-                    {r.actorName.slice(0, 1)}
-                  </span>
-                  <span className="font-medium">{r.actorName}</span>
-                </span>
+                <IdentityCell
+                  id={r.actorId}
+                  name={r.actorName}
+                  src={r.actorAvatarUrl}
+                  detail={r.actorAvatarUrl ? undefined : "no avatar recorded"}
+                />
               ),
             },
             {
               key: "action",
               label: "What changed",
+              sortKey: "action",
               render: (r) => (
-                <Badge
-                  tone={
-                    r.action === "deleted"
-                      ? "red"
-                      : r.action === "created"
-                        ? "green"
-                        : r.action === "moderated"
-                          ? "amber"
-                          : "purple"
-                  }
-                >
-                  {r.action}
+                <Badge tone={auditActionTone(r.action)}>
+                  {auditActionLabel(r.action)}
                 </Badge>
               ),
             },
@@ -421,7 +441,12 @@ export function AuditPage() {
               key: "detail",
               label: "Details",
               render: (r) => (
-                <span className="line-clamp-2 max-w-xs text-muted-foreground">
+                // Clamped for scanning, with the full text on hover and in the
+                // row's detail dialog.
+                <span
+                  className="line-clamp-2 max-w-xs text-muted-foreground"
+                  title={r.detail}
+                >
                   {r.detail}
                 </span>
               ),
@@ -429,6 +454,7 @@ export function AuditPage() {
             {
               key: "time",
               label: "When",
+              sortKey: "createdAt",
               render: (r) => (
                 <span className="whitespace-nowrap text-muted-foreground">
                   {relativeTime(r.createdAt, data.presentation.referenceAt)}
@@ -436,8 +462,12 @@ export function AuditPage() {
               ),
             },
             {
+              // A trailing action column, not a data column: it has no header
+              // text, so it must stay out of the Columns menu instead of
+              // appearing there as a nameless checkbox.
               key: "open",
               label: "",
+              canHide: false,
               render: (r) => (
                 <Button
                   variant="ghost"
@@ -477,7 +507,7 @@ export function AuditPage() {
             <div className="mb-5 flex flex-wrap gap-2 border-b pb-4">
               <CopyButton
                 key={detail.id}
-                text={detail.detail}
+                text={detail.details ?? detail.detail}
                 label={
                   detail.action === "failed" ? "Copy error" : "Copy details"
                 }
@@ -493,9 +523,20 @@ export function AuditPage() {
             {[
               ["Event ID", detail?.id],
               ["Actor", `${detail?.actorName} (${detail?.actorId})`],
-              ["Action", detail?.action],
+              // The stored token stays visible next to the human word so the
+              // detail view still shows exactly what was recorded.
+              [
+                "Action",
+                detail?.action
+                  ? `${auditActionLabel(detail.action)} (${detail.action})`
+                  : null,
+              ],
               ["Target", detail?.target],
-              ["Details", detail?.detail],
+              ["Summary", detail?.detail],
+              // Older rows have no separate diagnostic; the summary stands in.
+              ...(detail?.details
+                ? ([["Diagnostic details", detail.details]] as const)
+                : []),
               [
                 "Timestamp",
                 detail?.createdAt
@@ -510,19 +551,84 @@ export function AuditPage() {
                 <dd
                   className={cn(
                     "min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere] leading-relaxed",
-                    k === "Details" && "font-mono text-[11px]"
+                    (k === "Diagnostic details" || k === "Summary") &&
+                      "font-mono text-[11px]"
                   )}
                 >
-                  {v}
+                  {k === "Actor" && detail ? (
+                    <span className="flex items-center gap-2">
+                      {/* Same historical identity as the row that opened this
+                          dialog; no fresh lookup when the dialog appears. */}
+                      <ActorAvatar
+                        id={detail.actorId}
+                        name={detail.actorName}
+                        src={detail.actorAvatarUrl}
+                        size={24}
+                      />
+                      <span>{v}</span>
+                    </span>
+                  ) : (
+                    v
+                  )}
                 </dd>
               </div>
             ))}
           </dl>
+          {detail && (
+            <CurrentIdentity
+              actorId={detail.actorId}
+              recordedName={detail.actorName}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </>
   );
 }
+
+/**
+ * The actor as this server sees them *now*, next to the identity recorded with
+ * the action.
+ *
+ * The two are deliberately separate blocks with their own headings: a rename
+ * should never make an old audit row look like it was written under the new name,
+ * and a reader should never have to guess which one is evidence. The current
+ * profile comes from the roster the bot synchronized — no Discord request.
+ */
+function CurrentIdentity({
+  actorId,
+  recordedName,
+}: {
+  actorId: string;
+  recordedName: string;
+}) {
+  const { data } = useWorkspace();
+  const account = data.accounts.find((a) => a.userId === actorId);
+  if (!account) return null;
+  const current = personFields(account, account.name).name;
+  return (
+    <div className="mt-4 rounded-lg border bg-muted/30 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Current profile in this server
+      </p>
+      <div className="mt-2 flex items-center gap-2 text-xs">
+        <IdentityCell
+          id={account.userId}
+          name={account.name}
+          src={account.avatarUrl}
+          person={account}
+        />
+      </div>
+      <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+        {current.toLowerCase() === recordedName.toLowerCase()
+          ? "The name matches what was recorded with this action."
+          : `Recorded then as “${recordedName}”. This is their name and picture today, not a change to the record.`}{" "}
+        Their roles and membership are not part of an audit entry.
+      </p>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const { data, saveConfig } = useWorkspace();
   const [v, setV] = useState<GuildConfig>(structuredClone(data.guild.config));
@@ -600,21 +706,28 @@ export function SettingsPage() {
               label="Preferred locale"
               hint="Saved server preference. Dashboard and command copy currently use English."
             >
-              <Select
+              <FormSelect
                 value={v.locale}
-                onChange={(e) => setV({ ...v, locale: e.target.value })}
-              >
-                <option value="en">English</option>
-                <option value="de">Deutsch</option>
-                <option value="fr">Français</option>
-                <option value="es">Español</option>
-              </Select>
+                onValueChange={(next) => setV({ ...v, locale: next })}
+                options={[
+                  { value: "en", label: "English" },
+                  { value: "de", label: "Deutsch" },
+                  { value: "fr", label: "Français" },
+                  { value: "es", label: "Español" },
+                ]}
+              />
             </Field>
             <Field
               label="Timezone"
               hint="Used for display. Polling intervals are elapsed time, not wall-clock schedules."
             >
-              <Select
+              {/*
+                Deliberately native: the full IANA list is 400+ entries, and the
+                browser's own select gives OS type-ahead and list rendering that a
+                menu of 400 Radix items would not. `Location` keeps the display
+                order and label the settings page has always used.
+              */}
+              <NativeSelect
                 value={v.timezone}
                 onChange={(e) => setV({ ...v, timezone: e.target.value })}
               >
@@ -630,7 +743,7 @@ export function SettingsPage() {
                 ].map((t) => (
                   <option key={t}>{t}</option>
                 ))}
-              </Select>
+              </NativeSelect>
             </Field>
             <Field label="Server ID">
               <div className="flex h-10 items-center rounded-lg border bg-muted/30 px-3 font-mono text-[12px] text-muted-foreground">
@@ -650,37 +763,38 @@ export function SettingsPage() {
               label="Moderation audit channel"
               hint="Warnings, timeouts, and other moderation cases are logged here."
             >
-              <Select
+              <Combobox
                 value={v.auditChannelId}
-                onChange={(e) => setV({ ...v, auditChannelId: e.target.value })}
-              >
-                <option value="">No audit channel</option>
-                {textChannels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name}
-                  </option>
-                ))}
-              </Select>
+                onValueChange={(next) => setV({ ...v, auditChannelId: next })}
+                placeholder="No audit channel"
+                searchPlaceholder="Search channels…"
+                options={[
+                  { value: "", label: "No audit channel" },
+                  ...textChannels.map((c) => ({
+                    value: c.id,
+                    label: `#${c.name}`,
+                  })),
+                ]}
+              />
             </Field>
             <Field
               label="Default notification role"
               hint="Optional. Sources can override this role. @everyone is never allowed."
             >
-              <Select
+              <Combobox
                 value={v.notificationRoleId}
-                onChange={(e) =>
-                  setV({ ...v, notificationRoleId: e.target.value })
+                onValueChange={(next) =>
+                  setV({ ...v, notificationRoleId: next })
                 }
-              >
-                <option value="">No default notification</option>
-                {data.guild.roles
-                  .filter((r) => !r.managed && r.id !== data.guild.id)
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      @{r.name}
-                    </option>
-                  ))}
-              </Select>
+                placeholder="No default notification"
+                searchPlaceholder="Search roles…"
+                options={[
+                  { value: "", label: "No default notification" },
+                  ...data.guild.roles
+                    .filter((r) => !r.managed && r.id !== data.guild.id)
+                    .map((r) => ({ value: r.id, label: `@${r.name}` })),
+                ]}
+              />
             </Field>
           </div>
         </Card>

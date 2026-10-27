@@ -18,7 +18,7 @@ export default function Login() {
         orbit<span className="mb-4 text-primary">.</span>
       </Link>
       <div className="w-full max-w-md rounded-2xl border bg-card p-10 text-center shadow-xl shadow-violet-100/20">
-        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-50 text-violet-500">
+        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-50 text-violet-700 dark:text-violet-300">
           <Sparkles size={25} />
         </div>
         <h1 className="text-[28px] font-semibold leading-tight">

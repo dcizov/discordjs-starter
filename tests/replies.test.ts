@@ -187,8 +187,22 @@ describe("listening-room cards", () => {
     expect(data.description).toContain(
       "**1.** A public track — An artist · 3:45"
     );
-    expect(data.fields?.map((f) => f.value)).toEqual(["50%", "off"]);
+    // Every field is asserted: source link, requester, progress, voice, volume,
+    // repeat — in that order, and nothing invented when a value is unknown.
+    expect(data.fields?.map((f) => [f.name, f.value])).toEqual([
+      [
+        "Source",
+        "[Open on soundcloud.com](https://soundcloud.com/artist/track)",
+      ],
+      ["Requested by", "Member"],
+      ["Progress", "0:00 / 3:45 · 3:45 remaining"],
+      ["Voice", "Not connected"],
+      ["Volume", "50%"],
+      ["Repeat", "off"],
+    ]);
     expect(JSON.stringify(data)).not.toContain("private-url-query");
+    // The public page is linked; the stream identifier is not.
+    expect(JSON.stringify(data)).not.toContain("soundcloud.com/artist/track?");
     expect(JSON.stringify(data)).not.toContain("never-include-encoded");
     expect(
       embed(commandReply("queue", queueCard(state))).description
@@ -216,5 +230,84 @@ describe("listening-room cards", () => {
     expect(
       embed(commandReply("skip", musicActionCard("skip", queued))).description
     ).toContain("skip request was sent");
+  });
+});
+describe("music card links and artwork", () => {
+  const youtube: Track = {
+    ...track,
+    source: "youtube",
+    uri: "https://www.youtube.com/watch?v=dQw4w9WgXcQ&si=tracking-value",
+    artwork: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+  };
+  it("links the provider page, embeds artwork and names the provider", () => {
+    const data = embed(
+      commandReply(
+        "queue",
+        queueCard(
+          { ...state, current: youtube, tracks: [] },
+          { voiceChannel: "Listening room", queueLimit: 100 }
+        )
+      )
+    );
+    // Tracking parameters are dropped; the watch id survives.
+    expect(data.url).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(data.thumbnail?.url).toBe(
+      "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+    );
+    expect(data.fields?.[0]).toMatchObject({
+      name: "Source",
+      value: "[Open on YouTube](https://www.youtube.com/watch?v=dQw4w9WgXcQ)",
+    });
+    expect(data.fields).toContainEqual(
+      expect.objectContaining({ name: "Voice", value: "Listening room" })
+    );
+    const play = embed(
+      commandReply(
+        "play",
+        musicActionCard("play", { ...state, current: youtube, tracks: [] })
+      )
+    );
+    expect(play.url).toBe("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+  });
+  it("refuses unsafe pages and artwork instead of rendering them", () => {
+    const hostile: Track = {
+      ...youtube,
+      uri: "javascript:alert(1)",
+      artwork: "http://127.0.0.1/private.png",
+    };
+    const data = embed(
+      commandReply(
+        "queue",
+        queueCard({ ...state, current: hostile, tracks: [] })
+      )
+    );
+    expect(data.url).toBeUndefined();
+    expect(data.thumbnail).toBeUndefined();
+    expect(data.fields?.some((f) => f.name === "Source")).toBe(false);
+    const credentialed = embed(
+      commandReply(
+        "queue",
+        queueCard({
+          ...state,
+          current: { ...youtube, uri: "https://user:pw@youtube.com/watch?v=x" },
+          tracks: [],
+        })
+      )
+    );
+    expect(credentialed.url).toBeUndefined();
+  });
+  it("reports progress only when the backend reported a duration", () => {
+    const data = embed(
+      commandReply(
+        "queue",
+        queueCard({
+          ...state,
+          current: { ...track, duration: 0 },
+          tracks: [],
+          position: 5000,
+        })
+      )
+    );
+    expect(data.fields?.some((f) => f.name === "Progress")).toBe(false);
   });
 });

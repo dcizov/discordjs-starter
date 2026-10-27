@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { chooseOption } from "./support/ui";
 const root = "/dashboard/120000000000000001/overview";
 const hydrationError =
   /hydrat|server rendered|minified react error #(418|425)|react\.dev\/errors\/(418|425)/i;
@@ -42,16 +43,19 @@ for (const [zone, clientTime] of [
       expect(await chart.getAttribute("data-activity-timezone")).toBe(
         "Europe/Berlin"
       );
-      expect(
-        await chart.locator("svg").getAttribute("data-activity-labels")
-      ).toBe(serialized("data-activity-labels"));
-      expect(
-        await chart.locator("svg").getAttribute("data-activity-values")
-      ).toBe(serialized("data-activity-values"));
+      // The chart's own svg, not the metric select's chevron: the reference
+      // container now holds both, so the attribute is the stable selector.
+      const chartSvg = chart.locator("svg[data-activity-labels]");
+      expect(await chartSvg.getAttribute("data-activity-labels")).toBe(
+        serialized("data-activity-labels")
+      );
+      expect(await chartSvg.getAttribute("data-activity-values")).toBe(
+        serialized("data-activity-values")
+      );
       await expect(chart.locator("[data-activity-day]")).toHaveCount(7);
       await chart.locator("summary").click();
       await expect(chart.locator("tbody tr")).toHaveCount(7);
-      await page.getByLabel("Chart metric").selectOption("members");
+      await chooseOption(page, "Chart metric", "Rewarded members");
       await expect(
         chart.getByRole("columnheader", {
           name: "Rewarded members",

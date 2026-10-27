@@ -41,8 +41,11 @@ describe("version-matched Discord image URLs and public projection", () => {
   it("allows only the deliberately named local samples in demo and never substitutes them in live mode", () => {
     vi.stubEnv("DEMO_MODE", "true");
     expect(userAvatarUrl(id, DEMO_USER_AVATAR)).toBe(DEMO_USER_AVATAR);
+    expect(userAvatarUrl(id, "/demo/alex.svg")).toBe("/demo/alex.svg");
     expect(guildIconUrl(id, DEMO_GUILD_ICON)).toBe(DEMO_GUILD_ICON);
     expect(userAvatarUrl(id, "/other.svg")).toBeNull();
+    expect(userAvatarUrl(id, "/demo/../secret.svg")).toBeNull();
+    expect(userAvatarUrl(id, "/demo/avatars/secret.svg")).toBeNull();
     expect(guildIconUrl(id, DEMO_USER_AVATAR)).toBeNull();
     vi.stubEnv("DEMO_MODE", "false");
     expect(userAvatarUrl(id, DEMO_USER_AVATAR)).toBeNull();

@@ -9,6 +9,8 @@ import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import type { MusicService } from "../features/music/service";
 import { handleRoleInteraction } from "../features/roles/panels";
+import { SEARCH_SELECT_PREFIX } from "../features/music/search-session";
+import { handleMusicSearchPick } from "./music-search";
 import { dispatchCommand } from "../commands/dispatch";
 import { handleAutocomplete } from "./autocomplete";
 import { commandErrorReply, commandReply, type ReplyCard } from "./replies";
@@ -20,6 +22,10 @@ export async function onInteraction(
 ) {
   if (!i.guild) return;
   try {
+    if (i.isStringSelectMenu() && i.customId.startsWith(SEARCH_SELECT_PREFIX)) {
+      await handleMusicSearchPick(i, music);
+      return;
+    }
     if (i.isButton() || i.isStringSelectMenu()) {
       if (i.customId.startsWith("role:")) await handleRoleInteraction(i);
       return;
@@ -58,11 +64,13 @@ export async function onInteraction(
         "volume",
         "shuffle",
         "repeat",
+        "seek",
+        "search",
       ].includes(i.commandName)
     )
       await audit(
         i.guild.id,
-        { id: i.user.id, name: i.user.displayName },
+        { id: i.user.id, name: i.user.displayName, avatar: i.user.avatar },
         "failed",
         `music /${i.commandName}`,
         detail

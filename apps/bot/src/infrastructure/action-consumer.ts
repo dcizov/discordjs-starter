@@ -15,6 +15,8 @@ import { executeCommunity } from "../features/community";
 import type { MusicService } from "../features/music/service";
 import { publishPanel } from "../features/roles/panels";
 import { claimShopRole } from "../features/roles/shop";
+import { applyTemplateRun, captureTemplate } from "../features/templates/apply";
+import { syncRoster } from "./roster-sync";
 
 export async function executeDashboardAction(
   client: Client,
@@ -48,6 +50,24 @@ export async function executeDashboardAction(
     if (job.name === "claim-role")
       return await claimShopRole(actor, job.data.itemId);
     if (job.name === "music") return await music.action(actor, job.data);
+    if (job.name === "capture-template")
+      return await captureTemplate(guild, {
+        name: String(job.data.name ?? "Untitled template"),
+        description: String(job.data.description ?? ""),
+        include: {
+          structure: job.data.include?.structure !== false,
+          config: job.data.include?.config !== false,
+        },
+        actorId,
+      });
+    if (job.name === "apply-template")
+      return await applyTemplateRun(guild, {
+        templateId: String(job.data.templateId),
+        runId: String(job.data.runId),
+        fingerprint: String(job.data.fingerprint),
+        mapping: job.data.mapping,
+      });
+    if (job.name === "sync-roster") return await syncRoster(guild, "manual");
     if (job.name === "test-message") {
       const stored = await getGuild(guildId),
         source = await getResource(guildId, job.data.sourceId);
@@ -112,6 +132,7 @@ export function createActionConsumer(
           name:
             client.users.cache.get(job.data.actorId)?.displayName ??
             job.data.actorId,
+          avatar: client.users.cache.get(job.data.actorId)?.avatar ?? null,
         },
         "failed",
         job.name,

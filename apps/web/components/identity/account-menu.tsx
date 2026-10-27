@@ -67,11 +67,13 @@ export function AccountMenu({ onModeInfo }: { onModeInfo: () => void }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <div className="px-3 py-2">
+          {/* Same resolver as every list: the guild nickname, then the global
+              name, then the handle — with the handle repeated only when it
+              adds something. */}
           <p className="text-xs font-semibold">{data.user.name}</p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {data.demo
-              ? "Demo administrator · sample image"
-              : "Global Discord profile"}
+            {data.user.secondaryName ? `@${data.user.secondaryName} · ` : ""}
+            {data.demo ? "Demo administrator" : "Signed in with Discord"}
           </p>
         </div>
         <DropdownMenuSeparator />

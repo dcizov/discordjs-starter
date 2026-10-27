@@ -8,8 +8,11 @@ export function DemoNotice({ onModeInfo }: { onModeInfo: () => void }) {
   if (!data.demo || !visible) return null;
   return (
     <div className="mb-6 flex min-h-[34px] items-center justify-between gap-3 rounded-lg border border-violet-200/40 bg-[#f1edfc] px-3.5 py-2 dark:border-violet-500/20 dark:bg-violet-500/10">
-      <span className="flex items-center gap-2 text-[11px] text-[#8b75b3] dark:text-violet-300">
-        <FlaskConical size={13} className="text-violet-500" />
+      <span className="flex items-center gap-2 text-[11px] text-violet-700 dark:text-violet-300">
+        <FlaskConical
+          size={13}
+          className="text-violet-600 dark:text-violet-300"
+        />
         <span>
           <strong className="font-medium text-violet-600 dark:text-violet-300">
             A little space to explore.
@@ -22,7 +25,7 @@ export function DemoNotice({ onModeInfo }: { onModeInfo: () => void }) {
       </span>
       <div className="flex shrink-0 items-center gap-4">
         <button
-          className="text-[10px] font-medium text-violet-500 hover:underline"
+          className="text-[10px] font-medium text-violet-700 hover:underline dark:text-violet-300"
           onClick={() => onModeInfo()}
         >
           About demo mode <ArrowUpRight className="ml-0.5 inline" size={10} />

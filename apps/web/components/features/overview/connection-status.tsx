@@ -20,7 +20,7 @@ export function ConnectionStatus() {
     <>
       <Card className="flex flex-col">
         <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
-          <h2 className="text-[12px] font-semibold">Bot status</h2>
+          <h2 className="text-xs font-semibold">Bot status</h2>
           <Badge tone={online ? "green" : "amber"}>
             <span
               className={cn(
@@ -42,7 +42,7 @@ export function ConnectionStatus() {
             />
           </div>
           <div>
-            <p className="text-[12px] font-semibold">
+            <p className="text-xs font-semibold">
               {online
                 ? "Orbit is in good spirits."
                 : "No current gateway connection."}
@@ -85,7 +85,9 @@ export function ConnectionStatus() {
                 <span
                   className={cn(
                     "flex items-center gap-1.5",
-                    h.status === "healthy" ? "text-[#77a68e]" : "text-amber-500"
+                    h.status === "healthy"
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : "text-amber-700 dark:text-amber-300"
                   )}
                 >
                   <span
@@ -135,11 +137,22 @@ export function ConnectionStatus() {
                           : "amber"
                     }
                   >
-                    {h.status}
+                    {/* Same words as the summary card, so "degraded" and
+                        "Not connected" are not two names for one state. */}
+                    {h.status === "healthy"
+                      ? "Connected"
+                      : h.status === "degraded"
+                        ? "Degraded"
+                        : "Offline"}
                   </Badge>
                 </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {h.detail} · {h.latency}ms ·{" "}
+                <p className="mt-2 break-words text-[11px] leading-relaxed text-muted-foreground">
+                  {h.detail}
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {/* A zero latency is "not measured", not "0 ms": the music
+                      backend reports no round trip of its own. */}
+                  {h.latency > 0 ? `${h.latency} ms · ` : ""}
                   {relativeTime(h.updatedAt, data.presentation.referenceAt)}
                 </p>
               </div>

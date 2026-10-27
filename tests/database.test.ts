@@ -196,6 +196,39 @@ describe("atomic PostgreSQL economy transactions", () => {
       economyTransaction(input({ type: "transfer", amount: 1, toUserId: u1 }))
     ).rejects.toThrow("another");
   });
+  it("captures the actor avatar at the interaction and keeps it current, not historical", async () => {
+    const first = "a_0123456789abcdef0123456789abcdef";
+    const second = "0123456789abcdef0123456789abcdef";
+    await economyTransaction(input({ userAvatar: first }));
+    expect((await account()).avatar).toBe(first);
+    // A later interaction that carries a newer hash refreshes the stored
+    // identity (a transfer is used because daily and activity are rate limited).
+    await economyTransaction(
+      input({ type: "transfer", toUserId: u2, amount: 25, userAvatar: second })
+    );
+    expect((await account()).avatar).toBe(second);
+    // An interaction with no hash (a caller without a member object) must not
+    // erase what is already known.
+    await economyTransaction(
+      input({ type: "transfer", toUserId: u2, amount: 25 })
+    );
+    expect((await account()).avatar).toBe(second);
+  });
+  it("stores a transfer recipient's display name and avatar instead of their id", async () => {
+    await economyTransaction(input());
+    await economyTransaction(
+      input({
+        type: "transfer",
+        toUserId: u2,
+        amount: 50,
+        toUserName: "Recipient name",
+        toUserAvatar: "0123456789abcdef0123456789abcdef",
+      })
+    );
+    const recipient = await account(g1, u2);
+    expect(recipient.name).toBe("Recipient name");
+    expect(recipient.avatar).toBe("0123456789abcdef0123456789abcdef");
+  });
   it("enforces the daily window even with a new idempotency key", async () => {
     await economyTransaction(input());
     await expect(economyTransaction(input())).rejects.toThrow("24 hours");
@@ -410,6 +443,30 @@ describe("persistent feed deduplication and tenant isolation", () => {
         })
       ).total
     ).toBe(0);
+  });
+  it("keeps a one-line summary and the full diagnostic apart", async () => {
+    const summary =
+      "YouTube playback failed (provider-login): this video requires login";
+    const details =
+      "Client [ANDROID_VR] failed: This video requires login.\nClient [WEB] failed: No supported audio streams available.";
+    await audit(g1, actor, "failed", "music playback", summary, { details });
+    const page = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "failed",
+    });
+    expect(page.rows[0]).toMatchObject({ detail: summary, details });
+    // Old rows predate the column and still serialize (null, not undefined).
+    await audit(g1, actor, "failed", "music", "A legacy summary");
+    const legacy = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "legacy",
+      filter: "failed",
+    });
+    expect(legacy.rows[0]).toMatchObject({ detail: "A legacy summary" });
+    expect(legacy.rows[0].details ?? null).toBeNull();
   });
   it("writes configuration and its audit record together", async () => {
     const r = await saveResource(
@@ -1088,5 +1145,92 @@ describe("profile refresh SQL ownership and session lifetime", () => {
       vi.unstubAllGlobals();
       await database().db.delete(s.sessions).where(eq(s.sessions.id, id));
     }
+  });
+});
+
+describe("server-side history ordering", () => {
+  beforeEach(async () => {
+    await database().db.delete(s.auditLogs).where(eq(s.auditLogs.guildId, g1));
+  });
+
+  it("orders by an allowed text field in both directions", async () => {
+    await audit(g1, { id: u1, name: "zoe" }, "created", "roles", "first");
+    await audit(g1, { id: u1, name: "alice" }, "updated", "news", "second");
+    await audit(g1, { id: u1, name: "mike" }, "deleted", "deals", "third");
+
+    const asc = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "asc",
+    });
+    expect(asc.rows.map((r) => r.actorName)).toEqual(["alice", "mike", "zoe"]);
+
+    const desc = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "desc",
+    });
+    expect(desc.rows.map((r) => r.actorName)).toEqual(["zoe", "mike", "alice"]);
+    // Ordering never changes which rows match: same filter, same total.
+    expect(desc.total).toBe(asc.total);
+  });
+
+  it("keeps the default newest-first order when nothing is requested", async () => {
+    await audit(g1, actor, "created", "roles", "older");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await audit(g1, actor, "updated", "roles", "newer");
+    const page = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 7,
+      query: "",
+      filter: "all",
+    });
+    expect(page.rows[0].detail).toBe("newer");
+    expect(page.rows[1].detail).toBe("older");
+  });
+
+  it("rejects a field the screen does not show for that dataset", async () => {
+    // "amount" belongs to the ledger; sorting audit logs by it would be an
+    // invented column, so it must fail rather than silently fall back.
+    await expect(
+      queryHistory(g1, "audit", {
+        page: 1,
+        pageSize: 7,
+        query: "",
+        filter: "all",
+        sort: "amount" as never,
+        dir: "asc",
+      })
+    ).rejects.toThrow('Cannot sort audit history by "amount"');
+  });
+
+  it("pages a sorted result without repeating or skipping rows", async () => {
+    for (const name of ["a", "b", "c", "d", "e", "f", "g", "h"])
+      await audit(g1, { id: u1, name }, "created", "roles", name);
+    const first = await queryHistory(g1, "audit", {
+      page: 1,
+      pageSize: 3,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "asc",
+    });
+    const second = await queryHistory(g1, "audit", {
+      page: 2,
+      pageSize: 3,
+      query: "",
+      filter: "all",
+      sort: "actorName",
+      dir: "asc",
+    });
+    expect(first.rows.map((r) => r.actorName)).toEqual(["a", "b", "c"]);
+    expect(second.rows.map((r) => r.actorName)).toEqual(["d", "e", "f"]);
+    expect(first.total).toBe(8);
   });
 });

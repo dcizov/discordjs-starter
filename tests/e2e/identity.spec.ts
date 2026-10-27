@@ -2,13 +2,16 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { setTheme } from "./support/ui";
 const root = "/dashboard/120000000000000001/overview";
 const guildButton = (page: Page, name = "The Cozy Corner") =>
   page.getByRole("button", {
     name: `Switch server, current: ${name}`,
     exact: true,
   });
-const accountButton = (page: Page, name = "Jamie Davis") =>
+// The account menu names the signed-in person the way this server does: their
+// nickname here, not the global account name.
+const accountButton = (page: Page, name = "Jamie") =>
   page.getByRole("button", { name: `Account menu for ${name}`, exact: true });
 async function visit(page: Page) {
   await page.goto(root);
@@ -59,9 +62,10 @@ test("real local demo images decode in fixed-size accessible identity controls",
     animations: "disabled",
   });
   await account.click();
-  await expect(
-    page.getByText("Demo administrator · sample image")
-  ).toBeVisible();
+  // The menu shows the same identity the roster holds: this guild's name for
+  // the person, then the handle, then what the workspace is.
+  await expect(page.getByText("@jamie.davis", { exact: false })).toBeVisible();
+  await expect(page.getByText(/Demo administrator/)).toBeVisible();
   await page.screenshot({
     path: ".artifacts/dashboard-account-demo.png",
     animations: "disabled",
@@ -115,7 +119,11 @@ test("failed network images preserve initials and dimensions and can recover on 
     .locator('span[aria-hidden="true"]')
     .first();
   await expect(guildFallback).toHaveText("CC");
-  await expect(userFallback).toHaveText("JD");
+  // Initials come from the name the surface actually shows. This menu names the
+  // signed-in person by their nickname in this server ("Jamie"), so a broken
+  // picture falls back to one letter rather than initials from a name that is
+  // not on screen.
+  await expect(userFallback).toHaveText("J");
   expect((await guildFallback.boundingBox())?.width).toBe(33);
   expect((await userFallback.boundingBox())?.height).toBe(30);
   await page.screenshot({
@@ -353,8 +361,7 @@ test("navigation and identity controls pass scoped contrast/label checks in both
 }) => {
   await visit(page);
   for (const theme of ["light", "dark"]) {
-    if (theme === "dark")
-      await page.getByRole("button", { name: "Toggle color theme" }).click();
+    if (theme === "dark") await setTheme(page, "dark");
     await expect(page.locator("html")).toHaveClass(
       new RegExp(`\\b${theme}\\b`)
     );

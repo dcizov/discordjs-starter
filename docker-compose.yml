@@ -2,6 +2,9 @@ x-app: &app
   build:
     context: .
     target: runtime
+    args:
+      # Source ref for the docs "view the source" links; defaults to `main`.
+      ORBIT_SOURCE_REF: ${ORBIT_SOURCE_REF:-}
   image: orbit-community:local
   env_file:
     - path: .env

@@ -6,6 +6,17 @@ import { dealQuality, eligibleDeal } from "@orbit/core/deal-policy";
 import { createQueue } from "@orbit/core/queue";
 import { getGuild, getResource, listResources, reserveDelivery } from "./store";
 let queue: ReturnType<typeof createQueue> | undefined;
+/**
+ * Route one poll's items for one source and enqueue the deliveries that survive
+ * routing, dedupe and policy.
+ *
+ * Silently returns `0` (rather than throwing) when the guild is uninstalled, the
+ * module is off, or the source was disabled after the fetch: those are normal
+ * races with a dashboard edit, not failures that should retry a feed poll. Each
+ * accepted item is reserved first, so a crashed poll re-runs without duplicating
+ * posts. Demo mode throws instead — demo must never reach Discord. Never call this
+ * from a dashboard request; it runs in the worker with the bot's queue.
+ */
 export async function dispatchItems(source: Resource, items: FeedItem[]) {
   if (isDemo())
     throw new Error("Live delivery dispatch is disabled in demo mode");
@@ -48,6 +59,11 @@ export async function dispatchItems(source: Resource, items: FeedItem[]) {
           ...(source.kind === "deal" && item.deal ? { deal: item.deal } : {}),
           summary: item.summary,
           tags: normalized.tags,
+          image: item.image ?? null,
+          attribution: item.attribution ?? "unknown",
+          providerLabel: item.sourceLabel ?? "",
+          publisher: item.publisher ?? "",
+          publishedAt: item.publishedAt,
           notificationRoleId:
             settings.notificationRoleId || guild.config.notificationRoleId,
           color: settings.embedColor ?? "#8b5cf6",

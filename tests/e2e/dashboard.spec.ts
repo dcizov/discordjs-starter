@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { chooseOption, setTheme } from "./support/ui";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, url: string) {
@@ -17,7 +18,27 @@ test("overview is polished, responsive, and clearly labels simulation", async ({
   await expect(
     page.getByText("Your changes are saved, not sent.")
   ).toBeVisible();
-  await expect(page.getByText("2,846", { exact: true })).toBeVisible();
+  // The demo's member total is the roster it can actually show, not a
+  // decorative number: compare the card with the members API.
+  const roster = await page.request.get(
+    `/api/guilds/${guild}/members?pageSize=1`
+  );
+  expect(roster.ok()).toBe(true);
+  const counts = (await roster.json()).counts as {
+    guildMemberCount: number;
+    syncedMembers: number;
+  };
+  expect(counts.guildMemberCount).toBe(counts.syncedMembers);
+  await expect(
+    page
+      .getByText(
+        new Intl.NumberFormat("en-US").format(counts.guildMemberCount),
+        {
+          exact: true,
+        }
+      )
+      .first()
+  ).toBeVisible();
   await expect(page.getByText("Sample activity")).toBeVisible();
   await page.getByRole("button", { name: "Customize", exact: true }).click();
   await page.getByRole("switch", { name: "A little welcome" }).click();
@@ -31,9 +52,9 @@ test("overview is polished, responsive, and clearly labels simulation", async ({
   await page.getByRole("button", { name: "Customize", exact: true }).click();
   await page.getByRole("switch", { name: "A little welcome" }).click();
   await page.getByRole("button", { name: "Looks like home" }).click();
-  await page.getByRole("button", { name: "Toggle color theme" }).click();
+  await setTheme(page, "dark");
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await page.getByRole("button", { name: "Toggle color theme" }).click();
+  await setTheme(page, "light");
 });
 test("role panels have working create, preview, publish, edit, and delete flows", async ({
   page,
@@ -102,15 +123,17 @@ test("role panels have working create, preview, publish, edit, and delete flows"
 test("moderation rules validate, persist, filter, and delete", async ({
   page,
 }) => {
+  // A name of its own. Playwright retries a failed test in a database that the
+  // first attempt already wrote to, and a fixed name then produces two rows
+  // that only make the retry fail with an ambiguous-locator error.
+  const name = `E2E · Kind conversations ${Date.now().toString(36)}`;
   await visit(page, `${root}/moderation`);
   await page
     .getByRole("button", { name: "Create automod rule", exact: true })
     .click();
   const d = page.getByRole("dialog");
-  await d.getByLabel("Name", { exact: true }).fill("E2E · Kind conversations");
-  await d
-    .getByLabel("What should Orbit watch for?")
-    .selectOption("blocked_terms");
+  await d.getByLabel("Name", { exact: true }).fill(name);
+  await chooseOption(d, "What should Orbit watch for?", "Blocked terms");
   await d
     .getByLabel("Blocked terms", { exact: true })
     .fill("blocked phrase\nsecond phrase");
@@ -118,28 +141,26 @@ test("moderation rules validate, persist, filter, and delete", async ({
     .getByRole("button", { name: "Create automod rule", exact: true })
     .click();
   await expect(d).not.toBeVisible();
-  await page
-    .getByPlaceholder("Search automod rules…")
-    .fill("Kind conversations");
+  await page.getByPlaceholder("Search automod rules…").fill(name);
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await page.getByRole("switch", { name: `Toggle ${name}` }).click();
   await expect(
-    page.getByText("E2E · Kind conversations", { exact: true })
-  ).toBeVisible();
-  await page
-    .getByRole("switch", { name: "Toggle E2E · Kind conversations" })
-    .click();
-  await expect(
-    page.getByRole("switch", { name: "Toggle E2E · Kind conversations" })
+    page.getByRole("switch", { name: `Toggle ${name}` })
   ).not.toBeChecked();
-  await page
-    .getByRole("button", { name: "Actions for E2E · Kind conversations" })
-    .click();
+  // The switch persists through a refresh, and the row menu is opened on a
+  // table that is not still re-rendering the response.
+  await visit(page, `${root}/moderation`);
+  await page.getByPlaceholder("Search automod rules…").fill(name);
+  await expect(page.getByText(name, { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("switch", { name: `Toggle ${name}` })
+  ).not.toBeChecked();
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
   await page.getByRole("menuitem", { name: "Delete automod rule" }).click();
   await page
     .getByRole("button", { name: "Delete configuration", exact: true })
     .click();
-  await expect(
-    page.getByText("E2E · Kind conversations", { exact: true })
-  ).not.toBeVisible();
+  await expect(page.getByText(name, { exact: true })).not.toBeVisible();
 });
 test("news sources can be tested, routed, and safely simulated", async ({
   page,
@@ -148,22 +169,23 @@ test("news sources can be tested, routed, and safely simulated", async ({
   await page.getByRole("button", { name: "Add news source" }).click();
   const d = page.getByRole("dialog");
   await d.getByLabel("Name", { exact: true }).fill("E2E · Community dispatch");
-  await d.getByLabel("Source adapter").selectOption("webhook");
+  await chooseOption(d, "Source adapter", "Signed incoming webhook");
   await d.getByLabel("Source tags").fill("Community, Updates");
   await d
     .getByRole("button", { name: "Create news source", exact: true })
     .click();
   await expect(d).not.toBeVisible();
-  const card = page
-    .locator("div.rounded-xl")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "E2E · Community dispatch",
-        exact: true,
-      }),
-    })
-    .last();
-  await card.getByRole("button", { name: "Test source", exact: true }).click();
+  // News sources are cards, each with its own action menu; the moderation rules
+  // on the other tab are the table. Assert the card arrived before using it.
+  await expect(
+    page.getByRole("heading", { name: "E2E · Community dispatch", exact: true })
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Actions for E2E · Community dispatch" })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "Test source", exact: true })
+    .click();
   await expect(
     page.getByText("Your source is ready for a test flight")
   ).toBeVisible();
@@ -176,12 +198,12 @@ test("news sources can be tested, routed, and safely simulated", async ({
     page.getByText("Test delivery simulated — nothing sent to Discord.")
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Delivery history", exact: true })
+    .getByRole("tab", { name: "Delivery history", exact: true })
     .click();
   await expect(
     page.getByText("Test message from E2E · Community dispatch").first()
   ).toBeVisible();
-  await page.getByRole("button", { name: "Sources", exact: true }).click();
+  await page.getByRole("tab", { name: "Sources", exact: true }).click();
   await page
     .getByRole("button", { name: "Actions for E2E · Community dispatch" })
     .click();
@@ -222,7 +244,7 @@ test("economy daily rewards and transfers update persistent balances", async ({
   const final = after.accounts.find((a: any) => a.userId === after.user.id);
   expect(final.balance).toBe(me.balance + (me.lastDaily ? 0 : 250) - 30);
   await page
-    .getByRole("button", { name: "Transaction history", exact: true })
+    .getByRole("tab", { name: "Transaction history", exact: true })
     .click();
   await page
     .getByPlaceholder("Search transactions…")

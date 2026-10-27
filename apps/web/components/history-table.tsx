@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useWorkspace } from "./workspace";
+import { historyQueryString } from "@orbit/core/history-query";
 import { DataTable, type Column } from "./data-table";
-import { Button } from "./ui/button";
-import { Skeleton } from "./ui/primitives";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import type { FacetFilter } from "./table-facet";
+import { ErrorState, Skeleton } from "./ui/primitives";
 export function HistoryTable<T extends { id: string }>({
   kind,
   query = "",
@@ -12,6 +12,14 @@ export function HistoryTable<T extends { id: string }>({
   columns,
   emptyTitle,
   emptyDescription,
+  searchLabel,
+  searchPlaceholder,
+  onQueryChange,
+  facetLabel,
+  facetTitle,
+  facetOptions,
+  onFilterChange,
+  footerNote,
 }: {
   kind: "audit" | "ledger" | "deliveries" | "cases";
   query?: string;
@@ -19,9 +27,29 @@ export function HistoryTable<T extends { id: string }>({
   columns: Column<T>[];
   emptyTitle?: string;
   emptyDescription?: string;
+  /**
+   * Search and facet chrome belong to the table. A caller that also filters
+   * other views with the same term passes the handlers and keeps ownership of
+   * the state; a caller that does not gets no search box at all.
+   */
+  searchLabel?: string;
+  searchPlaceholder?: string;
+  onQueryChange?: (value: string) => void;
+  facetLabel?: string;
+  facetTitle?: string;
+  facetOptions?: { value: string; label: string }[];
+  onFilterChange?: (value: string) => void;
+  footerNote?: React.ReactNode;
 }) {
   const { api, data } = useWorkspace();
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(7);
+  // Sorting is a server contract: changing it restarts at page 1 so the reader
+  // never sees page 4 of a different ordering.
+  const [sort, setSort] = useState<{ field: string; dir: "asc" | "desc" }>({
+    field: "createdAt",
+    dir: "desc",
+  });
   const [result, setResult] = useState<{ rows: T[]; total: number } | null>(
     null
   );
@@ -37,12 +65,21 @@ export function HistoryTable<T extends { id: string }>({
           ? data.deliveries[0]?.id
           : data.resources.find((r) => r.kind === "case")?.id;
   useEffect(() => setPage(1), [query, filter, kind]);
+  useEffect(() => setPage(1), [pageSize]);
   useEffect(() => {
     let active = true;
     setLoading(true);
     const timer = setTimeout(() => {
       api(
-        `/history?${new URLSearchParams({ kind, page: String(page), pageSize: "7", query, filter })}`
+        `/history?${historyQueryString({
+          kind,
+          page,
+          pageSize,
+          query,
+          filter,
+          sort: sort.field,
+          dir: sort.dir,
+        })}`
       )
         .then((r) => {
           if (active) {
@@ -61,25 +98,13 @@ export function HistoryTable<T extends { id: string }>({
       active = false;
       clearTimeout(timer);
     };
-  }, [api, kind, page, query, filter, token, retry]);
-  if (error)
-    return (
-      <div
-        role="alert"
-        className="flex flex-col items-center gap-3 p-10 text-center"
-      >
-        <AlertCircle size={22} className="text-amber-500" />
-        <p className="text-xs text-muted-foreground">{error}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setRetry((v) => v + 1)}
-        >
-          <RefreshCw size={12} />
-          Try again
-        </Button>
-      </div>
-    );
+  }, [api, kind, page, pageSize, query, filter, sort, token, retry]);
+  const retryRequest = () => setRetry((v) => v + 1);
+  // A first request that failed must not look like a request still in flight:
+  // an endless skeleton is the one state a reader cannot act on. The failure is
+  // reported with the same retry the table uses once rows have arrived.
+  if (error && !result)
+    return <ErrorState detail={error} onRetry={retryRequest} />;
   if (!result)
     return (
       <div className="space-y-4 p-5" aria-label="Loading records">
@@ -89,19 +114,77 @@ export function HistoryTable<T extends { id: string }>({
       </div>
     );
   return (
-    <div
-      aria-busy={loading}
-      className={
-        loading ? "opacity-60 transition-opacity" : "transition-opacity"
+    <DataTable
+      rows={result.rows}
+      columns={columns}
+      loading={loading}
+      pageSize={pageSize}
+      pagination={{
+        page,
+        total: result.total,
+        onPage: setPage,
+        onPageSize: setPageSize,
+      }}
+      sort={{
+        field: sort.field,
+        dir: sort.dir,
+        // Reset the page with the ordering change, in one render, so a listener
+        // on page 4 does not fetch "page 4 of the new sort" first.
+        onChange: (field) => {
+          setPage(1);
+          setSort((current) =>
+            current.field === field
+              ? { field, dir: current.dir === "asc" ? "desc" : "asc" }
+              : { field, dir: "desc" }
+          );
+        },
+      }}
+      label={
+        kind === "audit"
+          ? "Audit events"
+          : kind === "ledger"
+            ? "Transaction history"
+            : kind === "deliveries"
+              ? "Delivery history"
+              : "Moderation cases"
       }
-    >
-      <DataTable
-        rows={result.rows}
-        columns={columns}
-        pagination={{ page, total: result.total, onPage: setPage }}
-        emptyTitle={emptyTitle}
-        emptyDescription={emptyDescription}
-      />
-    </div>
+      search={
+        onQueryChange && searchLabel
+          ? {
+              value: query,
+              onChange: onQueryChange,
+              placeholder: searchPlaceholder ?? "Search…",
+              label: searchLabel,
+            }
+          : undefined
+      }
+      filters={
+        onFilterChange && facetOptions?.length
+          ? ([
+              {
+                key: `${kind}-facet`,
+                label: facetLabel ?? facetTitle ?? "Filter",
+                title: facetTitle ?? "Filter",
+                value: filter,
+                allValue: "all",
+                onChange: onFilterChange,
+                options: facetOptions,
+                searchable: facetOptions.length > 6,
+              },
+            ] satisfies FacetFilter[])
+          : undefined
+      }
+      footerNote={footerNote}
+      // A filter that matches nothing is not an empty history. The copy names
+      // the search rather than claiming the community has no records yet.
+      emptyTitle={query || filter !== "all" ? "No records match" : emptyTitle}
+      emptyDescription={
+        query || filter !== "all"
+          ? "Try a shorter search term or a different filter. The search and filters above stay available."
+          : emptyDescription
+      }
+      error={error}
+      onRetry={retryRequest}
+    />
   );
 }

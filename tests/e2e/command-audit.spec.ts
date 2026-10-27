@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { chooseOption } from "./support/ui";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, path: string) {
@@ -32,15 +33,14 @@ test("commands are discoverable, derived from registration, searchable, and filt
   await expect(
     page.getByRole("heading", { name: "One command away." })
   ).toBeVisible();
-  await expect(page.getByRole("article")).toHaveCount(44);
+  await expect(page.getByRole("article")).toHaveCount(47);
   await expect(
-    page.getByText("Showing 44 of 44 command invocations", { exact: false })
+    page.getByText("Showing 47 of 47 command invocations", { exact: false })
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "This does not verify which commands are currently registered in Discord.",
-      { exact: false }
-    )
+    page.getByText("it does not check what Discord currently has", {
+      exact: false,
+    })
   ).toBeVisible();
   const search = page.getByPlaceholder(
     "Search commands, arguments, or permissions…"
@@ -54,8 +54,8 @@ test("commands are discoverable, derived from registration, searchable, and filt
     timeout.getByText("Moderate Members", { exact: true })
   ).toBeVisible();
   await search.fill("");
-  await page.getByLabel("Filter command module").selectOption("music");
-  await expect(page.getByRole("article")).toHaveCount(9);
+  await chooseOption(page, "Filter command module", "Music");
+  await expect(page.getByRole("article")).toHaveCount(11);
   await expect(
     page.getByRole("article", { name: "/play", exact: true })
   ).toBeVisible();
@@ -69,8 +69,8 @@ test("commands are discoverable, derived from registration, searchable, and filt
   expect(await catalog.json()).toMatchObject({
     source: "registration-definitions",
     registrationVerified: false,
-    rootCount: 29,
-    invocationCount: 44,
+    rootCount: 32,
+    invocationCount: 47,
   });
   expect(
     (await page.request.get("/api/guilds/990000000000000999/commands")).status()
@@ -114,7 +114,7 @@ test("command reference handles a failed load and retries instead of showing an 
     page.getByText("The command reference couldn’t load.", { exact: true })
   ).toBeVisible();
   await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await expect(page.getByRole("article")).toHaveCount(44);
+  await expect(page.getByRole("article")).toHaveCount(47);
 });
 test("audit detail copies the exact stored multiline error and full event JSON", async ({
   page,

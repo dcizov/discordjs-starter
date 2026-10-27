@@ -8,6 +8,7 @@ const f = vi.hoisted(() => ({
   message: vi.fn(),
   reaction: vi.fn(),
   interaction: vi.fn(),
+  musicCleanup: vi.fn(),
   warn: vi.fn(),
 }));
 vi.mock("../apps/bot/src/infrastructure/guild-sync", () => ({
@@ -29,13 +30,24 @@ vi.mock("@orbit/core/logger", () => ({
 import { attachGatewayEvents } from "../apps/bot/src/events/gateway";
 beforeEach(() => {
   vi.clearAllMocks();
-  for (const mock of [f.sync, f.remove, f.message, f.reaction, f.interaction])
+  for (const mock of [
+    f.sync,
+    f.remove,
+    f.message,
+    f.reaction,
+    f.interaction,
+    f.musicCleanup,
+  ])
     mock.mockResolvedValue(undefined);
 });
 function setup() {
   const emitter = Object.assign(new EventEmitter(), { user: { id: "bot" } });
   const client = emitter as unknown as Client;
-  const stop = attachGatewayEvents(client, {} as MusicService, {} as REST);
+  const stop = attachGatewayEvents(
+    client,
+    { guildRemoved: f.musicCleanup } as unknown as MusicService,
+    {} as REST
+  );
   return { emitter, stop };
 }
 describe("owned, explicitly typed gateway listeners", () => {
@@ -81,6 +93,8 @@ describe("owned, explicitly typed gateway listeners", () => {
       [reaction, user, false],
     ]);
     expect(f.remove).toHaveBeenCalledWith("guild");
+    // Leaving the guild also drops the pending music leave for that guild.
+    expect(f.musicCleanup).toHaveBeenCalledWith("guild");
     stop();
   });
   it("disposes idempotently without detaching somebody else's listener", () => {

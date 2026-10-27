@@ -1,9 +1,23 @@
 "use client";
 import { cn } from "@/lib/utils";
 import * as Primitive from "@radix-ui/react-dropdown-menu";
+import { Check } from "lucide-react";
 import * as React from "react";
 export const DropdownMenu = Primitive.Root;
 export const DropdownMenuTrigger = Primitive.Trigger;
+/** Non-interactive heading inside a menu; not a focusable item. */
+export const DropdownMenuLabel = ({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof Primitive.Label>) => (
+  <Primitive.Label
+    className={cn(
+      "px-3 pb-1 pt-1.5 text-[10px] font-medium text-muted-foreground",
+      className
+    )}
+    {...props}
+  />
+);
 export const DropdownMenuSeparator = () => (
   <Primitive.Separator className="my-1.5 h-px bg-border" />
 );
@@ -39,3 +53,42 @@ export function DropdownMenuItem({
     />
   );
 }
+export const DropdownMenuCheckboxItem = ({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof Primitive.CheckboxItem>) => (
+  <Primitive.CheckboxItem
+    className={cn(
+      "relative flex cursor-pointer select-none items-center gap-2 rounded-md py-2 pl-8 pr-3 text-xs outline-none focus:bg-muted data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2.5 flex size-3.5 items-center justify-center">
+      <Primitive.ItemIndicator>
+        <Check size={12} strokeWidth={3} className="text-primary" />
+      </Primitive.ItemIndicator>
+    </span>
+    {props.children}
+  </Primitive.CheckboxItem>
+);
+export const DropdownMenuRadioGroup = Primitive.RadioGroup;
+export const DropdownMenuRadioItem = ({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof Primitive.RadioItem>) => (
+  <Primitive.RadioItem
+    className={cn(
+      "relative flex cursor-pointer select-none items-center gap-2 rounded-md py-2 pl-8 pr-3 text-xs outline-none focus:bg-muted data-[disabled]:opacity-50",
+      className
+    )}
+    {...props}
+  >
+    <span className="absolute left-2.5 flex size-3.5 items-center justify-center">
+      <Primitive.ItemIndicator>
+        <span className="size-1.5 rounded-full bg-primary" />
+      </Primitive.ItemIndicator>
+    </span>
+    {props.children}
+  </Primitive.RadioItem>
+);

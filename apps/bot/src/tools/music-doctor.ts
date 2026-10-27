@@ -14,9 +14,12 @@ Usage:
   npm run music:doctor
   npm run music:doctor -- --query "the same failing search text"
   npm run music:doctor -- --query "https://soundcloud.com/ARTIST/TRACK"
+  npm run music:doctor -- --query "the same failing search text" --source youtube
 
 Options:
   --query TEXT    Optional 2–200 character search or approved source URL.
+  --source ID     Optional text-search provider for --query: soundcloud,
+                  youtube, youtube-music, bandcamp. Default: MUSIC_SEARCH_PREFIX.
   -h, --help      Show help with no credentials or network requests.
 
 Requires DEMO_MODE=false, LAVALINK_URL=hostname:port, and LAVALINK_PASSWORD
@@ -24,8 +27,8 @@ in the root .env. LAVALINK_SECURE=true enables TLS.
 Run from the same network as the bot: host-run localhost:2333 or Compose's
 lavalink:2333. Does not require Discord credentials, a database, or Redis.
 
-Reads /v4/info and optionally /v4/loadtracks. Reports version, loaded source
-managers, plugins, and sanitized lookup failure details. Never logs in to
+Reads /v4/info and optionally /v4/loadtracks. Reports version, the status of
+every supported search provider, plugins, and sanitized lookup failure details. Never logs in to
 Discord, joins voice, plays audio, or changes the queue. Successful metadata
 loading does not verify Discord playback. It never falls back to another source.
 JSON goes to stdout; exit status 1 indicates a failed check.
@@ -43,12 +46,19 @@ async function main() {
       "Music diagnostics require DEMO_MODE=false. Demo mode never contacts Lavalink or audio providers."
     );
   validateEnvironment("music-doctor");
+  const host = required("LAVALINK_URL");
+  const secure = process.env.LAVALINK_SECURE === "true";
   const client = createMusicDoctorClient({
-    host: required("LAVALINK_URL"),
+    host,
     password: required("LAVALINK_PASSWORD"),
-    secure: process.env.LAVALINK_SECURE === "true",
+    secure,
   });
-  const report = await runMusicDoctor(client, { query: options.query });
+  const report = await runMusicDoctor(client, {
+    query: options.query,
+    source: options.source,
+    host,
+    secure,
+  });
   await new Promise<void>((done, fail) => {
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`, (error) =>
       error ? fail(error) : done()

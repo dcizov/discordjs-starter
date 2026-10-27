@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LoadType, type LavalinkResponse, type Track } from "shoukaku";
 import {
   musicSourceFailure,
+  musicSourceFailureReport,
   prepareMusicQuery,
   resolveMusicQuery,
   type MusicNodeInfo,
@@ -229,6 +230,172 @@ describe("music source resolution", () => {
       expect(resolve).toHaveBeenCalledWith("scsearch:Public track");
     }
   });
+  it("returns as many search candidates as asked for, up to five", async () => {
+    const hits = Array.from({ length: 7 }, (_, n) => track(`Hit ${n}`));
+    const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({
+      loadType: LoadType.SEARCH,
+      data: hits,
+    }));
+    const five = await resolveMusicQuery({ resolve }, "Public track", {
+      info,
+      settings,
+      limit: 5,
+    });
+    expect(five.tracks).toHaveLength(5);
+    // A default lookup (quick play) still takes one.
+    const one = await resolveMusicQuery({ resolve }, "Public track", {
+      info,
+      settings,
+    });
+    expect(one.tracks).toHaveLength(1);
+    // Over-large or fractional limits are clamped, never forwarded unbounded.
+    const clamped = await resolveMusicQuery({ resolve }, "Public track", {
+      info,
+      settings,
+      limit: 500,
+    });
+    expect(clamped.tracks).toHaveLength(5);
+    expect(resolve).toHaveBeenCalledTimes(3);
+  });
+  it("never truncates a direct URL or playlist to the search limit", async () => {
+    const first = track(),
+      second = track("Second");
+    const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({
+      loadType: LoadType.PLAYLIST,
+      data: {
+        encoded: "",
+        info: { name: "Playlist", selectedTrack: 0 },
+        pluginInfo: {},
+        tracks: [first, second],
+      },
+    }));
+    const loaded = await resolveMusicQuery(
+      { resolve },
+      "https://soundcloud.com/artist/sets/public",
+      { info, settings, resolveHost: publicDns, limit: 1 }
+    );
+    expect(loaded.tracks).toEqual([first, second]);
+    expect(loaded.kind).toBe("url");
+    expect(resolve).toHaveBeenCalledWith(
+      "https://soundcloud.com/artist/sets/public"
+    );
+  });
+  it("maps an explicit provider choice to its approved prefix and manager", async () => {
+    const youtubeTrack: Track = {
+      ...track(),
+      info: {
+        ...track().info,
+        title: "Track",
+        sourceName: "youtube",
+        uri: "https://www.youtube.com/watch?v=example",
+      },
+    };
+    const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({
+      loadType: LoadType.SEARCH,
+      data: [youtubeTrack],
+    }));
+    const youtube = await prepareMusicQuery(
+      "Track",
+      settings,
+      publicDns,
+      "youtube"
+    );
+    expect(youtube).toMatchObject({
+      identifier: "ytsearch:Track",
+      source: "youtube",
+      kind: "search",
+    });
+    expect(youtube.provider?.id).toBe("youtube");
+    const music = await prepareMusicQuery(
+      "Track",
+      settings,
+      publicDns,
+      "youtube-music"
+    );
+    // Distinct provider/catalogue, same Lavalink source manager.
+    expect(music).toMatchObject({
+      identifier: "ytmsearch:Track",
+      source: "youtube",
+    });
+    expect(music.provider?.id).toBe("youtube-music");
+    expect(
+      await prepareMusicQuery("Track", settings, publicDns, "bandcamp")
+    ).toMatchObject({ identifier: "bcsearch:Track", source: "bandcamp" });
+    // A prefix is accepted as the configured default, never as raw backend input
+    // from a user-facing option (`scsearch:raw` is rejected below).
+    expect(
+      await prepareMusicQuery("Track", {
+        ...settings,
+        searchPrefix: "ytsearch",
+      })
+    ).toMatchObject({ identifier: "ytsearch:Track" });
+    const selected = await resolveMusicQuery({ resolve }, "Track", {
+      info: { ...info, sourceManagers: [...info.sourceManagers, "youtube"] },
+      settings,
+      provider: "youtube",
+      limit: 5,
+    });
+    expect(selected.provider?.label).toBe("YouTube");
+    expect(resolve).toHaveBeenCalledWith("ytsearch:Track");
+  });
+  it("refuses unknown providers and raw backend identifiers", async () => {
+    for (const bad of ["scsearch:raw", "http://example.com", "twitch", " "])
+      await expect(
+        prepareMusicQuery("Track", settings, publicDns, bad)
+      ).rejects.toThrow(/Unknown search provider|approved source URL/);
+  });
+  it("defines a provider plus URL contradiction instead of ignoring it", async () => {
+    // The host decides: a YouTube link with a Bandcamp selection is refused, and
+    // the same link with 'youtube' is accepted as a URL (no search prefix).
+    await expect(
+      prepareMusicQuery(
+        "https://www.youtube.com/watch?v=example",
+        {
+          ...settings,
+          allowedHosts: [...settings.allowedHosts, "youtube.com"],
+        },
+        publicDns,
+        "bandcamp"
+      )
+    ).rejects.toThrow(
+      /belongs to YouTube, but the selected source is Bandcamp/
+    );
+    expect(
+      await prepareMusicQuery(
+        "https://www.youtube.com/watch?v=example",
+        {
+          ...settings,
+          allowedHosts: [...settings.allowedHosts, "youtube.com"],
+        },
+        publicDns,
+        "youtube"
+      )
+    ).toMatchObject({ kind: "url", source: "youtube", provider: null });
+  });
+  it("names the provider whose adapter is missing for an explicit choice", async () => {
+    const resolve = vi.fn();
+    await expect(
+      resolveMusicQuery({ resolve }, "Track", {
+        info,
+        settings,
+        provider: "youtube",
+      })
+    ).rejects.toThrow(
+      /YouTube search is not enabled on this Lavalink node\. Enable plugins\.youtube\.enabled/
+    );
+    expect(resolve).not.toHaveBeenCalled();
+  });
+  it("explains how to enable a direct URL's missing adapter", async () => {
+    const resolve = vi.fn();
+    await expect(
+      resolveMusicQuery({ resolve }, "https://soundcloud.com/artist/track", {
+        info: { ...info, sourceManagers: ["bandcamp"] },
+        settings,
+        resolveHost: publicDns,
+      })
+    ).rejects.toThrow(/plugins\.soundy\.enabled/);
+    expect(resolve).not.toHaveBeenCalled();
+  });
   it("retains cause, severity, backend version, and long errors instead of reporting generic lookup failure", async () => {
     const cause = `java.io.IOException: HTTP 403 ${"nested detail ".repeat(150)}`;
     const resolve = vi.fn(async (): Promise<LavalinkResponse> => ({
@@ -388,5 +555,153 @@ describe("music source resolution", () => {
     expect(message).toContain("track playback failed");
     expect(message).toContain("after track lookup");
     expect(message).not.toContain("not a Discord voice-connection");
+  });
+});
+
+describe("provider URL forms", () => {
+  const hosts = {
+    ...settings,
+    allowedHosts: ["soundcloud.com", "bandcamp.com", "youtube.com", "youtu.be"],
+  };
+  it.each([
+    // Ordinary provider variations an administrator will paste.
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ",
+    "https://youtu.be/dQw4w9WgXcQ?t=42",
+    "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+    "https://www.youtube.com/live/dQw4w9WgXcQ",
+    "https://www.youtube.com/playlist?list=PL1234567890",
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PL1234567890&start_radio=1",
+  ])("accepts the YouTube form %s", async (url) => {
+    expect(await prepareMusicQuery(url, hosts, publicDns)).toMatchObject({
+      source: "youtube",
+      kind: "url",
+    });
+  });
+  it.each([
+    "https://soundcloud.com/artist/track",
+    "https://soundcloud.com/artist/sets/an-album",
+    "https://on.soundcloud.com/short-link",
+    "https://m.soundcloud.com/artist/track",
+  ])("accepts the SoundCloud form %s", async (url) => {
+    expect(await prepareMusicQuery(url, hosts, publicDns)).toMatchObject({
+      source: "soundcloud",
+      kind: "url",
+    });
+  });
+  it.each([
+    // A lookalike host must not inherit the allowlist.
+    ["https://youtube.com.evil.example/watch?v=x", "not enabled"],
+    ["https://notyoutube.com/watch?v=x", "not enabled"],
+    // Unencrypted URLs are refused before DNS resolution.
+    ["http://www.youtube.com/watch?v=x", "public HTTPS"],
+    // Credentials in the URL are refused.
+    ["https://user:pass@youtube.com/watch?v=x", "public HTTPS"],
+    // SoundCloud's shortener for other domains is not an approved source.
+    ["https://soundcloud.app.goo.gl/x", "not enabled"],
+  ])("refuses %s", async (url, message) => {
+    await expect(prepareMusicQuery(url, hosts, publicDns)).rejects.toThrow(
+      message
+    );
+  });
+});
+
+describe("bare provider identifiers", () => {
+  it.each(["dQw4w9WgXcQ", "PL1234567890abcdef", "OLAK5uy_mixed-case01"])(
+    "asks for the full link instead of searching for %s",
+    async (identifier) => {
+      await expect(prepareMusicQuery(identifier, settings)).rejects.toThrow(
+        "bare YouTube identifier"
+      );
+    }
+  );
+  it("still treats ordinary short text as a search", async () => {
+    expect(await prepareMusicQuery("daft punk", settings)).toMatchObject({
+      kind: "search",
+    });
+  });
+});
+
+describe("playback failure reports", () => {
+  const reported = {
+    message: "All clients failed to load the item.",
+    severity: "fault" as const,
+    cause:
+      "Client [ANDROID_VR] failed: This video requires login.\nClient [WEB] failed: No supported audio streams available.",
+  };
+  it("classifies the reported YouTube restriction and keeps a short summary", () => {
+    const report = musicSourceFailureReport(reported, {
+      stage: "playback",
+      source: "youtube",
+      info,
+    });
+    expect(report.category).toBe("provider-login");
+    expect(report.summary.length).toBeLessThanOrEqual(300);
+    expect(report.summary).toContain("YouTube playback failed");
+    expect(report.summary).toContain("provider-login");
+    expect(report.summary).not.toContain("\n");
+    // The full diagnostic keeps the client detail for the event dialog.
+    expect(report.details).toContain("ANDROID_VR");
+    expect(report.details).toContain("No supported audio streams available");
+  });
+  it("describes the provider challenge without claiming a universal cause", () => {
+    const report = musicSourceFailureReport(
+      {
+        message: "All clients failed to load the item.",
+        severity: "fault" as const,
+        cause:
+          "Client [ANDROID_VR] failed: This video requires login.\nClient [WEB] failed: No supported audio streams available.",
+      },
+      { stage: "playback", source: "youtube", info }
+    );
+    const text = report.summary.toLowerCase();
+    // Observed evidence, not a diagnosis of the item or the deployment.
+    expect(text).toContain("provider asked for a signed-in/verified session");
+    expect(text).not.toContain("only serves this item");
+    // Kept apart from the two other things a listener tends to blame.
+    expect(text).toContain("not a discord voice-permission problem");
+    expect(text).toContain("not a lavalink connection problem");
+    // No credentials, cookies or stack traces in the user-facing text.
+    expect(text).not.toMatch(
+      /cookie|token|refresh|bearer|at java\.|exception:/
+    );
+    // The short summary stays short; details keep the client lines for operators.
+    expect(report.summary.length).toBeLessThanOrEqual(300);
+    expect(report.details).toContain("ANDROID_VR");
+  });
+  it.each([
+    ["DRM protected stream", "drm"],
+    ["No playable stream found", "no-streams"],
+    ["HTTP 429 Too Many Requests", "rate-limit"],
+    ["HTTP 403 Forbidden", "auth"],
+    ["java.net.SocketTimeoutException: timeout", "network"],
+    ["some unexpected bridge failure", "unknown"],
+  ])("categorizes %s as %s", (cause, category) => {
+    expect(
+      musicSourceFailureReport({ cause }, { stage: "playback", source: null })
+        .category
+    ).toBe(category);
+  });
+  it("never puts credentials into the summary or details", () => {
+    vi.stubEnv("LAVALINK_PASSWORD", "private-lavalink-password");
+    const report = musicSourceFailureReport(
+      {
+        message: "private-lavalink-password",
+        cause:
+          "HTTP 403 https://api.example/track?client_id=private-id&Signature=private-signature",
+      },
+      { stage: "playback", source: "soundcloud", info }
+    );
+    for (const secret of [
+      "private-lavalink-password",
+      "private-id",
+      "private-signature",
+    ]) {
+      expect(report.summary).not.toContain(secret);
+      expect(report.details).not.toContain(secret);
+    }
   });
 });

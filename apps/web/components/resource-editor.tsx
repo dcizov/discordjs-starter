@@ -25,12 +25,14 @@ import {
 } from "./ui/dialog";
 import {
   Badge,
+  Checkbox,
   Field,
   Input,
-  Select,
+  FormSelect,
   Spinner,
   Textarea,
 } from "./ui/primitives";
+import { Combobox } from "./ui/combobox";
 import { Switch } from "./ui/switch";
 import { useWorkspace } from "./workspace";
 export const kindNames: Record<ResourceKind, string> = {
@@ -122,6 +124,7 @@ export function ResourceEditor({
       notificationRoleId: "",
       embedColor: "#8b5cf6",
       includeSummary: true,
+      officialOnly: false,
       health: "setup_required",
     },
     route: {
@@ -151,19 +154,20 @@ export function ResourceEditor({
       required
       hint="Orbit needs View Channel, Send Messages, and Embed Links permissions."
     >
-      <Select
-        required
+      <Combobox
         value={values.channelId ?? ""}
-        onChange={(e) => set("channelId", e.target.value)}
-      >
-        <option value="">Choose a channel</option>
-        {channels.map((c) => (
-          <option key={c.id} value={c.id}>
-            # {c.name}
-            {!c.canSend ? " · missing permissions" : ""}
-          </option>
-        ))}
-      </Select>
+        onValueChange={(next) => set("channelId", next)}
+        placeholder="Choose a channel"
+        searchPlaceholder="Search channels…"
+        options={[
+          { value: "", label: "Choose a channel" },
+          ...channels.map((c) => ({
+            value: c.id,
+            label: `# ${c.name}`,
+            hint: c.canSend ? undefined : "missing permissions",
+          })),
+        ]}
+      />
     </Field>
   );
   const notificationSelect = (
@@ -171,19 +175,18 @@ export function ResourceEditor({
       label="Notification role"
       hint="Optional. Only this role will be mentioned; @everyone and @here are blocked."
     >
-      <Select
+      <Combobox
         value={values.notificationRoleId ?? ""}
-        onChange={(e) => set("notificationRoleId", e.target.value)}
-      >
-        <option value="">No role notification</option>
-        {roles
-          .filter((r) => !r.managed && r.id !== data.guild.id)
-          .map((r) => (
-            <option key={r.id} value={r.id}>
-              @{r.name}
-            </option>
-          ))}
-      </Select>
+        onValueChange={(next) => set("notificationRoleId", next)}
+        placeholder="No role notification"
+        searchPlaceholder="Search roles…"
+        options={[
+          { value: "", label: "No role notification" },
+          ...roles
+            .filter((r) => !r.managed && r.id !== data.guild.id)
+            .map((r) => ({ value: r.id, label: `@${r.name}` })),
+        ]}
+      />
     </Field>
   );
   const listField = (key: string, label: string, hint?: string) => (
@@ -278,26 +281,28 @@ export function ResourceEditor({
               {channelSelect}
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Panel style">
-                  <Select
+                  <FormSelect
                     value={values.mode}
-                    onChange={(e) => set("mode", e.target.value)}
-                  >
-                    <option value="buttons">Buttons</option>
-                    <option value="select">Select menu</option>
-                    <option value="reaction">Reaction roles</option>
-                  </Select>
+                    onValueChange={(next) => set("mode", next)}
+                    options={[
+                      { value: "buttons", label: "Buttons" },
+                      { value: "select", label: "Select menu" },
+                      { value: "reaction", label: "Reaction roles" },
+                    ]}
+                  />
                 </Field>
                 <Field label="Selection">
-                  <Select
+                  <FormSelect
                     value={values.selection}
-                    onChange={(e) => {
-                      set("selection", e.target.value);
-                      if (e.target.value === "single") set("maxRoles", 1);
+                    onValueChange={(next) => {
+                      set("selection", next);
+                      if (next === "single") set("maxRoles", 1);
                     }}
-                  >
-                    <option value="multi">Multiple roles</option>
-                    <option value="single">One role at a time</option>
-                  </Select>
+                    options={[
+                      { value: "multi", label: "Multiple roles" },
+                      { value: "single", label: "One role at a time" },
+                    ]}
+                  />
                 </Field>
               </div>
               <Field
@@ -370,15 +375,16 @@ export function ResourceEditor({
           {kind === "rule" && (
             <>
               <Field label="What should Orbit watch for?">
-                <Select
+                <FormSelect
                   value={values.type}
-                  onChange={(e) => set("type", e.target.value)}
-                >
-                  <option value="spam">Message spam</option>
-                  <option value="repeated">Repeated messages</option>
-                  <option value="mentions">Excessive mentions</option>
-                  <option value="blocked_terms">Blocked terms</option>
-                </Select>
+                  onValueChange={(next) => set("type", next)}
+                  options={[
+                    { value: "spam", label: "Message spam" },
+                    { value: "repeated", label: "Repeated messages" },
+                    { value: "mentions", label: "Excessive mentions" },
+                    { value: "blocked_terms", label: "Blocked terms" },
+                  ]}
+                />
               </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field
@@ -422,14 +428,15 @@ export function ResourceEditor({
               )}
               <div className="grid grid-cols-2 gap-4">
                 <Field label="When triggered">
-                  <Select
+                  <FormSelect
                     value={values.action}
-                    onChange={(e) => set("action", e.target.value)}
-                  >
-                    <option value="delete">Delete message</option>
-                    <option value="warn">Delete & warn</option>
-                    <option value="timeout">Delete & timeout</option>
-                  </Select>
+                    onValueChange={(next) => set("action", next)}
+                    options={[
+                      { value: "delete", label: "Delete message" },
+                      { value: "warn", label: "Delete & warn" },
+                      { value: "timeout", label: "Delete & timeout" },
+                    ]}
+                  />
                 </Field>
                 <Field label="Timeout duration (minutes)">
                   <Input
@@ -458,8 +465,7 @@ export function ResourceEditor({
                       className="flex items-center gap-1.5 text-[11px]"
                       key={c.id}
                     >
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={(values.exemptChannelIds ?? []).includes(c.id)}
                         onChange={(e) =>
                           set(
@@ -483,13 +489,14 @@ export function ResourceEditor({
             <>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Item type">
-                  <Select
+                  <FormSelect
                     value={values.type}
-                    onChange={(e) => set("type", e.target.value)}
-                  >
-                    <option value="role">Discord role</option>
-                    <option value="item">Virtual item / perk</option>
-                  </Select>
+                    onValueChange={(next) => set("type", next)}
+                    options={[
+                      { value: "role", label: "Discord role" },
+                      { value: "item", label: "Virtual item / perk" },
+                    ]}
+                  />
                 </Field>
                 <Field label="Item emoji">
                   <Input
@@ -501,18 +508,19 @@ export function ResourceEditor({
               </div>
               {values.type === "role" && (
                 <Field label="Role to unlock" required>
-                  <Select
+                  <Combobox
                     value={values.roleId ?? ""}
-                    onChange={(e) => set("roleId", e.target.value)}
-                    required
-                  >
-                    <option value="">Choose a safe role</option>
-                    {safeRoles.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        @{r.name}
-                      </option>
-                    ))}
-                  </Select>
+                    onValueChange={(next) => set("roleId", next)}
+                    placeholder="Choose a safe role"
+                    searchPlaceholder="Search roles…"
+                    options={[
+                      { value: "", label: "Choose a safe role" },
+                      ...safeRoles.map((r) => ({
+                        value: r.id,
+                        label: `@${r.name}`,
+                      })),
+                    ]}
+                  />
                 </Field>
               )}
               <div className="grid grid-cols-2 gap-4">
@@ -634,11 +642,10 @@ export function ResourceEditor({
               </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Region">
-                  <Select
+                  <FormSelect
                     value={values.region}
-                    onChange={(e) => set("region", e.target.value)}
-                  >
-                    {[
+                    onValueChange={(next) => set("region", next)}
+                    options={[
                       ["DE", "Germany"],
                       ["US", "United States"],
                       ["GB", "United Kingdom"],
@@ -646,22 +653,18 @@ export function ResourceEditor({
                       ["CA", "Canada"],
                       ["AU", "Australia"],
                       ["NL", "Netherlands"],
-                    ].map(([v, l]) => (
-                      <option key={v} value={v}>
-                        {l}
-                      </option>
-                    ))}
-                  </Select>
+                    ].map(([value, label]) => ({ value, label }))}
+                  />
                 </Field>
                 <Field label="Currency">
-                  <Select
+                  <FormSelect
                     value={values.currency}
-                    onChange={(e) => set("currency", e.target.value)}
-                  >
-                    {["EUR", "USD", "GBP", "CAD", "AUD"].map((c) => (
-                      <option key={c}>{c}</option>
-                    ))}
-                  </Select>
+                    onValueChange={(next) => set("currency", next)}
+                    options={["EUR", "USD", "GBP", "CAD", "AUD"].map((c) => ({
+                      value: c,
+                      label: c,
+                    }))}
+                  />
                 </Field>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -737,22 +740,27 @@ export function ResourceEditor({
           {kind === "source" && (
             <>
               <Field label="Source adapter">
-                <Select
+                <FormSelect
                   value={values.adapter}
-                  onChange={(e) => {
-                    set("adapter", e.target.value);
+                  onValueChange={(next) => {
+                    set("adapter", next);
                     set("health", "setup_required");
                   }}
-                >
-                  <option value="rss">RSS / Atom feed</option>
-                  <option value="steam">Steam · official app news API</option>
-                  <option value="webhook">Signed incoming webhook</option>
-                  <option value="blizzard">
-                    Blizzard · bring your own feed
-                  </option>
-                  <option value="wowhead">Wowhead · bring your own feed</option>
-                  <option value="mojang">Mojang · bring your own feed</option>
-                </Select>
+                  options={[
+                    { value: "rss", label: "RSS / Atom feed" },
+                    { value: "steam", label: "Steam · official app news API" },
+                    { value: "webhook", label: "Signed incoming webhook" },
+                    {
+                      value: "blizzard",
+                      label: "Blizzard · bring your own feed",
+                    },
+                    {
+                      value: "wowhead",
+                      label: "Wowhead · bring your own feed",
+                    },
+                    { value: "mojang", label: "Mojang · bring your own feed" },
+                  ]}
+                />
               </Field>
               {values.adapter === "steam" ? (
                 <Field
@@ -843,9 +851,26 @@ export function ResourceEditor({
                 <Switch
                   checked={values.includeSummary}
                   onCheckedChange={(v) => set("includeSummary", v)}
-                  aria-label="Include summary"
+                  aria-label="Include a short summary"
                 />
               </div>
+              {values.adapter === "steam" && (
+                <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+                  <span className="text-xs leading-relaxed">
+                    Official announcements only
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      Uses Steam's app announcement feed only, so posts from
+                      other publishers are not requested. Steam has no "first
+                      party" field — the feed is the signal, nothing more.
+                    </span>
+                  </span>
+                  <Switch
+                    checked={!!values.officialOnly}
+                    onCheckedChange={(v) => set("officialOnly", v)}
+                    aria-label="Official announcements only"
+                  />
+                </div>
+              )}
             </>
           )}
           {kind === "route" && (
@@ -859,8 +884,7 @@ export function ResourceEditor({
                         key={s.id}
                         className="flex items-center gap-2 text-xs"
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={(values.sourceIds ?? []).includes(s.id)}
                           onChange={(e) =>
                             set(
@@ -964,9 +988,7 @@ export function RolePicker({
           )}
           key={r.id}
         >
-          <input
-            type="checkbox"
-            className="size-3"
+          <Checkbox
             checked={value.includes(r.id)}
             onChange={(e) =>
               onChange(

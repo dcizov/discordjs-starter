@@ -32,10 +32,17 @@ import {
 import { useState } from "react";
 import { toast } from "sonner";
 import { DataTable } from "./data-table";
+import { FacetFilterButton, type FacetFilter } from "./table-facet";
+import { IdentityCell } from "./identity/identity-cell";
 import { HistoryTable } from "./history-table";
 import { PageHeader } from "./page-header";
 import { ResourceEditor, kindNames } from "./resource-editor";
+import { NewsPreviewFeed } from "./news-preview-feed";
+import type { NewsCard } from "@orbit/core/news-presentation";
+import { sourceFreshness } from "@orbit/core/source-health";
 import { Button } from "./ui/button";
+import { ConfirmDialog } from "./ui/confirm-dialog";
+import { TabBar } from "./ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -50,18 +57,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import {
-  Badge,
-  Card,
-  EmptyState,
-  SearchInput,
-  Select,
-  Spinner,
-} from "./ui/primitives";
+import { Badge, Card, EmptyState, SearchInput, Spinner } from "./ui/primitives";
 import { Switch } from "./ui/switch";
 import { useWorkspace } from "./workspace";
 import { sourceSetupIssue } from "@orbit/core/module-setup";
 import { dealQuality } from "@orbit/core/deal-policy";
+import { discordMessageUrl } from "@/lib/discord-links";
 const settings = {
   roles: {
     title: "Self roles",
@@ -93,6 +94,16 @@ const settings = {
     action: "Add news source",
     icon: Rss,
   },
+};
+/** Region names read as the list a reader sees, not as a singular type. */
+const KIND_LISTS: Record<ResourceKind, string> = {
+  panel: "Role panels",
+  rule: "Automod rules",
+  shop: "Shop items",
+  deal: "Deal subscriptions",
+  source: "News sources",
+  route: "Routing rules",
+  case: "Moderation cases",
 };
 export function ResourcesPage({
   section,
@@ -126,6 +137,38 @@ export function ResourcesPage({
           ? r.kind === "source" && !!sourceSetupIssue(r)
           : r.enabled === (filter === "enabled")))
   );
+  const showSetupFilter = section === "news";
+  const statusOptions = [
+    { value: "all", label: "All statuses", count: resources.length },
+    {
+      value: "enabled",
+      label: "Enabled",
+      count: resources.filter((r) => r.enabled).length,
+    },
+    {
+      value: "paused",
+      label: "Paused",
+      count: resources.filter((r) => !r.enabled).length,
+    },
+    ...(showSetupFilter
+      ? [
+          {
+            value: "needs-setup",
+            label: "Needs setup",
+            count: resources.filter((r) => !!sourceSetupIssue(r)).length,
+          },
+        ]
+      : []),
+  ];
+  const statusFacet = {
+    key: "status",
+    label: "Filter by status",
+    title: "Status",
+    value: filter,
+    allValue: "all",
+    onChange: setFilter,
+    options: statusOptions,
+  };
   async function toggle(r: Resource, v: boolean) {
     try {
       await api(`/resources/${r.kind}/${r.id}`, "PATCH", {
@@ -280,7 +323,7 @@ export function ResourcesPage({
                     ).length,
                     detail: "Looking out for your community",
                     icon: ShieldCheck,
-                    color: "text-[#d3a170] bg-[#fcf2e8]",
+                    color: "text-orange-700 dark:text-orange-300 bg-[#fcf2e8]",
                   },
                   {
                     label: "Moderation cases",
@@ -288,7 +331,7 @@ export function ResourcesPage({
                       .length,
                     detail: "A transparent record of every action",
                     icon: MessageSquare,
-                    color: "text-[#9d89cb] bg-violet-50",
+                    color: "text-violet-700 dark:text-violet-300 bg-violet-50",
                   },
                   {
                     label: "Members protected",
@@ -329,7 +372,7 @@ export function ResourcesPage({
                     ).length,
                     detail: "A quick setup goes a long way",
                     icon: FlaskConical,
-                    color: "text-[#d3a170] bg-[#fcf2e8]",
+                    color: "text-orange-700 dark:text-orange-300 bg-[#fcf2e8]",
                   },
                 ]
             ).map((stat) => (
@@ -359,42 +402,35 @@ export function ResourcesPage({
               </Card>
             ))}
           </div>
-          <div className="mb-5 flex gap-6 border-b">
-            {(section === "news"
-              ? [
-                  { id: "main", label: "Sources" },
-                  { id: "routes", label: "Routing rules" },
-                  { id: "history", label: "Delivery history" },
-                ]
-              : [
-                  { id: "main", label: "Auto moderation" },
-                  { id: "cases", label: "Case history" },
-                ]
-            ).map((t) => (
-              <button
-                className={cn(
-                  "relative -mb-px border-b-2 px-0.5 pb-3 pt-1 text-[12px] font-medium transition",
-                  tab === t.id
-                    ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
-                )}
-                key={t.id}
-                onClick={() => {
-                  setTab(t.id);
-                  setQuery("");
-                  setFilter("all");
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+          <TabBar
+            id={`resources-${section}`}
+            label={`${section} sections`}
+            controls={false}
+            value={tab}
+            onChange={(next) => {
+              setTab(next);
+              setQuery("");
+              setFilter("all");
+            }}
+            tabs={
+              section === "news"
+                ? [
+                    { id: "main", label: "Sources" },
+                    { id: "routes", label: "Routing rules" },
+                    { id: "history", label: "Delivery history" },
+                  ]
+                : [
+                    { id: "main", label: "Auto moderation" },
+                    { id: "cases", label: "Case history" },
+                  ]
+            }
+          />
         </>
       )}
       {section === "deals" && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-5 py-4">
           <span className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-[#eaf6f2] text-[#7ba99c]">
+            <span className="flex size-9 items-center justify-center rounded-xl bg-[#eaf6f2] text-teal-700 dark:text-teal-300">
               <Tags size={18} />
             </span>
             <span>
@@ -420,33 +456,14 @@ export function ResourcesPage({
           </Badge>
         </div>
       )}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder={
-            tab === "history"
-              ? "Search delivery history…"
-              : `Search ${kindNames[kind]}s…`
-          }
-        />
-        <Select
-          aria-label="Filter by status"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="h-9 w-32 text-[11px]"
-        >
-          <option value="all">All statuses</option>
-          <option value="enabled">Enabled</option>
-          <option value="paused">Paused</option>
-          {section === "news" && tab === "main" && (
-            <option value="needs-setup">Needs setup</option>
-          )}
-        </Select>
-      </div>
       {tab === "history" ? (
         <Card>
-          <DeliveryTable query={query} filter={filter} />
+          <DeliveryTable
+            query={query}
+            filter={filter}
+            onQueryChange={setQuery}
+            onFilterChange={setFilter}
+          />
         </Card>
       ) : tab === "cases" ? (
         <Card>
@@ -454,20 +471,44 @@ export function ResourcesPage({
             kind="cases"
             query={query}
             filter={filter}
+            searchLabel="Search cases"
+            searchPlaceholder="Search by case or member…"
+            onQueryChange={setQuery}
+            facetLabel="Filter case action"
+            facetTitle="Action"
+            facetOptions={CASE_ACTION_OPTIONS}
+            onFilterChange={setFilter}
             columns={[
               {
                 key: "name",
                 label: "Case",
+                sortKey: "name",
                 render: (r) => <span className="font-medium">{r.name}</span>,
               },
               {
                 key: "member",
                 label: "Member",
-                render: (r) => (
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {r.data.targetId}
-                  </span>
-                ),
+                render: (r) => {
+                  // The case records who it was about, not their picture. If
+                  // this guild's own account data already knows that member,
+                  // show it; otherwise the id is the honest answer and no
+                  // Discord request is made to dress it up.
+                  const account = data.accounts.find(
+                    (a) => a.userId === r.data.targetId
+                  );
+                  return account ? (
+                    <IdentityCell
+                      id={account.userId}
+                      name={account.name}
+                      src={account.avatarUrl}
+                      person={account}
+                    />
+                  ) : (
+                    <span className="font-mono text-[10px] text-muted-foreground">
+                      {r.data.targetId}
+                    </span>
+                  );
+                },
               },
               {
                 key: "type",
@@ -498,6 +539,7 @@ export function ResourcesPage({
               {
                 key: "when",
                 label: "Created",
+                sortKey: "createdAt",
                 render: (r) => (
                   <span className="whitespace-nowrap text-muted-foreground">
                     {relativeTime(r.createdAt, data.presentation.referenceAt)}
@@ -509,276 +551,353 @@ export function ResourcesPage({
             emptyDescription="Moderation actions taken with slash commands or automod will appear here. Cases are append-only for a trustworthy audit trail."
           />
         </Card>
-      ) : !rows.length ? (
-        <Card>
-          <EmptyState
-            icon={s.icon}
-            title={
-              query
-                ? "Nothing quite matches."
-                : `Your first ${kindNames[kind]} starts here.`
-            }
-            description={
-              query
-                ? "Try a different search or filter. A fresh perspective can help."
-                : section === "roles"
-                  ? "Give your members a simple way to choose their interests, notifications, and little corners of the community."
-                  : "A few thoughtful settings are all it takes. Let’s get something good going."
-            }
-            action={
-              <Button onClick={() => setEditor({ kind })}>
-                <Plus />
-                Create {kindNames[kind]}
-              </Button>
-            }
-          />
-        </Card>
       ) : section === "roles" ? (
-        <div className="grid gap-5 md:grid-cols-2">
-          {rows.map((r) => (
-            <Card key={r.id} className="overflow-hidden">
-              <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex size-8 items-center justify-center rounded-lg bg-violet-50 text-violet-400 dark:bg-violet-500/10">
-                    <UsersRound size={16} />
-                  </span>
-                  <div>
-                    <h2 className="text-xs font-semibold">{r.name}</h2>
-                    <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Hash size={10} />
-                      {data.guild.channels.find(
-                        (c) => c.id === r.data.channelId
-                      )?.name ?? "No destination"}
-                    </p>
-                  </div>
-                </div>
-                {actions(r)}
-              </div>
-              <div className="mx-5 mb-3 mt-5 rounded-lg border bg-muted/20 p-4">
-                <div className="flex gap-2">
-                  <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-                    <Radio size={13} />
-                  </div>
-                  <div>
-                    <p className="flex items-center gap-1.5 text-[11px] font-semibold">
-                      Orbit{" "}
-                      <span className="rounded bg-violet-400 px-1 py-0.5 text-[6px] font-normal text-white">
-                        APP
+        <>
+          <ListToolbar
+            query={query}
+            onQueryChange={setQuery}
+            placeholder="Search roles…"
+            facet={statusFacet}
+          />
+          {rows.length ? (
+            <div className="grid gap-5 md:grid-cols-2">
+              {rows.map((r) => (
+                <Card key={r.id} className="overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex size-8 items-center justify-center rounded-lg bg-violet-50 text-violet-400 dark:bg-violet-500/10">
+                        <UsersRound size={16} />
                       </span>
-                    </p>
-                    <div className="mt-2 border-l-[3px] border-violet-300 pl-3">
-                      <p className="text-[12px] font-semibold">{r.name}</p>
-                      <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                        {r.data.description}
-                      </p>
+                      <div>
+                        <h2 className="text-xs font-semibold">{r.name}</h2>
+                        <p className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <Hash size={10} />
+                          {data.guild.channels.find(
+                            (c) => c.id === r.data.channelId
+                          )?.name ?? "No destination"}
+                        </p>
+                      </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {(r.data.roleIds as string[]).map((id, i) => {
-                        const role = data.guild.roles.find(
-                          (role) => role.id === id
-                        );
-                        return (
-                          <span
-                            key={id}
-                            className="flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-[10px] text-muted-foreground"
-                          >
-                            {r.data.emojis?.[i] ?? (
-                              <span
-                                className="size-1.5 rounded-full"
-                                style={{ background: role?.color ?? "#aaa" }}
-                              />
-                            )}
-                            {role?.name ?? "Deleted role"}
+                    {actions(r)}
+                  </div>
+                  <div className="mx-5 mb-3 mt-5 rounded-lg border bg-muted/20 p-4">
+                    <div className="flex gap-2">
+                      <div className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                        <Radio size={13} />
+                      </div>
+                      <div>
+                        <p className="flex items-center gap-1.5 text-[11px] font-semibold">
+                          Orbit{" "}
+                          <span className="rounded bg-violet-400 px-1 py-0.5 text-[6px] font-normal text-white">
+                            APP
                           </span>
-                        );
-                      })}
+                        </p>
+                        <div className="mt-2 border-l-[3px] border-violet-300 pl-3">
+                          <p className="text-xs font-semibold">{r.name}</p>
+                          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                            {r.data.description}
+                          </p>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {(r.data.roleIds as string[]).map((id, i) => {
+                            const role = data.guild.roles.find(
+                              (role) => role.id === id
+                            );
+                            return (
+                              <span
+                                key={id}
+                                className="flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-[10px] text-muted-foreground"
+                              >
+                                {r.data.emojis?.[i] ?? (
+                                  <span
+                                    className="size-1.5 rounded-full"
+                                    style={{
+                                      background: role?.color ?? "#aaa",
+                                    }}
+                                  />
+                                )}
+                                {role?.name ?? "Deleted role"}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-              <div className="flex items-center justify-between px-5 pb-4">
-                <span className="flex items-center gap-2 text-[9px] text-muted-foreground">
-                  <Badge tone="purple" className="text-[9px]">
-                    {r.data.mode === "select"
-                      ? "Select menu"
-                      : r.data.mode === "reaction"
-                        ? "Reactions"
-                        : "Buttons"}
-                  </Badge>
-                  {r.data.selection === "single"
-                    ? "Single select"
-                    : `Up to ${r.data.maxRoles} roles`}
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] text-muted-foreground">
-                    {r.enabled ? "Active" : "Paused"}
-                  </span>
-                  <Switch
-                    aria-label={`Toggle ${r.name}`}
-                    checked={r.enabled}
-                    onCheckedChange={(v) => toggle(r, v)}
-                  />
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      ) : section === "news" && tab === "main" ? (
-        <div className="grid gap-5 md:grid-cols-2">
-          {rows.map((r) => {
-            const Icon =
-              r.data.adapter === "steam"
-                ? Gamepad2
-                : r.data.adapter === "blizzard"
-                  ? Snowflake
-                  : r.data.adapter === "wowhead"
-                    ? Flame
-                    : r.data.adapter === "mojang"
-                      ? Blocks
-                      : r.data.adapter === "webhook"
-                        ? Webhook
-                        : Rss;
-            const setupIssue = sourceSetupIssue(r);
-            const healthy = !setupIssue && r.data.health === "healthy";
-            return (
-              <Card key={r.id} className="p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={cn(
-                        "flex size-11 items-center justify-center rounded-xl",
-                        r.data.adapter === "mojang"
-                          ? "bg-[#ecf3e8] text-[#89a47c]"
-                          : r.data.adapter === "wowhead"
-                            ? "bg-[#fcf0df] text-[#cba666]"
-                            : r.data.adapter === "blizzard"
-                              ? "bg-[#eaf3fc] text-[#7ba6ca]"
-                              : "bg-[#eef0f7] text-[#8090ac]"
-                      )}
-                    >
-                      <Icon size={23} strokeWidth={1.5} />
+                  <div className="flex items-center justify-between px-5 pb-4">
+                    <span className="flex items-center gap-2 text-[9px] text-muted-foreground">
+                      <Badge tone="purple" className="text-[9px]">
+                        {r.data.mode === "select"
+                          ? "Select menu"
+                          : r.data.mode === "reaction"
+                            ? "Reactions"
+                            : "Buttons"}
+                      </Badge>
+                      {r.data.selection === "single"
+                        ? "Single select"
+                        : `Up to ${r.data.maxRoles} roles`}
                     </span>
-                    <div>
-                      <h2 className="text-[13px] font-semibold">{r.name}</h2>
-                      <p className="mt-1 text-[10px] text-muted-foreground">
-                        {r.data.adapter === "steam"
-                          ? "Official Steam app news"
-                          : r.data.adapter === "webhook"
-                            ? "Signed incoming webhook"
-                            : r.data.adapter === "rss"
-                              ? "RSS / Atom feed"
-                              : "Custom publisher feed"}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] text-muted-foreground">
+                        {r.enabled ? "Active" : "Paused"}
+                      </span>
+                      <Switch
+                        aria-label={`Toggle ${r.name}`}
+                        checked={r.enabled}
+                        onCheckedChange={(v) => toggle(r, v)}
+                      />
                     </div>
                   </div>
-                  {actions(r)}
-                </div>
-                <div className="mt-5 flex items-center gap-2">
-                  <Badge tone={healthy ? "green" : "amber"}>
-                    <span
-                      className={cn(
-                        "size-1 rounded-full",
-                        healthy ? "bg-emerald-500" : "bg-amber-500"
-                      )}
-                    />
-                    {healthy
-                      ? "Healthy"
-                      : setupIssue
-                        ? "Setup required"
-                        : r.data.health === "degraded"
-                          ? "Needs attention"
-                          : "Awaiting check"}
-                  </Badge>
-                  {!r.enabled && <Badge>Paused</Badge>}
-                </div>
-                <p className="mt-3 line-clamp-2 min-h-[31px] text-[11px] leading-relaxed text-muted-foreground">
-                  {healthy
-                    ? r.data.adapter === "steam"
-                      ? `App #${r.data.appId} updates, straight from the source. Kept tidy and delivered to your community.`
-                      : r.data.adapter === "webhook"
-                        ? "Your own integration, routed safely into Discord."
-                        : r.data.url
-                    : (setupIssue ??
-                      r.data.lastError ??
-                      "Configured; test the source and inspect its next worker check. Webhook signing credentials are managed separately.")}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {(r.data.tags ?? []).map((tag: string) => (
-                    <Badge key={tag} className="text-[9px]">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-                <div className="mt-4 flex items-center justify-between border-t pt-3.5">
-                  <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                    <Hash size={11} />
-                    {data.guild.channels.find((c) => c.id === r.data.channelId)
-                      ?.name ?? "Not routed"}
-                    <span className="mx-1 text-border">·</span>
-                    <Clock3 size={10} />
-                    Every {r.data.intervalMinutes}m
-                  </span>
-                  <Switch
-                    aria-label={`Toggle ${r.name}`}
-                    checked={r.enabled}
-                    onCheckedChange={(v) => toggle(r, v)}
-                  />
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 text-[10px]"
-                    onClick={() => action(r, "test")}
-                    disabled={testBusy === r.id}
-                  >
-                    {testBusy === r.id ? (
-                      <Spinner />
-                    ) : (
-                      <FlaskConical size={12} />
-                    )}
-                    Test source
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex-1 text-[10px]"
-                    onClick={() =>
-                      healthy
-                        ? action(r, "send-test")
-                        : setEditor({ kind: "source", resource: r })
-                    }
-                  >
-                    {healthy ? (
-                      <>
-                        <Send size={12} />
-                        Send test
-                      </>
-                    ) : (
-                      <>
-                        Finish setup
-                        <ArrowRight size={12} />
-                      </>
-                    )}
-                  </Button>
-                </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <>
+              <Card>
+                <EmptyState
+                  icon={s.icon}
+                  title={
+                    query
+                      ? "Nothing quite matches."
+                      : `Your first ${kindNames[kind]} starts here.`
+                  }
+                  description={
+                    query
+                      ? "Try a different search or filter. A fresh perspective can help."
+                      : "Give your members a simple way to choose their interests, notifications, and little corners of the community."
+                  }
+                  action={
+                    <Button onClick={() => setEditor({ kind })}>
+                      <Plus />
+                      Create {kindNames[kind]}
+                    </Button>
+                  }
+                />
               </Card>
-            );
-          })}
-        </div>
+            </>
+          )}
+        </>
+      ) : section === "news" && tab === "main" ? (
+        <>
+          <ListToolbar
+            query={query}
+            onQueryChange={setQuery}
+            placeholder={`Search ${kindNames[kind]}s…`}
+            facet={statusFacet}
+          />
+          {rows.length ? (
+            <div className="grid gap-5 md:grid-cols-2">
+              {rows.map((r) => {
+                const Icon =
+                  r.data.adapter === "steam"
+                    ? Gamepad2
+                    : r.data.adapter === "blizzard"
+                      ? Snowflake
+                      : r.data.adapter === "wowhead"
+                        ? Flame
+                        : r.data.adapter === "mojang"
+                          ? Blocks
+                          : r.data.adapter === "webhook"
+                            ? Webhook
+                            : Rss;
+                const setupIssue = sourceSetupIssue(r);
+                const healthy = !setupIssue && r.data.health === "healthy";
+                // Saved health is not evidence that a check ran recently.
+                const freshness = sourceFreshness(
+                  r,
+                  new Date(data.presentation.referenceAt).getTime()
+                );
+                return (
+                  <Card key={r.id} className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={cn(
+                            "flex size-11 items-center justify-center rounded-xl",
+                            r.data.adapter === "mojang"
+                              ? "bg-[#ecf3e8] text-emerald-700 dark:text-emerald-300"
+                              : r.data.adapter === "wowhead"
+                                ? "bg-[#fcf0df] text-amber-700 dark:text-amber-300"
+                                : r.data.adapter === "blizzard"
+                                  ? "bg-[#eaf3fc] text-sky-700 dark:text-sky-300"
+                                  : "bg-[#eef0f7] text-slate-700 dark:text-slate-300"
+                          )}
+                        >
+                          <Icon size={23} strokeWidth={1.5} />
+                        </span>
+                        <div>
+                          <h2 className="text-xs font-semibold">{r.name}</h2>
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            {r.data.adapter === "steam"
+                              ? "Official Steam app news"
+                              : r.data.adapter === "webhook"
+                                ? "Signed incoming webhook"
+                                : r.data.adapter === "rss"
+                                  ? "RSS / Atom feed"
+                                  : "Custom publisher feed"}
+                          </p>
+                        </div>
+                      </div>
+                      {actions(r)}
+                    </div>
+                    <div className="mt-5 flex items-center gap-2">
+                      <Badge tone={healthy ? "green" : "amber"}>
+                        <span
+                          className={cn(
+                            "size-1 rounded-full",
+                            healthy ? "bg-emerald-500" : "bg-amber-500"
+                          )}
+                        />
+                        {healthy
+                          ? "Healthy"
+                          : setupIssue
+                            ? "Setup required"
+                            : r.data.health === "degraded"
+                              ? "Needs attention"
+                              : "Awaiting check"}
+                      </Badge>
+                      {!r.enabled && <Badge>Paused</Badge>}
+                      {r.enabled && freshness.state !== "fresh" && (
+                        <Badge tone="amber">{freshness.label}</Badge>
+                      )}
+                    </div>
+                    <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
+                      {freshness.detail}
+                    </p>
+                    <p className="mt-3 line-clamp-2 min-h-[31px] text-[11px] leading-relaxed text-muted-foreground">
+                      {healthy
+                        ? r.data.adapter === "steam"
+                          ? `App #${r.data.appId} updates, straight from the source. Kept tidy and delivered to your community.`
+                          : r.data.adapter === "webhook"
+                            ? "Your own integration, routed safely into Discord."
+                            : r.data.url
+                        : (setupIssue ??
+                          r.data.lastError ??
+                          "Configured; test the source and inspect its next worker check. Webhook signing credentials are managed separately.")}
+                    </p>
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {(r.data.tags ?? []).map((tag: string) => (
+                        <Badge key={tag} className="text-[9px]">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex items-center justify-between border-t pt-3.5">
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Hash size={11} />
+                        {data.guild.channels.find(
+                          (c) => c.id === r.data.channelId
+                        )?.name ?? "Not routed"}
+                        <span className="mx-1 text-border">·</span>
+                        <Clock3 size={10} />
+                        Every {r.data.intervalMinutes}m
+                      </span>
+                      <Switch
+                        aria-label={`Toggle ${r.name}`}
+                        checked={r.enabled}
+                        onCheckedChange={(v) => toggle(r, v)}
+                      />
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 text-[10px]"
+                        onClick={() => action(r, "test")}
+                        disabled={testBusy === r.id}
+                      >
+                        {testBusy === r.id ? (
+                          <Spinner />
+                        ) : (
+                          <FlaskConical size={12} />
+                        )}
+                        Test source
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 text-[10px]"
+                        onClick={() =>
+                          healthy
+                            ? action(r, "send-test")
+                            : setEditor({ kind: "source", resource: r })
+                        }
+                      >
+                        {healthy ? (
+                          <>
+                            <Send size={12} />
+                            Send test
+                          </>
+                        ) : (
+                          <>
+                            Finish setup
+                            <ArrowRight size={12} />
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <>
+              <Card>
+                <EmptyState
+                  icon={s.icon}
+                  title={
+                    query
+                      ? "Nothing quite matches."
+                      : `Your first ${kindNames[kind]} starts here.`
+                  }
+                  description={
+                    query
+                      ? "Try a different search or filter. A fresh perspective can help."
+                      : "A few thoughtful settings are all it takes. Let’s get something good going."
+                  }
+                  action={
+                    <Button onClick={() => setEditor({ kind })}>
+                      <Plus />
+                      Create {kindNames[kind]}
+                    </Button>
+                  }
+                />
+              </Card>
+            </>
+          )}
+        </>
       ) : (
         <Card>
           <DataTable
             rows={rows}
+            label={KIND_LISTS[kind]}
+            emptyTitle={
+              query || filter !== "all"
+                ? "Nothing quite matches"
+                : `Your first ${kindNames[kind]} starts here`
+            }
+            emptyDescription={
+              query || filter !== "all"
+                ? "Try a different search or filter; the controls above stay available while you do."
+                : "A few thoughtful settings are all it takes."
+            }
+            search={{
+              value: query,
+              onChange: setQuery,
+              placeholder: `Search ${kindNames[kind]}s…`,
+              label: `Search ${kindNames[kind]}s`,
+            }}
+            filters={[statusFacet]}
             columns={
               kind === "rule"
                 ? [
                     {
                       key: "name",
                       label: "Rule",
+                      sortValue: (r) => r.name,
                       render: (r) => (
                         <div className="flex items-center gap-3">
-                          <span className="flex size-8 items-center justify-center rounded-lg bg-[#fbf0e5] text-[#cba276]">
+                          <span className="flex size-8 items-center justify-center rounded-lg bg-[#fbf0e5] text-orange-700 dark:text-orange-300">
                             <ShieldCheck size={15} />
                           </span>
                           <div>
@@ -830,8 +949,10 @@ export function ResourcesPage({
                       ),
                     },
                     {
+                      // Action-only column: no header text, never hideable.
                       key: "actions",
                       label: "",
+                      canHide: false,
                       render: actions,
                       className: "w-12",
                     },
@@ -841,6 +962,7 @@ export function ResourcesPage({
                       {
                         key: "name",
                         label: "Subscription",
+                        sortValue: (r) => r.name,
                         render: (r) => (
                           <div>
                             <p className="font-medium">{r.name}</p>
@@ -902,12 +1024,19 @@ export function ResourcesPage({
                           />
                         ),
                       },
-                      { key: "actions", label: "", render: actions },
+                      {
+                        // Action-only column: no header text, never hideable.
+                        key: "actions",
+                        label: "",
+                        canHide: false,
+                        render: actions,
+                      },
                     ]
                   : [
                       {
                         key: "name",
                         label: "Routing rule",
+                        sortValue: (r) => r.name,
                         render: (r) => (
                           <span className="font-medium">{r.name}</span>
                         ),
@@ -950,7 +1079,13 @@ export function ResourcesPage({
                           />
                         ),
                       },
-                      { key: "actions", label: "", render: actions },
+                      {
+                        // Action-only column: no header text, never hideable.
+                        key: "actions",
+                        label: "",
+                        canHide: false,
+                        render: actions,
+                      },
                     ]
             }
           />
@@ -981,89 +1116,97 @@ export function ResourcesPage({
           onClose={() => setEditor(null)}
         />
       )}
-      <Dialog
+      <ConfirmDialog
         open={!!deleting}
-        onOpenChange={(o) => {
-          if (!o && !deleteBusy) setDeleting(null);
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
         }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>A little less in your orbit?</DialogTitle>
-            <DialogDescription>
-              Delete “{deleting?.name}”? This can’t be undone. Previously
-              delivered messages and audit records will stay intact.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setDeleting(null)}
-              disabled={deleteBusy}
-            >
-              Keep it
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={deleteBusy}
-              onClick={async () => {
-                if (!deleting) return;
-                setDeleteBusy(true);
-                try {
-                  await api(
-                    `/resources/${deleting.kind}/${deleting.id}`,
-                    "DELETE"
-                  );
-                  await refresh();
-                  toast.success("Configuration deleted");
-                  setDeleting(null);
-                } catch (e: any) {
-                  toast.error(e.message);
-                } finally {
-                  setDeleteBusy(false);
-                }
-              }}
-            >
-              {deleteBusy ? <Spinner /> : <Trash2 size={14} />}Delete
-              configuration
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        title="A little less in your orbit?"
+        description={`Delete “${deleting?.name ?? ""}”? This can’t be undone. Previously delivered messages and audit records will stay intact.`}
+        cancelLabel="Keep it"
+        confirmLabel="Delete configuration"
+        busy={deleteBusy}
+        onConfirm={async () => {
+          if (!deleting) return;
+          setDeleteBusy(true);
+          try {
+            await api(`/resources/${deleting.kind}/${deleting.id}`, "DELETE");
+            await refresh();
+            toast.success("Configuration deleted");
+            setDeleting(null);
+          } catch (e: any) {
+            toast.error(e.message);
+          } finally {
+            setDeleteBusy(false);
+          }
+        }}
+      />
       <Dialog
         open={!!test}
         onOpenChange={(o) => {
           if (!o) setTest(null);
         }}
       >
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{test?.name} · test flight</DialogTitle>
             <DialogDescription>
               {test?.demo
-                ? "A simulated preview. No external source was fetched and nothing was sent."
-                : `Source reached successfully. Found ${test?.count} recent items. Nothing has been sent to Discord.`}
+                ? "A simulated preview. No external source was fetched and nothing was sent to Discord."
+                : `Source reached successfully. Found ${test?.count ?? 0} recent item${test?.count === 1 ? "" : "s"}. Nothing has been sent to Discord.`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            {test?.items?.map((item: any, i: number) => (
-              <div
-                key={i}
-                className="rounded-xl border-l-4 border-l-primary bg-muted/40 p-4"
-              >
-                <h3 className="text-xs font-semibold">{item.title}</h3>
-                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-                  {item.summary}
-                </p>
-              </div>
-            ))}
-            {!test?.items?.length && (
-              <p className="rounded-lg bg-muted p-4 text-xs text-muted-foreground">
-                The source is reachable but has no recent items. Incoming
-                webhooks wait for your integration to send an event.
+          {test?.items?.length ? (
+            <NewsPreviewFeed items={test.items} sourceName={test.name} />
+          ) : (
+            <p className="rounded-lg bg-muted p-4 text-xs text-muted-foreground">
+              No recent items yet. Webhook sources only post when your
+              integration sends an event.
+            </p>
+          )}
+          {/* Facts a reader only sometimes wants: how many items were polled,
+              which filter was applied, and what each provider omitted. */}
+          <details className="rounded-lg border bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+            <summary className="cursor-pointer select-none font-medium text-foreground/80 underline-offset-2 hover:underline">
+              Preview details
+            </summary>
+            <div className="mt-2 space-y-1.5">
+              <p>
+                Same normalization and embed limits as live delivery; only the
+                worker posts new items.
               </p>
-            )}
-          </div>
+              {test?.officialOnly ? (
+                <p>
+                  Official-only filter on: Steam was asked for this app&apos;s
+                  announcement feed.
+                </p>
+              ) : null}
+              {!!test?.count && test.count > (test?.shown ?? 0) ? (
+                <p>
+                  Showing the {test.shown} most recent of {test.count}; the rest
+                  arrive through normal delivery only.
+                </p>
+              ) : null}
+              {test?.items?.flatMap((item: NewsCard) => item.notices).length ? (
+                <ul className="space-y-1">
+                  {[
+                    ...new Set<string>(
+                      test.items.flatMap((item: NewsCard) => item.notices)
+                    ),
+                  ].map((notice) => (
+                    <li key={notice}>{notice}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </details>
+          {!!test?.notices?.length && (
+            <ul className="space-y-1 rounded-lg border border-amber-200/70 bg-amber-50/70 p-3 text-[11px] leading-relaxed text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
+              {test.notices.map((notice: string) => (
+                <li key={notice}>{notice}</li>
+              ))}
+            </ul>
+          )}
           <Button className="mt-5 w-full" onClick={() => setTest(null)}>
             Looks good
             <Check size={14} />
@@ -1131,22 +1274,74 @@ export function ResourcesPage({
     </>
   );
 }
-function DeliveryTable({ query, filter }: { query: string; filter: string }) {
+const CASE_ACTION_OPTIONS = [
+  { value: "all", label: "All actions" },
+  { value: "warn", label: "Warn" },
+  { value: "timeout", label: "Timeout" },
+  { value: "kick", label: "Kick" },
+  { value: "ban", label: "Ban" },
+  { value: "purge", label: "Purge" },
+];
+const DELIVERY_STATUS_OPTIONS = [
+  { value: "all", label: "All statuses" },
+  { value: "delivered", label: "Delivered" },
+  { value: "failed", label: "Failed" },
+  { value: "pending", label: "Pending" },
+  { value: "sending", label: "Sending" },
+];
+function DeliveryTable({
+  query,
+  filter,
+  onQueryChange,
+  onFilterChange,
+}: {
+  query: string;
+  filter: string;
+  onQueryChange: (value: string) => void;
+  onFilterChange: (value: string) => void;
+}) {
   const { data } = useWorkspace();
   return (
     <HistoryTable<Delivery>
       kind="deliveries"
       query={query}
       filter={filter}
+      searchLabel="Search delivery history"
+      searchPlaceholder="Search updates and errors…"
+      onQueryChange={onQueryChange}
+      facetLabel="Filter delivery status"
+      facetTitle="Status"
+      facetOptions={DELIVERY_STATUS_OPTIONS}
+      onFilterChange={onFilterChange}
       columns={[
         {
           key: "title",
           label: "Update",
-          render: (r) => (
-            <span className="block max-w-xs truncate font-medium">
-              {r.title}
-            </span>
-          ),
+          render: (r) => {
+            // Only a confirmed message id becomes a jump link; a delivery that
+            // was never confirmed shows its title without one.
+            const href =
+              r.status === "delivered"
+                ? discordMessageUrl(data.guild.id, r.channelId, r.messageId)
+                : null;
+            return (
+              <span className="block max-w-xs">
+                {href ? (
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="block truncate font-medium underline-offset-2 hover:underline"
+                    title={`Open “${r.title}” in Discord`}
+                  >
+                    {r.title}
+                  </a>
+                ) : (
+                  <span className="block truncate font-medium">{r.title}</span>
+                )}
+              </span>
+            );
+          },
         },
         {
           key: "source",
@@ -1172,6 +1367,7 @@ function DeliveryTable({ query, filter }: { query: string; filter: string }) {
         {
           key: "status",
           label: "Status",
+          sortKey: "status",
           render: (r) => (
             <div>
               <Badge
@@ -1199,6 +1395,7 @@ function DeliveryTable({ query, filter }: { query: string; filter: string }) {
         {
           key: "time",
           label: "When",
+          sortKey: "createdAt",
           render: (r) => (
             <span className="whitespace-nowrap text-muted-foreground">
               {relativeTime(r.createdAt, data.presentation.referenceAt)}
@@ -1209,6 +1406,33 @@ function DeliveryTable({ query, filter }: { query: string; filter: string }) {
       emptyTitle="The next update is on its way"
       emptyDescription="Successful deliveries, retries, and any delivery errors will appear here. Events are deduplicated per source and destination."
     />
+  );
+}
+/**
+ * Card layouts (roles, news sources) are still lists of records. They keep the
+ * same compact search + status controls the tables own, instead of a separate
+ * page-level filter row that would disappear together with the cards.
+ */
+function ListToolbar({
+  query,
+  onQueryChange,
+  placeholder,
+  facet,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  placeholder: string;
+  facet: FacetFilter;
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2">
+      <SearchInput
+        value={query}
+        onChange={onQueryChange}
+        placeholder={placeholder}
+      />
+      <FacetFilterButton facet={facet} />
+    </div>
   );
 }
 function PanelPreview({
@@ -1250,7 +1474,7 @@ function PanelPreview({
         <div className="rounded-xl bg-[#313338] p-5 text-white">
           <div className="border-l-4 border-violet-400 bg-[#2b2d31] p-4">
             <h3 className="text-sm font-semibold">{r.name}</h3>
-            <p className="mt-2 text-xs leading-relaxed text-[#b5bac1]">
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               {r.data.description}
             </p>
           </div>

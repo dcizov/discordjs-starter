@@ -15,7 +15,7 @@ test("header search and notifications keep independent state and navigate from t
   await search
     .getByPlaceholder("Search pages and configuration…")
     .fill("self roles");
-  await search.getByRole("button", { name: "Self roles", exact: true }).click();
+  await search.getByRole("option", { name: /Self roles/ }).click();
   await expect(page).toHaveURL(`${root}/roles`);
   await expect(search).not.toBeVisible();
   await page
@@ -81,7 +81,7 @@ test("failed profile refresh retains the current identity and image rather than 
     })
   );
   const account = page.getByRole("button", {
-    name: "Account menu for Jamie Davis",
+    name: "Account menu for Jamie",
     exact: true,
   });
   await account.click();
@@ -106,4 +106,30 @@ test("failed profile refresh retains the current identity and image rather than 
         )
     )
     .toBe(true);
+});
+
+test("section tabs expose tab semantics and respond to arrow keys", async ({
+  page,
+}) => {
+  await page.goto(`${root}/channels`);
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
+  const list = page.getByRole("tablist", { name: "Server sections" });
+  await expect(list).toBeVisible();
+  const channels = list.getByRole("tab", { name: /^channels/i });
+  const roles = list.getByRole("tab", { name: /^roles/i });
+  await expect(channels).toHaveAttribute("aria-selected", "true");
+  await expect(roles).toHaveAttribute("aria-selected", "false");
+  // Roving tabindex: only the selected tab is in the Tab order.
+  await expect(channels).toHaveAttribute("tabindex", "0");
+  await expect(roles).toHaveAttribute("tabindex", "-1");
+  await channels.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(roles).toHaveAttribute("aria-selected", "true");
+  await expect(roles).toBeFocused();
+  await page.keyboard.press("End");
+  await expect(
+    list.getByRole("tab", { name: /^permissions/i })
+  ).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Home");
+  await expect(channels).toHaveAttribute("aria-selected", "true");
 });

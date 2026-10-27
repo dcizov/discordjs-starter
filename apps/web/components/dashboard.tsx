@@ -2,14 +2,16 @@
 import { waitForBotAction } from "@orbit/core/bot-actions";
 import { request } from "@/lib/utils";
 import type { DashboardData, GuildConfig } from "@orbit/core";
-import { ArrowUpRight, X } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CommunityPage } from "./features/community/community-page";
 import { CommandsPage } from "./commands-page";
 import { EconomyPage } from "./economy-page";
 import { MusicPage } from "./music-page";
 import { Overview } from "./features/overview/overview";
+import { MembersPage } from "./members-page";
+import { TemplatesPage } from "./templates-page";
 import { ResourcesPage } from "./resources-page";
 import { AuditPage, ChannelsPage, SettingsPage } from "./server-pages";
 import { WorkspaceContext } from "./workspace";
@@ -18,6 +20,14 @@ import { DashboardHeader } from "./layout/header";
 import { DemoNotice } from "./layout/demo-notice";
 import { InstallPrompt } from "./layout/install-prompt";
 import { HelpDialog, ModeInfoDialog } from "./layout/guidance";
+import { FirstVisitTour } from "./layout/first-visit-tour";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 export function Dashboard({
   initial,
   section,
@@ -30,6 +40,7 @@ export function Dashboard({
   useEffect(() => setHydrated(true), []);
   const [mobile, setMobile] = useState(false);
   const [help, setHelp] = useState(false);
+  const [tourReplay, setTourReplay] = useState(0);
   const [demoInfo, setDemoInfo] = useState(false);
   const router = useRouter();
   useEffect(() => {
@@ -59,7 +70,12 @@ export function Dashboard({
     },
     [data.guild.id]
   );
+  // Only the newest snapshot may replace what the visitor sees. A slow GET
+  // that resolves after a newer one (a burst of music controls, a tab that
+  // regains focus) must not roll the UI back to older queue state.
+  const refreshSeq = useRef(0);
   const refresh = useCallback(async () => {
+    const seq = ++refreshSeq.current;
     const d = await api<DashboardData>(
       section === "polls"
         ? "?community=poll"
@@ -73,6 +89,7 @@ export function Dashboard({
       router.refresh();
       return;
     }
+    if (seq !== refreshSeq.current) return;
     setData(d);
   }, [api, section, data.user.id, data.guild.id, router]);
   const navigate = useCallback(
@@ -103,6 +120,16 @@ export function Dashboard({
     }, 30000);
     return () => clearInterval(timer);
   }, [refresh, data.guild.installed]);
+  // A background tab throttles timers, so reconcile as soon as it is visible
+  // again instead of animating an old snapshot for another interval.
+  useEffect(() => {
+    if (!data.guild.installed) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refresh, data.guild.installed]);
 
   const sidebar = (
     <Sidebar
@@ -120,26 +147,23 @@ export function Dashboard({
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-[224px] flex-col overflow-y-auto border-r border-border bg-card px-4 pb-5 pt-7 lg:flex">
           {sidebar}
         </aside>
-        {mobile && (
-          <div
-            className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm lg:hidden"
-            onClick={() => setMobile(false)}
-          >
-            <aside
-              className="absolute inset-y-0 left-0 flex w-[250px] flex-col overflow-y-auto bg-card px-4 pb-5 pt-7"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                className="absolute right-4 top-5 p-2 text-muted-foreground"
-                aria-label="Close navigation"
-                onClick={() => setMobile(false)}
-              >
-                <X size={18} />
-              </button>
-              {sidebar}
-            </aside>
-          </div>
-        )}
+        {/*
+          The mobile navigation is a modal dialog, not a hand-rolled overlay: it
+          traps focus, closes on Escape, locks background scroll and returns
+          focus to the "Open navigation" button. The desktop sidebar above is the
+          same component, so the two can never list different pages.
+        */}
+        <Dialog open={mobile} onOpenChange={setMobile}>
+          <DialogContent className="left-0 top-0 h-dvh w-[264px] max-w-[80vw] translate-x-0 translate-y-0 overflow-y-auto rounded-none rounded-r-2xl p-5">
+            <DialogHeader className="sr-only mb-0 pr-0">
+              <DialogTitle>Workspace navigation</DialogTitle>
+              <DialogDescription>
+                Every page in this community workspace.
+              </DialogDescription>
+            </DialogHeader>
+            {sidebar}
+          </DialogContent>
+        </Dialog>
         <div className="lg:ml-[224px]">
           <DashboardHeader
             section={section}
@@ -154,6 +178,8 @@ export function Dashboard({
               <div className="page-enter" key={section}>
                 {section === "overview" ? (
                   <Overview />
+                ) : section === "members" ? (
+                  <MembersPage />
                 ) : section === "economy" ? (
                   <EconomyPage />
                 ) : section === "music" ? (
@@ -166,6 +192,8 @@ export function Dashboard({
                   <CommandsPage />
                 ) : section === "channels" ? (
                   <ChannelsPage />
+                ) : section === "templates" ? (
+                  <TemplatesPage />
                 ) : section === "audit" ? (
                   <AuditPage />
                 ) : section === "settings" ? (
@@ -183,7 +211,7 @@ export function Dashboard({
                 )}
               </div>
             )}
-            <footer className="mt-8 flex items-center justify-between border-t border-border/80 pt-5 text-[10px] text-muted-foreground/75">
+            <footer className="mt-8 flex items-center justify-between border-t border-border/80 pt-5 text-[10px] text-muted-foreground">
               <span>Made for the people who bring people together.</span>
               <button
                 className="flex items-center gap-1.5 hover:text-primary"
@@ -195,7 +223,17 @@ export function Dashboard({
           </main>
         </div>
         <ModeInfoDialog open={demoInfo} onOpenChange={setDemoInfo} />
-        <HelpDialog open={help} onOpenChange={setHelp} />
+        <HelpDialog
+          open={help}
+          onOpenChange={setHelp}
+          onReplayTour={() => {
+            setHelp(false);
+            setTourReplay((n) => n + 1);
+          }}
+        />
+        {hydrated && data.guild.installed && (
+          <FirstVisitTour replay={tourReplay} />
+        )}
       </div>
     </WorkspaceContext.Provider>
   );

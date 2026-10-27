@@ -2,7 +2,7 @@
 import type { ActivityRange } from "@orbit/core/activity";
 import { number } from "@/lib/utils";
 import { useState } from "react";
-import { Card, Select } from "./ui/primitives";
+import { Card, FormSelect } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
 
 function curve(points: [number, number][]) {
@@ -48,24 +48,25 @@ export function ActivityChart({ range }: { range: string }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-2 pt-4">
         <div>
-          <h2 className="text-[12px] font-semibold">Community activity</h2>
+          <h2 className="text-xs font-semibold">Community activity</h2>
           <p className="mt-1 text-[10px] text-muted-foreground">
             Daily activity rewards · {snapshot.timeZone} · {window.start} –{" "}
             {window.end}
           </p>
         </div>
-        <Select
+        <FormSelect
           aria-label="Chart metric"
           value={metric}
-          onChange={(event) => {
-            setMetric(event.target.value as typeof metric);
+          onValueChange={(next) => {
+            setMetric(next as typeof metric);
             setHover(null);
           }}
-          className="h-8 w-40 rounded-md px-2 text-[10px]"
-        >
-          <option value="events">Reward events</option>
-          <option value="members">Rewarded members</option>
-        </Select>
+          options={[
+            { value: "events", label: "Reward events" },
+            { value: "members", label: "Rewarded members" },
+          ]}
+          className="h-8 w-40 rounded-md text-[10px]"
+        />
       </div>
       <div className="mx-5 mt-2 flex flex-wrap gap-4 text-[9px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
@@ -168,6 +169,10 @@ export function ActivityChart({ range }: { range: string }) {
                 r="3"
                 fill="#a48ad5"
                 tabIndex={0}
+                // A focusable point announces its own value; `role="img"` is
+                // what makes `aria-label` valid on an SVG shape (axe:
+                // aria-prohibited-attr otherwise).
+                role="img"
                 aria-label={`${buckets[index].label}: ${number(values[index])} ${metricName.toLowerCase()}`}
                 onFocus={() => setHover(index)}
                 onBlur={() => setHover(null)}

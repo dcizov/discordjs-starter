@@ -6,6 +6,7 @@ import {
   type APIRequestContext,
 } from "@playwright/test";
 import { randomUUID } from "node:crypto";
+import { setTheme } from "./support/ui";
 const gid = "120000000000000001",
   base = `/api/guilds/${gid}`,
   root = `/dashboard/${gid}`,
@@ -411,9 +412,7 @@ test("new publishing, routing and private-history controls pass scoped WCAG AA c
   await page.getByRole("button", { name: "New poll", exact: true }).click();
   await check('[role="dialog"]');
   await page.keyboard.press("Escape");
-  await page
-    .getByRole("button", { name: "Toggle color theme", exact: true })
-    .click();
+  await setTheme(page, "dark");
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await check("[data-community-workspace]");
   await visit(page, "news");

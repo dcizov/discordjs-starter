@@ -5,6 +5,11 @@
 - [ ] Node 22.14+, PostgreSQL 17+, Redis 7+, and optional current Lavalink v4 are available **inside containers**, or installed for the non-Docker workflow. Docker hosts do not need Node/npm installed.
 - [ ] `DEMO_MODE=false` is explicit on all live services; demo mode is never used as authentication.
 - [ ] Discord application, OAuth callback, bot token, members/message-content intents, and command registration are configured.
+- [ ] `ORBIT_SOURCE_REF` (optional) is the commit id you deployed, so the docs
+      pages' "view the source" link points at the code that is actually running.
+      Pass it at build time (`docker build --build-arg ORBIT_SOURCE_REF=$(git rev
+    parse HEAD)`, or `ORBIT_SOURCE_REF=…` before `npm run build`); unset links
+      to `main`. It is a build-time value, never read from a request.
 - [ ] `APP_URL` is the actual HTTPS origin (no trailing slash), proxy forwards trusted headers, secure cookies are enabled, and `APP_SECRET` is at least 32 random characters.
 - [ ] Database/Redis/Lavalink credentials are strong and held in a secret manager or protected environment files. No `NEXT_PUBLIC_*` secret variables exist.
 - [ ] Database, Redis, and Lavalink are private. Worker and audio egress cannot reach metadata/private networks.
@@ -49,7 +54,7 @@ docker compose --profile live run --rm --build migrate
 docker compose --profile live up -d --build
 ```
 
-For hot-reloading Docker development, use the [development override/startup commands](DEVELOPMENT.md#2-start-every-service) instead. Host-run Node services remain a separate optional workflow.
+For hot-reloading Docker development, use the [development override/startup commands](DEVELOPMENT.md#2-start-every-service) instead. Host-run Node services remain a separate optional workflow; [Development workflows](WORKFLOWS.md) compares all three.
 
 Do **not** delete the old volume or run `docker compose down -v` as a troubleshooting shortcut. The new Orbit database starts empty. If you need data from the original installation, keep its volume, back it up using a compatible PostgreSQL version, and plan an explicit import into Orbit's new schema. If an earlier Orbit installation already stored data in `pgdata`, back it up before moving that data to the new volume; the volume switch does not migrate it automatically.
 
@@ -83,6 +88,21 @@ This is a Discord OAuth guild-list lookup, not a Lavalink error. Check web stdou
 - **503/network failures:** Discord or the connection is temporarily unavailable. Retry after the displayed delay. Do not rotate unrelated bot, database, or Lavalink credentials.
 
 No operation is authorized with expired cached guild permissions when verification fails. The permission cache and cooldowns are process-local; multiple web replicas have independent caches, so large deployments should coordinate upstream quotas across replicas rather than lengthening authorization-cache lifetimes. Bot actions continue to independently validate current member permissions.
+
+## Optional bot presence
+
+The bot sets one activity once, after the gateway is ready:
+
+| Variable            | Default    | Accepted values                                          |
+| ------------------- | ---------- | -------------------------------------------------------- |
+| `BOT_ACTIVITY`      | `/help`    | Any text (trimmed to 128 chars); empty disables presence |
+| `BOT_ACTIVITY_TYPE` | `watching` | `playing`, `watching`, `listening`, `competing`          |
+| `BOT_STATUS`        | `online`   | `online`, `idle`, `dnd`, `invisible`                     |
+
+It is deliberately not a rotating status and it never invents member or server
+counts, because those drift between shards and the dashboard. Unknown values fall
+back to watching/online and the startup log says so. Demo mode never logs in, so it
+never sets a presence.
 
 ## Health and observability
 

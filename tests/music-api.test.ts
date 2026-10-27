@@ -118,12 +118,66 @@ describe("real music route response contract (mocked I/O, no Discord)", () => {
     expect((await post({ action: "play", query: "Track" })).status).toBe(403);
     expect(deps.enqueueAction).not.toHaveBeenCalled();
   });
+  it("forwards an authorized seek with its position and rejects an invalid one", async () => {
+    const response = await post({ action: "seek", position: 42 });
+    expect(response.status).toBe(202);
+    expect(deps.enqueueAction).toHaveBeenCalledWith(
+      guildId,
+      actorId,
+      "music",
+      { action: "seek", position: 42 },
+      expect.any(String)
+    );
+    expect((await post({ action: "seek", position: 0 })).status).toBe(422);
+    expect((await post({ action: "seek", position: 1.5 })).status).toBe(422);
+  });
+  it("forwards an approved search provider and rejects anything else", async () => {
+    const ok = await post({
+      action: "play",
+      query: "Ambient",
+      source: "youtube-music",
+    });
+    expect(ok.status).toBe(202);
+    expect(deps.enqueueAction).toHaveBeenCalledWith(
+      guildId,
+      actorId,
+      "music",
+      { action: "play", query: "Ambient", source: "youtube-music" },
+      expect.any(String)
+    );
+    for (const source of ["scsearch:raw", "spotify", "ytsearch"]) {
+      const rejected = await post({ action: "play", query: "Ambient", source });
+      expect(rejected.status).toBe(400);
+      expect((await rejected.json()).error).toContain(
+        "Unknown search provider"
+      );
+    }
+    // A search provider on a control action would be silently ignored, so it is
+    // refused as well.
+    expect((await post({ action: "pause", source: "bandcamp" })).status).toBe(
+      400
+    );
+    expect(deps.enqueueAction).toHaveBeenCalledTimes(1);
+  });
   it("keeps demo playback purely local and never touches the live queue", async () => {
     vi.stubEnv("DEMO_MODE", "true");
     const response = await post({ action: "play", query: "Fictional preview" });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, demo: true });
     expect(deps.putMusicState).toHaveBeenCalled();
+    expect(deps.enqueueAction).not.toHaveBeenCalled();
+  });
+  it("says in demo mode that no provider was searched", async () => {
+    vi.stubEnv("DEMO_MODE", "true");
+    expect(
+      (await post({ action: "play", query: "Preview", source: "bandcamp" }))
+        .status
+    ).toBe(200);
+    const saved = deps.putMusicState.mock.calls.at(-1)![1];
+    expect(saved.current).toMatchObject({
+      title: "Preview",
+      author: "Demo request · Bandcamp not searched · no audio playback",
+    });
     expect(deps.enqueueAction).not.toHaveBeenCalled();
   });
   it.each([

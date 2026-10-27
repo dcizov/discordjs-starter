@@ -38,12 +38,25 @@ jobs:
       - run: npm audit --omit=dev --audit-level=moderate
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      # Screenshots are review material, not assertions: this spec always runs
+      # when VISUAL_EVIDENCE=1 and the artifact is kept on success too, so a
+      # reviewer can inspect the dashboard without a local browser.
+      - run: npx playwright test tests/e2e/screenshots.spec.ts
+        env:
+          VISUAL_EVIDENCE: "1"
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: browser-test-results
           path: test-results/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-screenshots
+          path: visual-evidence/
+          if-no-files-found: ignore
   containers:
     runs-on: ubuntu-latest
     steps:
@@ -59,7 +72,9 @@ jobs:
         run: |
           docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live --profile music config --quiet
           docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile live config --quiet
-      - run: docker build --target runtime -t orbit:ci .
+      # Pass the commit id so the docs source links in the built image are pinned
+      # to this commit (and the build arg itself is covered by CI).
+      - run: docker build --target runtime --build-arg ORBIT_SOURCE_REF=${{ github.sha }} -t orbit:ci .
       - run: docker build --target dev -t orbit:ci-dev .
       - name: Smoke-test unprivileged development image without network access
         run: |

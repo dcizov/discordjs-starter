@@ -12,6 +12,11 @@ import { onMessage } from "../features/moderation/messages";
 import { handleReaction } from "../features/roles/panels";
 import type { MusicService } from "../features/music/service";
 import { removeGuild, syncGuild } from "../infrastructure/guild-sync";
+import {
+  recordDeparture,
+  recordMember,
+  syncRoster,
+} from "../infrastructure/roster-sync";
 
 /** Installs only Orbit's application listeners; disposal never removes SDK/voice listeners. */
 export function attachGatewayEvents(
@@ -64,9 +69,27 @@ export function attachGatewayEvents(
       )
     );
   });
-  listen(Events.GuildCreate, sync);
+  listen(Events.GuildCreate, (guild) => {
+    sync(guild);
+    // A fresh install has no roster copy at all; read it once, bounded.
+    void syncRoster(guild, "installed").catch((error) =>
+      logger.warn(
+        { guildId: guild.id, error: errorDiagnostic(error) },
+        "Initial roster sync failed"
+      )
+    );
+  });
   listen(Events.GuildUpdate, (_before, guild) => sync(guild));
   listen(Events.GuildDelete, (guild) => {
+    // No pending music timer may outlive Orbit's membership of the guild.
+    void music
+      .guildRemoved(guild.id)
+      .catch((error) =>
+        logger.warn(
+          { guildId: guild.id, error: errorDiagnostic(error) },
+          "Music cleanup for a removed guild failed"
+        )
+      );
     void removeGuild(guild.id).catch((error) =>
       logger.warn(
         { error: errorDiagnostic(error) },
@@ -87,7 +110,45 @@ export function attachGatewayEvents(
     if ("guild" in channel) sync(channel.guild);
   });
   listen(Events.GuildMemberUpdate, (_before, member) => {
+    // Orbit's own membership carries the role position and permissions the
+    // dashboard shows, so it still refreshes guild metadata.
     if (member.id === client.user?.id) sync(member.guild);
+    // Nickname, role, avatar or guild-avatar changes for anyone else are exactly
+    // what makes a stale roster wrong in the members screen.
+    void recordMember(member).catch((error) =>
+      logger.warn(
+        {
+          guildId: member.guild.id,
+          userId: member.id,
+          error: errorDiagnostic(error),
+        },
+        "Member update could not be recorded"
+      )
+    );
+  });
+  listen(Events.GuildMemberAdd, (member) => {
+    void recordMember(member).catch((error) =>
+      logger.warn(
+        {
+          guildId: member.guild.id,
+          userId: member.id,
+          error: errorDiagnostic(error),
+        },
+        "Member join could not be recorded"
+      )
+    );
+  });
+  listen(Events.GuildMemberRemove, (member) => {
+    void recordDeparture(member).catch((error) =>
+      logger.warn(
+        {
+          guildId: member.guild.id,
+          userId: member.id,
+          error: errorDiagnostic(error),
+        },
+        "Member departure could not be recorded"
+      )
+    );
   });
   return () => {
     for (const remove of dispose) remove();

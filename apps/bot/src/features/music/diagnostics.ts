@@ -1,4 +1,12 @@
 import { diagnosticText, errorDiagnostic } from "@orbit/core/diagnostics";
+import {
+  MUSIC_SEARCH_PROVIDERS,
+  musicSearchProvider,
+  musicSearchProviderByPrefix,
+  providerUnavailableMessage,
+  supportedPrefixes,
+} from "@orbit/core/music-sources";
+import { musicConnectionDiagnostic } from "./connection";
 import { parseArgs } from "node:util";
 import { LoadType, type LavalinkResponse } from "shoukaku";
 import { z } from "zod";
@@ -92,6 +100,7 @@ export function parseMusicDoctorArgs(args: string[]) {
     args,
     options: {
       query: { type: "string" },
+      source: { type: "string" },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -104,11 +113,23 @@ export function parseMusicDoctorArgs(args: string[]) {
   )
     throw new Error("Provide --query only once.");
   if (
+    tokens.filter((t) => t.kind === "option" && t.name === "source").length > 1
+  )
+    throw new Error("Provide --source only once.");
+  if (
     values.query !== undefined &&
     (values.query.trim().length < 2 || values.query.length > 200)
   )
     throw new Error("--query must contain 2–200 characters.");
-  return { help: false, query: values.query } as const;
+  // Same table as the runtime: an unknown provider is refused here rather than
+  // reported as a mysterious backend failure.
+  if (values.source !== undefined && !musicSearchProvider(values.source))
+    throw new Error(
+      `--source must be one of: ${MUSIC_SEARCH_PROVIDERS.map((p) => p.id).join(", ")}.`
+    );
+  if (values.source !== undefined && values.query === undefined)
+    throw new Error("--source only selects the provider for --query.");
+  return { help: false, query: values.query, source: values.source } as const;
 }
 
 /** Exactly two possible read-only endpoints; never connects a gateway or voice player. */
@@ -191,13 +212,27 @@ type DoctorReport = {
   } | null;
   configuredSearch: string;
   warnings: string[];
+  providers: {
+    id: string;
+    prefix: string;
+    manager: string;
+    available: boolean;
+    configured: boolean;
+  }[];
+  /**
+   * Lookup outcome. Explicitly separate from playback: a loaded track only means
+   * the backend answered with metadata.
+   */
   lookup?: {
     status: "loaded" | "failed";
     tracks?: number;
     source?: string | null;
     kind?: "search" | "url";
+    provider?: string | null;
   };
   error?: string;
+  /** Why the backend check failed, when the error carried that evidence. */
+  category?: string;
 };
 export async function runMusicDoctor(
   client: MusicDoctorClient,
@@ -205,6 +240,11 @@ export async function runMusicDoctor(
     query?: string;
     settings?: MusicSourceSettings;
     resolveHost?: MusicLookup;
+    /** Provider to test the optional lookup with; defaults to the config. */
+    source?: string;
+    /** Configured `host:port`, used only to phrase a failure that has evidence. */
+    host?: string;
+    secure?: boolean;
   } = {}
 ): Promise<DoctorReport> {
   const settings = options.settings ?? musicSourceSettings();
@@ -214,6 +254,8 @@ export async function runMusicDoctor(
       "Read-only backend/source metadata check. No Discord login, voice join, audio playback, or database/queue access. A successful lookup does not prove playback works.",
     backend: null,
     configuredSearch: diagnosticText(settings.searchPrefix, 100),
+    /** Every provider the runtime understands, with its adapter status. */
+    providers: [],
     warnings: [],
   };
   try {
@@ -228,31 +270,51 @@ export async function runMusicDoctor(
         version: clean(plugin.version),
       })),
     };
-    const source =
-      settings.searchPrefix === "scsearch"
-        ? "soundcloud"
-        : settings.searchPrefix === "bcsearch"
-          ? "bandcamp"
-          : null;
-    if (!source)
-      report.warnings.push("MUSIC_SEARCH_PREFIX must be scsearch or bcsearch.");
-    else if (!info.sourceManagers.some((name) => name.toLowerCase() === source))
+    // One provider table, shared with the runtime, the commands and the
+    // dashboard. Every supported prefix is recognised, and a configured prefix
+    // the table does not know is reported instead of guessed at.
+    const hasManager = (manager: string) =>
+      info.sourceManagers.some((name) => name.toLowerCase() === manager);
+    report.providers = MUSIC_SEARCH_PROVIDERS.map((provider) => ({
+      id: provider.id,
+      prefix: provider.prefix,
+      manager: provider.manager,
+      available: hasManager(provider.manager),
+      configured: provider.prefix === settings.searchPrefix,
+    }));
+    const configured = musicSearchProviderByPrefix(settings.searchPrefix);
+    if (!configured) {
       report.warnings.push(
-        `The configured ${source} source manager is not enabled. Enable it in Lavalink and restart that service.`
+        `MUSIC_SEARCH_PREFIX is "${diagnosticText(settings.searchPrefix, 100)}", which Orbit cannot map to a search adapter. Use one of: ${supportedPrefixes().join(", ")}. Text search stays unavailable until this is fixed; nothing is switched automatically.`
       );
-    else report.ok = true;
+    } else if (
+      !report.providers.some((p) => p.id === configured.id && p.available)
+    ) {
+      report.warnings.push(providerUnavailableMessage(configured));
+    } else report.ok = true;
+    const unavailable = report.providers.filter((p) => !p.available);
+    if (unavailable.length === MUSIC_SEARCH_PROVIDERS.length)
+      report.warnings.push(
+        "No search adapter is registered, but Lavalink answered. The backend is reachable; source managers are what serve lookups. Playback would still be unconfirmed either way."
+      );
+    else if (unavailable.length)
+      report.warnings.push(
+        `Not registered on this node: ${unavailable.map((p) => `${p.id} (${p.manager})`).join(", ")}. Those providers cannot be offered until their adapter is enabled and Lavalink restarted; the doctor does not suggest switches beyond the ones this deployment documents.`
+      );
     if (options.query !== undefined) {
       try {
         const result = await resolveMusicQuery(client, options.query, {
           info,
           settings,
           resolveHost: options.resolveHost,
+          provider: options.source,
         });
         report.lookup = {
           status: "loaded",
           tracks: result.tracks.length,
           source: result.source,
           kind: result.kind,
+          provider: result.provider?.id ?? null,
         };
       } catch (error) {
         report.ok = false;
@@ -264,7 +326,15 @@ export async function runMusicDoctor(
         "No track was looked up. Add --query with the same failing search text or approved source URL to test the source."
       );
   } catch (error) {
-    report.error = errorDiagnostic(error);
+    // Same reading of the error as the runtime uses: a refused connection is
+    // named as one, and an error that answers nothing gets no invented cause.
+    const connection = musicConnectionDiagnostic(error, {
+      host: options.host,
+      secure: options.secure,
+    });
+    report.error = connection.detail;
+    report.category = connection.category;
+    if (connection.hint) report.warnings.push(connection.hint);
   }
   return report;
 }

@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { chooseComboboxOption } from "./support/ui";
 const guildId = "120000000000000001",
   root = `/dashboard/${guildId}`;
 test("automatic deals destination and evidence thresholds persist without sending anything in demo", async ({
@@ -20,12 +21,17 @@ test("automatic deals destination and evidence thresholds persist without sendin
   await expect(
     dialog.getByText("Automatic posts · familiar games only", { exact: true })
   ).toBeVisible();
-  await dialog
-    .getByLabel("Destination channel", { exact: true })
-    .selectOption({ label: "# game-deals" });
-  const channelId = await dialog
-    .getByLabel("Destination channel", { exact: true })
-    .inputValue();
+  // The channel picker is a searchable combobox; picking by name is the real
+  // user path, and the stored id is checked against the API below.
+  await chooseComboboxOption(dialog, "Destination channel", "# game-deals");
+  const channelId = await request
+    .get(`/api/guilds/${guildId}`)
+    .then(
+      async (r) =>
+        (await r.json()).guild.channels.find(
+          (c: any) => c.name === "game-deals"
+        ).id
+    );
   await dialog
     .getByLabel("Top ITAD popularity position", { exact: true })
     .fill("200");

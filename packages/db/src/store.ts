@@ -112,7 +112,7 @@ export async function getResource(guildId: string, id: string) {
     .where(and(eq(s.resources.guildId, guildId), eq(s.resources.id, id)));
   return row ? serialize<Resource>(row) : null;
 }
-export type Actor = { id: string; name: string };
+export type Actor = { id: string; name: string; avatar?: string | null };
 function newAudit(
   guildId: string,
   actor: Actor,
@@ -125,6 +125,7 @@ function newAudit(
     guildId,
     actorId: actor.id,
     actorName: actor.name,
+    actorAvatar: actor.avatar ?? null,
     action,
     target,
     detail,
@@ -136,15 +137,24 @@ export async function audit(
   actor: Actor,
   action: string,
   target: string,
-  detail: string
+  detail: string,
+  /**
+   * Full diagnostic for the "expanded details" view (stack traces, backend
+   * versions). `detail` is the one-line summary the history table shows, so a
+   * failure record no longer puts a whole Java exception into a table cell.
+   */
+  options: { details?: string } = {}
 ) {
-  const entry = newAudit(
-    guildId,
-    actor,
-    action,
-    safeText(target, 80),
-    diagnosticText(detail)
-  );
+  const entry: AuditEntry = {
+    ...newAudit(
+      guildId,
+      actor,
+      action,
+      safeText(target, 80),
+      diagnosticText(detail)
+    ),
+    details: options.details ? diagnosticText(options.details) : null,
+  };
   if (isDemo())
     await demoTransaction((d) => {
       d.audit.unshift(entry);
@@ -572,6 +582,16 @@ export async function recordCase(
     return serialize<Resource>(r);
   });
 }
+/**
+ * Claim one (guild, source, external item, channel) delivery, or return `null`
+ * when it was already claimed.
+ *
+ * This is the deduplication boundary for feeds and deals: the unique constraint
+ * decides the winner, so two workers racing on the same item produce exactly one
+ * row. A returned row is a *reservation* (`status: "pending"`, `attempts: 0`),
+ * not a delivery — the caller sends, then records success or failure. Callers must
+ * treat `null` as "someone else has it" and stay silent rather than retrying.
+ */
 export async function reserveDelivery(
   input: Omit<
     Delivery,

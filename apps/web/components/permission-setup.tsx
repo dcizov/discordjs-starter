@@ -9,8 +9,9 @@ import {
   type PermissionName,
 } from "@orbit/core/permissions";
 import { useState } from "react";
-import { Badge, Card, Field, Select } from "./ui/primitives";
+import { Badge, Card, Field } from "./ui/primitives";
 import { useWorkspace } from "./workspace";
+import { Combobox } from "./ui/combobox";
 const label = (name: PermissionName) =>
   name.replace(/([a-z])([A-Z])/g, "$1 $2");
 export function PermissionSetup() {
@@ -56,25 +57,22 @@ export function PermissionSetup() {
         </div>
         <div className="mt-5 max-w-md">
           <Field label="Check a synced channel">
-            <Select
+            <Combobox
               aria-label="Permission check channel"
               value={channelId}
-              onChange={(event) => setChannelId(event.target.value)}
-            >
-              {!data.guild.channels.length && (
-                <option value="">No synced channels</option>
-              )}
-              {data.guild.channels.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.type === "voice"
-                    ? "Voice: "
-                    : item.type === "stage"
-                      ? "Stage (unsupported): "
-                      : "#"}
-                  {item.name}
-                </option>
-              ))}
-            </Select>
+              onValueChange={setChannelId}
+              disabled={!data.guild.channels.length}
+              placeholder={
+                data.guild.channels.length
+                  ? "Choose a channel"
+                  : "No synced channels"
+              }
+              searchPlaceholder="Search channels…"
+              options={data.guild.channels.map((item) => ({
+                value: item.id,
+                label: `${item.type === "voice" ? "Voice: " : item.type === "stage" ? "Stage (unsupported): " : "#"}${item.name}`,
+              }))}
+            />
           </Field>
         </div>
         <div className="mt-5 overflow-x-auto">
@@ -212,14 +210,13 @@ export function PermissionSetup() {
           </h3>
           <ol className="mt-3 list-decimal space-y-2 pl-4 text-[11px] leading-relaxed text-muted-foreground">
             <li>
-              Install scopes: bot + applications.commands. The invite requests
-              basic View Channel, Send Messages and Embed Links only; opt into
-              feature grants in Discord.
+              Invite scopes: bot + applications.commands. Basic View Channel,
+              Send Messages and Embed Links only; opt into feature grants in
+              Discord.
             </li>
             <li>
-              Bot guild permissions and selected-channel/category overwrites are
-              different; fix the specific denied destination, not the whole
-              server.
+              Guild permissions and channel overwrites differ: fix the denied
+              destination, not the whole server.
             </li>
             <li>
               Gateway intents requested in code: {gatewayIntentNames.join(", ")}
@@ -231,20 +228,18 @@ export function PermissionSetup() {
               toggle.
             </li>
             <li>
-              Command defaults, runtime moderator checks, protected targets and
-              music’s same-channel/DJ rules still apply.
+              Command defaults, moderator checks, protected targets and the
+              music DJ rules still apply.
             </li>
             <li>
-              Dashboard OAuth uses identify + guilds. Owner/Manage Server (or
-              Administrator) authorizes the dashboard, not bot powers; writes
-              re-check authorization.
+              Dashboard sign-in uses identify + guilds. It grants no bot powers,
+              and every write re-checks your permissions.
             </li>
           </ol>
           <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-            For music, test a normal non-full voice channel with View Channel,
-            Connect and Speak. Then distinguish Discord handshake, Lavalink
-            player and permitted source loading. No playback claim follows from
-            these synced bits.
+            Music: test a normal voice channel with View Channel, Connect and
+            Speak. Synced bits never prove a handshake, a player, or that a
+            source will load.
           </p>
         </Card>
       </div>

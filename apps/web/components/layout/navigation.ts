@@ -3,6 +3,7 @@ import {
   CalendarClock,
   Hash,
   Terminal,
+  Layers,
   LayoutGrid,
   Music2,
   Rss,
@@ -10,11 +11,18 @@ import {
   Settings2,
   ShieldCheck,
   Tags,
+  UserRoundSearch,
   UsersRound,
   Wallet,
 } from "lucide-react";
 export const navigation = [
   { id: "overview", label: "Overview", icon: LayoutGrid, group: "workspace" },
+  {
+    id: "members",
+    label: "Members",
+    icon: UserRoundSearch,
+    group: "workspace",
+  },
   { id: "roles", label: "Self roles", icon: UsersRound, group: "workspace" },
   {
     id: "moderation",
@@ -34,6 +42,7 @@ export const navigation = [
     group: "workspace",
   },
   { id: "channels", label: "Channels & roles", icon: Hash, group: "server" },
+  { id: "templates", label: "Templates", icon: Layers, group: "server" },
   { id: "commands", label: "Commands", icon: Terminal, group: "server" },
   { id: "audit", label: "Audit log", icon: ScrollText, group: "server" },
   {
