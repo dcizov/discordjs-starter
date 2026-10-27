@@ -584,3 +584,59 @@ Discord's behaviour under a real interruption.
 was true when written and is no longer meaningful. It now asserts 0009 is
 present and sits directly after 0008 — the substance of the original claim —
 rather than that nothing newer exists.
+
+---
+
+## Slice 6b — cross-server target selection
+
+A template is portable: it addresses its own roles and channels by key, never by
+Discord id. The API already accepted any `targetGuildId` and checked it against
+the guilds the user administers, but the dashboard never sent anything but the
+current workspace, so a template could only ever be applied to the server it was
+captured from.
+
+### What was added
+
+**`apps/web/components/templates-page.tsx`** — an "Apply to" selector listing
+every server the user manages that Orbit is installed in. Choosing another
+server drops the plan, the explicit mappings and any run being followed, because
+all three describe the _old_ target: a mapping names a resource in a specific
+server, and a fingerprint is a hash of one target's plan. The card title and the
+preview prose both name the selected target.
+
+Servers the bot was never invited to are not offered as choices; the server
+refuses them regardless.
+
+**`apps/web/app/api/[...path]/route.ts`** — reading an apply run no longer
+requires the run to belong to the workspace whose dashboard is open. A
+cross-server apply is started from the template's home server but its run lives
+on the target, so the check is now "the caller manages the run's server" rather
+than "the run is in this workspace". `auth.guilds` is the Discord-derived list
+this user administers, so an id alone still grants nothing. A run the user
+cannot manage is reported as missing rather than forbidden, so the endpoint does
+not confirm that it exists.
+
+### Verified
+
+- `npm run typecheck` clean; `eslint --max-warnings=0` clean on all touched
+  files; `npm run format` applied; `npm run build:web` succeeds.
+- `npx vitest run`: **1062 passed** (1057 + 5).
+- `tests/template-cross-server.test.ts` (5) at the API boundary: a run is
+  followable from the workspace that started it, servable from its own server,
+  refused for a workspace the user does not manage, and hidden — 404, not 403 —
+  when the run's server is not in the caller's guild list.
+- Live demo server, three guilds (two installed, one not): template created in
+  "The Cozy Corner"; previewed against "The Workshop" → 200 with a plan
+  computed for the _other_ server; previewed against the uninstalled guild → 400
+  "Invite Orbit to the target server before applying a template."; applied to
+  The Workshop from The Cozy Corner's dashboard → 202, and the resulting run is
+  readable from both workspaces while an unmanaged guild is rejected with 403
+  before the run is ever touched.
+
+### Not verified
+
+The selector was never clicked in a browser — this session has no browser tool.
+It compiles, is in the client bundle, and the surrounding page renders, but the
+dropdown only appears once a template is selected, which happens client-side, so
+it is absent from the server-rendered HTML and its appearance and interaction
+are unproven.

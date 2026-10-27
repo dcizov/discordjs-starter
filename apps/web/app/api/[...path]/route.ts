@@ -441,7 +441,23 @@ async function handle(req: Request, context: Context) {
         });
       if (path[3] === "runs" && path[4] && req.method === "GET") {
         const run = await getTemplateRun(path[4]);
-        if (!run || run.guildId !== guildId)
+        if (!run) throw new HttpError(404, "Apply run not found");
+        /**
+         * A run belongs to the server the template was applied *to*, which is
+         * not always the server whose dashboard is open — a cross-server apply
+         * is started from the template's home server and its run lives on the
+         * target.
+         *
+         * So the check is "the caller manages the run's server", not "the run
+         * is in this workspace". `auth.guilds` is the Discord-derived list this
+         * user administers, so an id alone still grants nothing. A run the user
+         * cannot manage is reported as missing rather than forbidden, so the
+         * endpoint does not confirm that it exists.
+         */
+        if (
+          run.guildId !== guildId &&
+          !auth.guilds.some((g) => g.id === run.guildId)
+        )
           throw new HttpError(404, "Apply run not found");
         return NextResponse.json(run);
       }

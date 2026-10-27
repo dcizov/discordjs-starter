@@ -26,6 +26,7 @@ import {
   Badge,
   Card,
   Field,
+  FormSelect,
   Input,
   SectionHeader,
   Textarea,
@@ -86,6 +87,15 @@ export function TemplatesPage() {
     null
   );
   const [selected, setSelected] = useState<string>("");
+  /**
+   * The server the template would be applied to.
+   *
+   * Defaults to the workspace the page is open on, but a template is portable —
+   * it addresses its own roles and channels by key, not by Discord id — so any
+   * other server the user manages and has Orbit installed in is a valid target.
+   * The server decides which ones those are, not the browser.
+   */
+  const [targetGuildId, setTargetGuildId] = useState(data.guild.id);
   const [plan, setPlan] = useState<TemplatePlan | null>(null);
   const [planError, setPlanError] = useState("");
   const [planning, setPlanning] = useState(false);
@@ -235,6 +245,32 @@ export function TemplatesPage() {
   const sources = new Map(data.guilds.map((g) => [g.id, g]));
 
   /**
+   * A plan describes one target. Pointing the same template at another server
+   * invalidates the fingerprint, the explicit mappings (which name resources in
+   * the old target) and any run being followed, so all three are dropped rather
+   * than quietly reused.
+   */
+  function changeTarget(next: string) {
+    if (next === targetGuildId) return;
+    setTargetGuildId(next);
+    setPlan(null);
+    setPlanError("");
+    setMapping({});
+    setRun(null);
+    setRunId(null);
+    setApplyError("");
+  }
+
+  /**
+   * Every server the user manages that Orbit is actually in. A target the bot
+   * was never invited to cannot be applied to, so it is not offered; the server
+   * refuses it regardless.
+   */
+  const targets = data.guilds.filter((g) => g.installed);
+  const targetName =
+    targets.find((g) => g.id === targetGuildId)?.name ?? data.guild.name;
+
+  /**
    * Preview the plan, including any explicit mappings.
    *
    * Mappings are part of the plan: changing one changes the fingerprint, so the
@@ -250,7 +286,7 @@ export function TemplatesPage() {
         `/templates/${template.id}/preview`,
         "POST",
         {
-          targetGuildId: data.guild.id,
+          targetGuildId,
           ...(Object.keys(mappingOverride).length
             ? { mapping: mappingOverride }
             : {}),
@@ -286,7 +322,7 @@ export function TemplatesPage() {
         `/templates/${template.id}/apply`,
         "POST",
         {
-          targetGuildId: data.guild.id,
+          targetGuildId,
           fingerprint: plan.fingerprint,
           ...(Object.keys(mapping).length ? { mapping } : {}),
         },
@@ -517,7 +553,14 @@ export function TemplatesPage() {
         </Card>
 
         <Card>
-          <SectionHeader icon={Layers} title="Apply to this server" />
+          <SectionHeader
+            icon={Layers}
+            title={
+              targetGuildId === data.guild.id
+                ? "Apply to this server"
+                : `Apply to ${targetName}`
+            }
+          />
           <div className="space-y-4 p-5">
             {!template ? (
               <p className="text-xs text-muted-foreground">
@@ -525,6 +568,38 @@ export function TemplatesPage() {
               </p>
             ) : (
               <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label
+                    htmlFor="template-target"
+                    className="text-[11px] font-medium text-foreground"
+                  >
+                    Apply to
+                  </label>
+                  <FormSelect
+                    id="template-target"
+                    className="h-8 w-auto min-w-44 text-[11px]"
+                    aria-label="Server to apply this template to"
+                    value={targetGuildId}
+                    onValueChange={changeTarget}
+                    options={targets.map((g) => ({
+                      value: g.id,
+                      label:
+                        g.id === data.guild.id
+                          ? `${g.name} (this server)`
+                          : g.name,
+                    }))}
+                  />
+                  {targetGuildId !== data.guild.id && (
+                    <span className="text-[11px] text-muted-foreground">
+                      This template is applied additively; nothing is read from
+                      or written to{" "}
+                      <span className="font-medium text-foreground">
+                        {data.guild.name}
+                      </span>
+                      .
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
@@ -554,7 +629,7 @@ export function TemplatesPage() {
                   </span>{" "}
                   against{" "}
                   <span className="font-medium text-foreground">
-                    {data.guild.name}
+                    {targetName}
                   </span>
                   . Nothing is created until you confirm.
                 </p>
