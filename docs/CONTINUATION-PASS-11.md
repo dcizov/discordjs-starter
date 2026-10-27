@@ -1234,8 +1234,8 @@ leveling surface.
 
 ### Ordering is what satisfies the two requirements that pull against each other
 
-The brief wants *no duplicate rewards or announcements on retry* **and**
-*announcement failure never loses XP*. Those fight, and the order resolves them:
+The brief wants _no duplicate rewards or announcements on retry_ **and**
+_announcement failure never loses XP_. Those fight, and the order resolves them:
 
 1. XP is awarded and committed **before** reconciliation is attempted.
 2. Each grant is **recorded first**, then announced.
@@ -1300,3 +1300,71 @@ announced through the API. `reconcileRewards` is tested against a fake guild;
 the shape of Discord's permission and hierarchy checks is modelled, not
 proven. The dashboard has no reward editor yet, so `rewardStack` and the
 announcement message can only be changed in the database.
+
+---
+
+## Slice 13e — the leveling dashboard and `docs/LEVELING.md`
+
+### The documented curve table was wrong, and it now cannot be
+
+`docs/LEVELING.md` prints concrete numbers. They were written out by hand from
+the closed-form formula and **eight of the nine rows were wrong** — the level-1
+row claimed reaching level 1 costs 155 XP when it costs 100, and the error
+compounded all the way up (level 100 was out by ~170,000 XP).
+
+The cause is a real off-by-one in how the two functions relate, and it is
+exactly the confusion the doc warns about:
+
+- `totalXpForLevel(n)` — XP to *reach* level n.
+- `xpForLevel(n)` — XP to *leave* level n, i.e. `5n² + 50n + 100`.
+
+`total(n+1) = total(n) + cost(n)`. Writing "level n costs 5n²+50n+100" without
+saying *to advance from it* invites the wrong reading.
+
+The table is now generated from the functions and pinned by two tests: every
+documented row matches, and `total(n+1) = total(n) + cost(n)` holds for
+n = 1…200. The doc says which number is which.
+
+### The leaderboard joins the roster, and does not invent names
+
+XP rows carry a bare user id — the storage layer deliberately records no name,
+so it cannot show a stale one. The dashboard joins each row against the
+synchronized roster in the same batched read the economy already uses (no
+request per row). A member with no roster row — someone who left, or a server
+that has never synced — is shown as an id rather than a guessed name.
+
+### `HELP_ORDER` was one of six lists, and the only silent one
+
+Adding a module means touching the zod config schema, the hand-written
+`GuildConfig` type, `ModuleKey`, `commandModuleLabels`, `moduleRoots`,
+`MODULE_DOCS`, `HELP_ORDER` and the overview toolkit. Six of those break the
+build when missed. `HELP_ORDER` is a plain array rather than a `Record`, so
+missing `xp` there made the whole group vanish from `/help` with no type
+error — it took the help-overview test to surface it.
+
+### The page
+
+Three tabs. **Leaderboard** (rank, identity, level, progress bar, total, and
+the message/voice/adjusted split). **How levels work** — the curve, with both
+numbers side by side and the note about which is which. **Role rewards**, with
+the total XP each one takes.
+
+Settings cover: message range and cooldown, voice interval/cap/participants and
+the four mute-deafen eligibility switches, excluded channels and roles, the
+stack-or-replace choice, reward editing, and the announcement channel plus a
+**live preview** rendered by the same function the bot uses.
+
+### Verification
+
+Typecheck clean. `eslint --max-warnings=0` clean. `format:check` clean.
+`build:web` succeeds. `npm test`: **1214 passed / 92 files** (was 1212 / 92),
++2 pinning the documented curve.
+
+### Not verified
+
+**No browser was used on the new page.** It typechecks, lints and builds, but
+nothing about it has been looked at — layout, tab behaviour, the settings
+dialog, the announcement preview and the progress bar are all unreviewed. The
+page has never been loaded against a real guild, so the shape of the data
+reaching it (`data.xpBoard`) is asserted by type but not observed. Member XP
+detail linked from the member page is still unbuilt.

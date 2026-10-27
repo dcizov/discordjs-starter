@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CommunityPage } from "./features/community/community-page";
 import { CommandsPage } from "./commands-page";
 import { EconomyPage } from "./economy-page";
+import { LevelingPage } from "./leveling-page";
 import { MusicPage } from "./music-page";
 import { Overview } from "./features/overview/overview";
 import { MembersPage } from "./members-page";
@@ -195,6 +196,8 @@ export function Dashboard({
                   <MembersPage />
                 ) : section === "economy" ? (
                   <EconomyPage />
+                ) : section === "xp" ? (
+                  <LevelingPage />
                 ) : section === "music" ? (
                   <MusicPage />
                 ) : section === "polls" || section === "announcements" ? (

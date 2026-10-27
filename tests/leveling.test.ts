@@ -350,3 +350,34 @@ describe("the repetition fingerprint", () => {
     );
   });
 });
+
+describe("the table published in docs/LEVELING.md", () => {
+  // The documentation prints concrete numbers. They were once written out by
+  // hand and were wrong, so they are pinned to the functions: the doc can no
+  // longer drift from what the bot actually does.
+  const table: [number, number, number][] = [
+    [1, 100, 155],
+    [2, 255, 220],
+    [3, 475, 295],
+    [4, 770, 380],
+    [5, 1150, 475],
+    [10, 4675, 1100],
+    [25, 42000, 4475],
+    [50, 268375, 15100],
+    [100, 1899250, 55100],
+  ];
+  it("reports the same total and next-level cost", () => {
+    for (const [level, total, next] of table) {
+      expect(totalXpForLevel(level), `total(${level})`).toBe(total);
+      expect(xpForLevel(level), `next(${level})`).toBe(next);
+    }
+  });
+  it("advancing one level adds exactly that level's cost", () => {
+    // Guards the two functions against drifting apart, which is what made the
+    // hand-written table wrong in the first place.
+    for (let level = 1; level <= 200; level += 1)
+      expect(totalXpForLevel(level + 1)).toBe(
+        totalXpForLevel(level) + xpForLevel(level)
+      );
+  });
+});

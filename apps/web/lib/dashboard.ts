@@ -47,6 +47,30 @@ function withAccountAvatar<T extends AccountRecord>(
   };
 }
 /**
+ * An XP leaderboard row joined to the roster.
+ *
+ * Unlike the economy's accounts, an XP row records no name of its own, so its
+ * whole identity comes from the synchronized roster. A member with no roster
+ * row is left with a bare id: the board must not invent a name to fill a gap.
+ */
+function withXpIdentity<
+  T extends { guildId: string; userId: string; total: number },
+>(row: T, member?: MemberIdentity) {
+  return {
+    ...row,
+    username: member?.username ?? null,
+    globalName: member?.globalName ?? null,
+    nickname: member?.nickname ?? null,
+    avatarUrl: personAvatarUrl({
+      guildId: row.guildId,
+      userId: row.userId,
+      guildAvatar: member?.guildAvatar ?? null,
+      avatar: member?.avatar ?? null,
+    }),
+  };
+}
+
+/**
  * One projection for a historical audit row.
  *
  * The actor's picture is derived from the hash that was stored with the action.
@@ -127,6 +151,10 @@ export async function loadDashboard(
         (
           await getMemberIdentities(guildId, [
             ...data.accounts.map((account) => account.userId),
+            // The XP board earns its names from this same roster read. XP rows
+            // hold a bare id, so joining here is what lets the board show who
+            // someone actually is without a request per row.
+            ...(data.xpBoard?.rows ?? []).map((row) => row.userId),
             user.id,
           ])
         ).map((identity) => [identity.userId, identity])
@@ -188,6 +216,18 @@ export async function loadDashboard(
     accounts: data.accounts.map((account) =>
       withAccountAvatar(account, identities.get(account.userId))
     ),
+    // XP rows carry an id and nothing else. The board is still about *people*,
+    // so the roster's current names and pictures are joined here. A member with
+    // no roster row - someone who left, or a server that has never synced - is
+    // left with a bare id rather than an invented name.
+    xpBoard: data.xpBoard
+      ? {
+          ...data.xpBoard,
+          rows: data.xpBoard.rows.map((row) =>
+            withXpIdentity(row, identities.get(row.userId))
+          ),
+        }
+      : undefined,
     audit: data.audit.map(withAuditAvatarUrl),
     // The account menu is the signed-in person *in this server*: a nickname is
     // shown with the handle beside it, and the guild avatar wins over the global

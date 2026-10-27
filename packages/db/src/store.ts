@@ -26,6 +26,7 @@ import { database } from "./client";
 import { demoRead, demoTransaction } from "./demo";
 import { demoHealth } from "./demo-seed";
 import * as s from "./schema";
+import { listXpLeaderboard } from "./leveling";
 export const serialize = <T>(v: unknown): T => JSON.parse(JSON.stringify(v));
 export const emptyMusic = (): MusicState => ({
   current: null,
@@ -447,6 +448,7 @@ export async function getDashboardData(
           .filter((a) => a.guildId === guildId)
           .reduce((n, a) => n + a.balance, 0),
       },
+      xpBoard: await listXpLeaderboard(guildId, { page: 1, pageSize: 10 }),
       demo: true,
     };
   }
@@ -460,6 +462,7 @@ export async function getDashboardData(
     music,
     health,
     totals,
+    xpBoard,
   ] = await Promise.all([
     listResources(guildId),
     db
@@ -495,6 +498,7 @@ export async function getDashboardData(
       })
       .from(s.accounts)
       .where(eq(s.accounts.guildId, guildId)),
+    listXpLeaderboard(guildId, { page: 1, pageSize: 10 }),
   ]);
   return serialize({
     guild,
@@ -503,6 +507,7 @@ export async function getDashboardData(
     ledger,
     accounts,
     deliveries,
+    xpBoard,
     music: music[0]?.data ?? emptyMusic(),
     health: [
       "Discord API",

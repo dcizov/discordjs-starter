@@ -308,6 +308,12 @@ export type DashboardData = {
     pageSize: number;
   };
   integrations?: { itad: boolean; lavalink: boolean };
+  /**
+   * The XP leaderboard's first page. XP rows carry no names; the caller joins
+   * them against the synchronized roster, which is why this is separate from
+   * `accounts` (which is money, not XP).
+   */
+  xpBoard?: import("@orbit/db").XpLeaderboard;
   /** Hash fields remain compatible; URL fields are server-derived display data. */
   user: {
     id: string;

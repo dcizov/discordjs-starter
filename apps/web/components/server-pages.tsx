@@ -16,6 +16,7 @@ import {
   Layers,
   Lock,
   Music2,
+  TrendingUp,
   Radio,
   RotateCcw,
   Rss,
@@ -843,6 +844,12 @@ export function SettingsPage() {
                 name: "Economy",
                 desc: "Reward a little participation.",
                 icon: Wallet,
+              },
+              {
+                id: "xp",
+                name: "Levels & XP",
+                desc: "Let people grow into your community.",
+                icon: TrendingUp,
               },
               {
                 id: "music",
