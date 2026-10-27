@@ -13,6 +13,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { useLiveRefresh, isInFlight, isTerminal } from "@/lib/use-live-refresh";
 import { PageHeader } from "./page-header";
 import { useWorkspace } from "./workspace";
 import { IdentityImage } from "./identity/image";
@@ -59,6 +60,9 @@ type StoredTemplate = {
 
 type TemplateRun = {
   id: string;
+  /** Present on the server's run rows; used to re-select the template after a
+   * reload rediscovers a run that is still in flight. */
+  templateId?: string;
   state:
     "queued" | "running" | "completed" | "partial" | "failed" | "simulated";
   result: {
@@ -101,34 +105,145 @@ export function TemplatesPage() {
   const [planError, setPlanError] = useState("");
   const [planning, setPlanning] = useState(false);
   const [mapping, setMapping] = useState<Record<string, string>>({});
+  // The run is identified by id, not held only in `run`, so the poller and the
+  // reload-recovery path can both attach to the same piece of backend work.
+  const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<TemplateRun | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [captureError, setCaptureError] = useState("");
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState("");
 
-  const load = useCallback(async () => {
-    try {
-      const response = await api<{
-        templates: StoredTemplate[];
-        omissions: string[];
-      }>("/templates");
+  /** The capture job, when one is on the bot rather than already stored. */
+  const [captureJobId, setCaptureJobId] = useState<string | null>(null);
+
+  /** True while the backend is doing template work this page cares about. */
+  const busy =
+    !!captureJobId || capturing || isInFlight(run?.state) || applying;
+
+  /**
+   * The template list is the surface every other operation lands on: a capture
+   * adds a row, a delete removes one, an apply changes nothing but its run.
+   *
+   * It polls fast while work is in flight and slowly otherwise, so a second
+   * tab or a worker finishing a job shows up without a manual reload. The
+   * selected template is preserved across refreshes, and a refresh never
+   * touches anything the visitor is editing.
+   */
+  const list = useLiveRefresh<{
+    templates: StoredTemplate[];
+    omissions: string[];
+  }>({
+    fetcher: (signal) =>
+      api("/templates", "GET", undefined, undefined, { signal }),
+    active: busy,
+    // An idle surface still notices another tab's change, but does not hammer.
+    idleMs: 30_000,
+    onUpdate: (response) => {
       setTemplates(response.templates);
       setOmissions(response.omissions);
-      setLoadFailed(false);
-      setError("");
       setSelected((current) =>
         current && response.templates.some((t) => t.id === current)
           ? current
           : (response.templates[0]?.id ?? "")
       );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Templates could not load.");
-      setLoadFailed(true);
-    }
-  }, [api]);
+    },
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (list.data) return;
+    if (list.error) {
+      setError(list.error.message);
+      setLoadFailed(true);
+      return;
+    }
+    setError("");
+    setLoadFailed(false);
+  }, [list.data, list.error]);
+
+  const load = useCallback(() => list.refresh(), [list]);
+
+  /**
+   * Follow a capture that the bot is still working on.
+   *
+   * Capture is the one template operation with no run row to poll — it is a
+   * plain bot action — so the job's own status is watched until it settles,
+   * then the list is refreshed to pick up the new template. `idleMs: 0` keeps
+   * it from polling once the job has finished.
+   */
+  useLiveRefresh<{ state: string; error?: string | null }>({
+    fetcher: (signal) =>
+      api(`/actions/${captureJobId}`, "GET", undefined, undefined, { signal }),
+    active: !!captureJobId,
+    idleMs: 0,
+    immediate: !!captureJobId,
+    onUpdate: (job) => {
+      if (job.state === "completed") {
+        setCaptureJobId(null);
+        setCapturing(false);
+        list.refresh();
+      } else if (job.state === "failed") {
+        setCaptureJobId(null);
+        setCapturing(false);
+        setCaptureError(
+          job.error || "The bot could not finish capturing this server."
+        );
+      } else if (["unknown", "removed", "cancelled"].includes(job.state)) {
+        setCaptureJobId(null);
+        setCapturing(false);
+        setCaptureError(
+          "This capture is no longer available. It may have finished; refresh to check."
+        );
+      }
+    },
+  });
+
+  /**
+   * Rediscover an apply that is still running after a reload, a reconnect or a
+   * second tab. The run belongs to the worker, not to the browser that asked
+   * for it, so the server — not local state — is asked what is in flight.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    api<{ run: TemplateRun | null }>("/templates/active")
+      .then(({ run: active }) => {
+        if (!cancelled && active && !runId) {
+          setRunId(active.id);
+          setRun(active);
+          if (active.templateId) setSelected(active.templateId);
+        }
+      })
+      .catch(() => {
+        // Recovery is best-effort: a failure here must not break the page.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only by design: later status comes from the run poller below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Follow the apply run while the worker owns it.
+   *
+   * `idleMs: 0` is deliberate: once a run reaches a terminal state there is
+   * nothing left to poll, and a finished run must not keep generating requests.
+   */
+  const runFeed = useLiveRefresh<TemplateRun>({
+    fetcher: (signal) =>
+      api(`/templates/runs/${runId}`, "GET", undefined, undefined, { signal }),
+    active: !!runId && isInFlight(run?.state),
+    idleMs: 0,
+    immediate: !!runId,
+    onUpdate: (next) => {
+      setRun(next);
+      setApplying(isInFlight(next.state));
+      // A finished apply changes what the plan should say, so refresh the list
+      // and re-derive the preview rather than leaving it describing the
+      // server as it was before the run.
+      if (isTerminal(next.state)) list.refresh();
+    },
+  });
 
   const template = templates?.find((t) => t.id === selected) ?? null;
   const sources = new Map(data.guilds.map((g) => [g.id, g]));
@@ -165,35 +280,71 @@ export function TemplatesPage() {
     }
   }
 
+  /**
+   * Queue the apply and follow the run, rather than blocking on the job.
+   *
+   * `waitForBotAction` gives up after 30 seconds and reports "may still be
+   * processing". A template apply routinely takes longer than that, and the
+   * worker keeps going either way — so the page hands the job off, records the
+   * run id and lets the run poller report queued → running → completed.
+   * Closing the tab does not cancel anything.
+   */
   async function apply() {
     if (!template || !plan) return;
     setApplying(true);
     setApplyError("");
     setRun(null);
+    setRunId(null);
     try {
-      const accepted = await api<{ runId: string }>(
+      const accepted = await api<{ runId: string; jobId?: string }>(
         `/templates/${template.id}/apply`,
         "POST",
         {
           targetGuildId: data.guild.id,
           fingerprint: plan.fingerprint,
           ...(Object.keys(mapping).length ? { mapping } : {}),
-        }
+        },
+        undefined,
+        { awaitJob: false }
       );
-      // The API already waits for the queued job, but the recorded run is the
-      // source of truth for what was created, reused and failed.
-      const recorded = await api<TemplateRun>(
-        `/templates/runs/${accepted.runId}`
-      );
-      setRun(recorded);
+      setRunId(accepted.runId);
     } catch (e) {
       setApplyError(
         e instanceof Error ? e.message : "The apply could not start."
       );
-    } finally {
       setApplying(false);
     }
   }
+
+  /**
+   * One sentence describing what the backend is doing right now, for the live
+   * region and for the visible progress line. Progress is only claimed when a
+   * run actually reports step counts; otherwise it says what it knows.
+   */
+  const statusMessage = (() => {
+    if (captureJobId)
+      return "The bot is capturing this server’s structure. You can close this page; the capture continues on the server.";
+    if (!run) return "";
+    if (run.state === "queued")
+      return "Apply queued. It will start on its own and keep running if you close this page.";
+    if (run.state === "running") {
+      const total =
+        (run.result?.created?.length ?? 0) +
+        (run.result?.reused?.length ?? 0) +
+        (run.result?.failed?.length ?? 0);
+      return total
+        ? `Applying now. ${total} step${total === 1 ? "" : "s"} done so far.`
+        : "Applying now. Progress updates as each step finishes.";
+    }
+    const failed = run.result?.failed?.length ?? 0;
+    if (run.state === "completed")
+      return `Apply finished. ${run.result?.created?.length ?? 0} created, ${run.result?.reused?.length ?? 0} reused.`;
+    if (run.state === "partial")
+      return `Apply finished with problems. ${failed} step${failed === 1 ? "" : "s"} failed.`;
+    if (run.state === "failed")
+      return `Apply failed. ${run.error ?? ""}`.trim();
+    return STATE_COPY[run.state];
+  })();
 
   const targetOptions = (item: TemplatePlanItem) =>
     item.kind === "role"
@@ -237,6 +388,23 @@ export function TemplatesPage() {
           template.
         </p>
       </div>
+
+      {/* Visible counterpart to the live region above: a spinner alone tells a
+          sighted visitor "something is happening" but not what, and tells a
+          screen reader nothing at all. */}
+      {(captureJobId || isInFlight(run?.state)) && (
+        <div
+          role="status"
+          className="mb-5 flex items-start gap-2.5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-[11px] leading-relaxed text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200"
+        >
+          <Loader2
+            size={13}
+            className="mt-0.5 shrink-0 animate-spin"
+            aria-hidden
+          />
+          <span>{statusMessage}</span>
+        </div>
+      )}
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card>
@@ -394,6 +562,40 @@ export function TemplatesPage() {
                     {applyError}
                   </p>
                 )}
+                {/*
+                  Status is announced, not only animated. A spinner conveys
+                  "something is happening" to a sighted visitor and nothing at
+                  all to a screen reader, so the same state is published as
+                  text in a polite live region.
+                */}
+                <p aria-live="polite" className="sr-only">
+                  {statusMessage}
+                </p>
+                {captureError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-[11px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                    {captureError}
+                    <button
+                      className="ml-2 underline"
+                      onClick={() => {
+                        setCaptureError("");
+                        void load();
+                      }}
+                    >
+                      Dismiss and refresh
+                    </button>
+                  </div>
+                )}
+                {runFeed.error && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+                    Orbit could not re-read this apply run
+                    {isInFlight(run?.state)
+                      ? " — it is still running and will update automatically."
+                      : "."}
+                    <button className="ml-2 underline" onClick={runFeed.retry}>
+                      Try again
+                    </button>
+                  </div>
+                )}
                 {run && <RunResult run={run} />}
               </>
             )}
@@ -429,8 +631,11 @@ export function TemplatesPage() {
       <CreateTemplateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={async () => {
+        onCreated={async ({ jobId }) => {
           setCreateOpen(false);
+          setCaptureJobId(jobId);
+          // A capture runs in the worker and may still be going: refresh now to
+          // show what exists, and let the list keep polling until it lands.
           await load();
         }}
       />
@@ -637,7 +842,7 @@ function CreateTemplateDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: () => Promise<void>;
+  onCreated: (info: { jobId: string | null }) => Promise<void>;
 }) {
   const { api } = useWorkspace();
   const [name, setName] = useState("");
@@ -653,24 +858,37 @@ function CreateTemplateDialog({
     setError("");
     setNotice("");
     try {
+      // Only the bot can read permission overwrites, so a capture is a job.
+      // It is not awaited here: the worker owns it from this point and the page
+      // follows its own progress, so a capture that takes longer than the
+      // action bridge's 30s patience is not reported as a failure while it is
+      // in fact still running.
       const response = await api<{
         id?: string;
         demo?: boolean;
         note?: string;
-      }>("/templates", "POST", {
-        name: name.trim(),
-        description: description.trim(),
-        include,
-      });
+        jobId?: string;
+      }>(
+        "/templates",
+        "POST",
+        {
+          name: name.trim(),
+          description: description.trim(),
+          include,
+        },
+        undefined,
+        { awaitJob: false }
+      );
       if (!response?.id) {
         setNotice(
-          "The bot is capturing this server’s structure. The template appears here when it finishes."
+          "The bot is capturing this server’s structure. The template appears here when it finishes — you can close this dialog and even this tab; the capture is running on the server."
         );
+        await onCreated({ jobId: response?.jobId ?? null });
         return;
       }
       setName("");
       setDescription("");
-      await onCreated();
+      await onCreated({ jobId: null });
     } catch (e) {
       setError(
         e instanceof Error ? e.message : "The template could not be saved."

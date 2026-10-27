@@ -22,12 +22,14 @@ export async function request<T = any>(
   url: string,
   method = "GET",
   data?: unknown,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<T> {
   const r = await fetch(url, {
     method,
     headers: { "content-type": "application/json", ...headers },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
+    ...(signal ? { signal } : {}),
   });
   const result = await r.json();
   if (!r.ok)

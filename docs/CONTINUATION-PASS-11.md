@@ -69,14 +69,14 @@ $ git status --porcelain | wc -l
 0
 ```
 
-| Check | Result |
-| --- | --- |
-| `d3e5b61` is an ancestor of `HEAD` | **yes** — it *is* `HEAD` |
-| Working tree before / after deepen | clean / clean |
-| `HEAD` tree before / after deepen | `ec52099…` / `ec52099…` — unchanged |
-| `main` (`dc9726a`) is an ancestor of `HEAD` | **yes** |
+| Check                                                                | Result                                                                      |
+| -------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `d3e5b61` is an ancestor of `HEAD`                                   | **yes** — it _is_ `HEAD`                                                    |
+| Working tree before / after deepen                                   | clean / clean                                                               |
+| `HEAD` tree before / after deepen                                    | `ec52099…` / `ec52099…` — unchanged                                         |
+| `main` (`dc9726a`) is an ancestor of `HEAD`                          | **yes**                                                                     |
 | `eeb0e68` (handoff's stated baseline start) is an ancestor of `HEAD` | **yes**, `git rev-list --count eeb0e68..HEAD` → `98` (99 commits inclusive) |
-| All 11 pass-10 commits present with matching subjects | **yes** |
+| All 11 pass-10 commits present with matching subjects                | **yes**                                                                     |
 
 **No previous work was replayed.** The baseline was already the branch tip; only
 its truncated ancestry was missing, and that was restored by fetch alone.
@@ -85,12 +85,12 @@ its truncated ancestry was missing, and that was restored by fetch alone.
 
 `git ls-remote origin` shows four branches:
 
-| Branch | Tip | Decision |
-| --- | --- | --- |
-| `main` | `dc9726a` | ancestor of `HEAD`; nothing to merge |
+| Branch                             | Tip       | Decision                                                               |
+| ---------------------------------- | --------- | ---------------------------------------------------------------------- |
+| `main`                             | `dc9726a` | ancestor of `HEAD`; nothing to merge                                   |
 | `arena/99c6cf65-discordjs-starter` | `d3e5b61` | **identical SHA to `HEAD`** — no newer commits exist on the old branch |
-| `arena/e2b42b08-discordjs-starter` | `eeb0e68` | ancestor of `HEAD` |
-| `arena/752cdf1a-discordjs-starter` | `2ed0fec` | **not** an ancestor — inspected, see below |
+| `arena/e2b42b08-discordjs-starter` | `eeb0e68` | ancestor of `HEAD`                                                     |
+| `arena/752cdf1a-discordjs-starter` | `2ed0fec` | **not** an ancestor — inspected, see below                             |
 
 `2ed0fec` (`feat: add an optional dev container backed by the dev compose
 service`, 2026-10-19) branches directly off `main` and is **older** than the
@@ -111,14 +111,14 @@ Merging it would be a regression. It was left alone.
 All commands run on `arena/88919263-discordjs-starter` at `d3e5b61`, Node
 `v22.22.3`, npm `10.9.8`.
 
-| Command | Result |
-| --- | --- |
-| `npm ci` | **pass** — 642 packages, exit 0 (4 moderate npm-audit advisories, pre-existing) |
-| `npm run typecheck` | **pass** — exit 0 (`next typegen` + `tsc --noEmit` ×2) |
-| `npx eslint apps packages tests --max-warnings=0` | **pass** — exit 0 |
-| `npm run format:check` | **pass** — "All matched files use Prettier code style" |
-| `npx vitest run` | **pass** — **76 files / 953 tests**, 37.38 s |
-| `npm run build:web` | **pass** — exit 0, 33 routes generated |
+| Command                                           | Result                                                                          |
+| ------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `npm ci`                                          | **pass** — 642 packages, exit 0 (4 moderate npm-audit advisories, pre-existing) |
+| `npm run typecheck`                               | **pass** — exit 0 (`next typegen` + `tsc --noEmit` ×2)                          |
+| `npx eslint apps packages tests --max-warnings=0` | **pass** — exit 0                                                               |
+| `npm run format:check`                            | **pass** — "All matched files use Prettier code style"                          |
+| `npx vitest run`                                  | **pass** — **76 files / 953 tests**, 37.38 s                                    |
+| `npm run build:web`                               | **pass** — exit 0, 33 routes generated                                          |
 
 The 76/953 figure reproduces the previous session's result exactly. **The
 baseline is green and no failures were hidden.** `npm run test:e2e` (Playwright)
@@ -131,19 +131,19 @@ was not run — no browsers are installed in this sandbox; it runs in CI.
 The handoff was accurate about the big picture and wrong about several details.
 Each correction below was verified against the repository.
 
-| # | Handoff said | Actually | Evidence |
-| --- | --- | --- | --- |
-| 1 | "Tables currently in `schema.ts` (**16**)", then lists 17 names | **17** `pgTable` exports | `grep -cE '^export const … = pgTable' packages/db/src/schema.ts` → 17 |
-| 2 | React `^19.1.0` "would allow a fresh `npm ci` to resolve below 19.2.0" | **Wrong.** `npm ci` installs the lockfile exactly: React is **locked at 19.3.1**. The declared range only matters when the lockfile is regenerated. (This correction came from the user and is confirmed.) | `package-lock.json` → `react 19.3.1`, lockfileVersion 3 |
-| 3 | Music includes "lyrics" as implemented | **Not implemented.** LavaLyrics/LRCLIB are configured in Lavalink, but there is no lyrics command and no lyrics code path. The only match is a comment at `music/source.ts:407`. | `moduleRoots.music` = play, search, queue, pause, resume, skip, stop, volume, seek |
-| 4 | "Next migration starts at `0009`" | **Correct.** Journal has 9 entries (`idx` 0–8); last tag `0008_account_identity_fields`. Next is `0009_*`. | `drizzle/meta/_journal.json` |
-| 5 | Blizzard presence unstated | **Present and selectable.** `sourceSchema.data.adapter` enum = `["rss","steam","webhook","blizzard","wowhead","mojang"]`; `blizzard`/`wowhead`/`mojang` have **no fetch implementation** in `feeds.ts` (only `webhook` and `steam` are handled) but are offered in the UI. 53 matches repo-wide. | `packages/core/src/config.ts:207`, `feeds.ts:324-325`, `resource-editor.tsx:754` |
-| 6 | Templates "capture, preview, apply, delete" | **Confirmed.** No PATCH/PUT, no duplicate, no blank-create, no blueprints — the builder is greenfield. `templates-page.tsx` has exactly one `load()` in one `useEffect` (lines 129–131): no polling, no abort, no stale guarding. | grep on both files |
+| #   | Handoff said                                                           | Actually                                                                                                                                                                                                                                                                                         | Evidence                                                                           |
+| --- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| 1   | "Tables currently in `schema.ts` (**16**)", then lists 17 names        | **17** `pgTable` exports                                                                                                                                                                                                                                                                         | `grep -cE '^export const … = pgTable' packages/db/src/schema.ts` → 17              |
+| 2   | React `^19.1.0` "would allow a fresh `npm ci` to resolve below 19.2.0" | **Wrong.** `npm ci` installs the lockfile exactly: React is **locked at 19.3.1**. The declared range only matters when the lockfile is regenerated. (This correction came from the user and is confirmed.)                                                                                       | `package-lock.json` → `react 19.3.1`, lockfileVersion 3                            |
+| 3   | Music includes "lyrics" as implemented                                 | **Not implemented.** LavaLyrics/LRCLIB are configured in Lavalink, but there is no lyrics command and no lyrics code path. The only match is a comment at `music/source.ts:407`.                                                                                                                 | `moduleRoots.music` = play, search, queue, pause, resume, skip, stop, volume, seek |
+| 4   | "Next migration starts at `0009`"                                      | **Correct.** Journal has 9 entries (`idx` 0–8); last tag `0008_account_identity_fields`. Next is `0009_*`.                                                                                                                                                                                       | `drizzle/meta/_journal.json`                                                       |
+| 5   | Blizzard presence unstated                                             | **Present and selectable.** `sourceSchema.data.adapter` enum = `["rss","steam","webhook","blizzard","wowhead","mojang"]`; `blizzard`/`wowhead`/`mojang` have **no fetch implementation** in `feeds.ts` (only `webhook` and `steam` are handled) but are offered in the UI. 53 matches repo-wide. | `packages/core/src/config.ts:207`, `feeds.ts:324-325`, `resource-editor.tsx:754`   |
+| 6   | Templates "capture, preview, apply, delete"                            | **Confirmed.** No PATCH/PUT, no duplicate, no blank-create, no blueprints — the builder is greenfield. `templates-page.tsx` has exactly one `load()` in one `useEffect` (lines 129–131): no polling, no abort, no stale guarding.                                                                | grep on both files                                                                 |
 
 ### 3.1 A scoping note that matches what I found
 
 The user's instruction "do not delete the `webhook_secrets` table just because
-it contains *webhook*" is correct and I verified why: `webhook_secrets` is an
+it contains _webhook_" is correct and I verified why: `webhook_secrets` is an
 **in-house HMAC signing table** for Orbit's own signed-webhook ingestion
 endpoint (`apps/web/app/api/webhooks/[sourceId]/route.ts`), not a news-webhook
 delivery mechanism. It has its own protected server endpoint and is unrelated to
@@ -157,44 +157,44 @@ Kept up to date as the pass progresses.
 
 ### Implemented (verified in code / by the baseline run)
 
-| Area | State |
-| --- | --- |
-| Dashboard shell, server-side tables | TanStack Table v9 manual mode, server-side sort/filter/page, named column menus |
-| Auth | Discord OAuth, sessions, per-guild authorization, server-only permission checks |
-| Audit log | Append-only, actor avatars, hash-derived URLs |
-| Economy | Accounts, ledger, daily, transfer, shop, inventory, deliveries, outbox |
-| Moderation | warn/timeout/kick/ban/purge/cases + hierarchy & protected-target checks |
-| Roles / role panels | Publish job, hierarchy and managed-role checks |
-| Music | Lavalink via shoukaku, 4 providers with explicit selection, queue, progress, volume, idle-disconnect, `music:doctor` |
-| Deals / news / polls / announcements / help | Provider adapters, presentation policies, 32 commands / 47 invocations |
-| Documentation | 30 files in `docs/`, bespoke renderer (`marked` + `sanitize-html`), nav/search/anchors/copy |
-| Member directory | Synchronized roster, bounded sweeps, `complete`/`partial`/`failed`, server-side querying, read-only detail |
-| Identity | One resolver: guild nickname → globalName → username → storedName |
-| Templates | Capture, preview (create/reuse/skip + blockers + fingerprint), queued apply run with per-step results, retry-safe by name, DELETE (source guild only) |
-| Jobs | `sync-roster`, `capture-template`, `apply-template`, `publish-panel`, `send-test` over BullMQ + Redis |
-| Signed webhook ingestion | `webhook_secrets` + HMAC endpoint (**out of scope for news removal**) |
+| Area                                        | State                                                                                                                                                 |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dashboard shell, server-side tables         | TanStack Table v9 manual mode, server-side sort/filter/page, named column menus                                                                       |
+| Auth                                        | Discord OAuth, sessions, per-guild authorization, server-only permission checks                                                                       |
+| Audit log                                   | Append-only, actor avatars, hash-derived URLs                                                                                                         |
+| Economy                                     | Accounts, ledger, daily, transfer, shop, inventory, deliveries, outbox                                                                                |
+| Moderation                                  | warn/timeout/kick/ban/purge/cases + hierarchy & protected-target checks                                                                               |
+| Roles / role panels                         | Publish job, hierarchy and managed-role checks                                                                                                        |
+| Music                                       | Lavalink via shoukaku, 4 providers with explicit selection, queue, progress, volume, idle-disconnect, `music:doctor`                                  |
+| Deals / news / polls / announcements / help | Provider adapters, presentation policies, 32 commands / 47 invocations                                                                                |
+| Documentation                               | 30 files in `docs/`, bespoke renderer (`marked` + `sanitize-html`), nav/search/anchors/copy                                                           |
+| Member directory                            | Synchronized roster, bounded sweeps, `complete`/`partial`/`failed`, server-side querying, read-only detail                                            |
+| Identity                                    | One resolver: guild nickname → globalName → username → storedName                                                                                     |
+| Templates                                   | Capture, preview (create/reuse/skip + blockers + fingerprint), queued apply run with per-step results, retry-safe by name, DELETE (source guild only) |
+| Jobs                                        | `sync-roster`, `capture-template`, `apply-template`, `publish-panel`, `send-test` over BullMQ + Redis                                                 |
+| Signed webhook ingestion                    | `webhook_secrets` + HMAC endpoint (**out of scope for news removal**)                                                                                 |
 
 ### Partial
 
-| Area | Exists | Missing |
-| --- | --- | --- |
-| Template live refresh | One-shot `load()`; `GET /templates/runs/:id` | No polling, no abort, no stale-response guard, no queued/running/step display without manual reload, no cleanup |
-| Template editing | Capture, preview, apply, delete | No PATCH/PUT, no duplicate, no blank create, no blueprints, no validation UI, no dirty state, no unsaved-navigation guard, no reference-integrity check |
-| Template retries | Retry-safe "reuse by name" + fingerprint | No persisted run-step → created-resource mapping, no renamed/duplicate handling, no concurrent-run arbitration, no crash-after-create recovery |
-| Cross-server apply | `assertTargetAllowed` + preview for a second guild | No complete target picker/mapping UI, no execution-time recheck surfaced to the UI |
-| Music diagnostics | `diagnosticText` with secret redaction | No per-stage client taxonomy, no dedupe of repeated exception text, no bounded per-client summary |
-| Embeds | `replies.ts`: `ReplyCard`, tones `info\|success\|error` | No `warning` tone, no identity/pagination/attribution primitives, 4 files still call `EmbedBuilder` directly, no fixtures |
-| News adapters | `rss` + `steam` implemented | `blizzard`/`wowhead`/`mojang` are selectable but unimplemented |
+| Area                  | Exists                                                  | Missing                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Template live refresh | One-shot `load()`; `GET /templates/runs/:id`            | No polling, no abort, no stale-response guard, no queued/running/step display without manual reload, no cleanup                                         |
+| Template editing      | Capture, preview, apply, delete                         | No PATCH/PUT, no duplicate, no blank create, no blueprints, no validation UI, no dirty state, no unsaved-navigation guard, no reference-integrity check |
+| Template retries      | Retry-safe "reuse by name" + fingerprint                | No persisted run-step → created-resource mapping, no renamed/duplicate handling, no concurrent-run arbitration, no crash-after-create recovery          |
+| Cross-server apply    | `assertTargetAllowed` + preview for a second guild      | No complete target picker/mapping UI, no execution-time recheck surfaced to the UI                                                                      |
+| Music diagnostics     | `diagnosticText` with secret redaction                  | No per-stage client taxonomy, no dedupe of repeated exception text, no bounded per-client summary                                                       |
+| Embeds                | `replies.ts`: `ReplyCard`, tones `info\|success\|error` | No `warning` tone, no identity/pagination/attribution primitives, 4 files still call `EmbedBuilder` directly, no fixtures                               |
+| News adapters         | `rss` + `steam` implemented                             | `blizzard`/`wowhead`/`mojang` are selectable but unimplemented                                                                                          |
 
 ### Absent (confirmed by search this session)
 
-| Area | Evidence |
-| --- | --- |
-| **XP / leveling** | `grep -rniE '\bxp\b\|leveling' apps packages` → **0 matches**; no XP/level table in `schema.ts` |
-| **Tickets** | 2 matches total, both cosmetic (a shop-item description in `demo-seed.ts:299`, a test fixture name in `database.test.ts:258`). No table, command, or dashboard surface. |
-| Welcome/goodbye, autoroles, starboard, reminders, AFK, suggestions | 0 code matches |
-| Fumadocs / Nextra | Not installed |
-| Any YouTube fix | None beyond current configuration |
+| Area                                                               | Evidence                                                                                                                                                                |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **XP / leveling**                                                  | `grep -rniE '\bxp\b\|leveling' apps packages` → **0 matches**; no XP/level table in `schema.ts`                                                                         |
+| **Tickets**                                                        | 2 matches total, both cosmetic (a shop-item description in `demo-seed.ts:299`, a test fixture name in `database.test.ts:258`). No table, command, or dashboard surface. |
+| Welcome/goodbye, autoroles, starboard, reminders, AFK, suggestions | 0 code matches                                                                                                                                                          |
+| Fumadocs / Nextra                                                  | Not installed                                                                                                                                                           |
+| Any YouTube fix                                                    | None beyond current configuration                                                                                                                                       |
 
 ---
 
@@ -204,27 +204,27 @@ Kept up to date as the pass progresses.
 lockfile regeneration. Both columns are recorded because they answer different
 questions.
 
-| Package | Declared | Locked |
-| --- | --- | --- |
-| next | `^16.4.3` | 16.4.3 |
-| react | `^19.1.0` | **19.3.1** |
-| react-dom | `^19.1.0` | **19.3.1** |
-| typescript | `^5.9.3` | 5.9.3 |
-| tailwindcss | `^3.4.18` | 3.4.19 |
-| discord.js | `^14.22.1` | 14.27.0 |
-| drizzle-orm | `^0.45.4` | 0.45.4 |
-| @tanstack/react-table | `^9.3.1` | 9.3.1 |
-| shoukaku | `^4.1.1` | 4.3.0 |
-| bullmq | `^5.63.0` | 5.81.5 |
-| zod | `^4.6.7` | 4.6.7 |
-| marked | `^16.4.2` | 16.4.2 |
-| sanitize-html | `^2.17.0` | 2.18.1 |
-| vitest | `^5.0.5` | 5.0.5 |
-| @playwright/test | `^1.64.1` | 1.64.1 |
+| Package               | Declared   | Locked     |
+| --------------------- | ---------- | ---------- |
+| next                  | `^16.4.3`  | 16.4.3     |
+| react                 | `^19.1.0`  | **19.3.1** |
+| react-dom             | `^19.1.0`  | **19.3.1** |
+| typescript            | `^5.9.3`   | 5.9.3      |
+| tailwindcss           | `^3.4.18`  | 3.4.19     |
+| discord.js            | `^14.22.1` | 14.27.0    |
+| drizzle-orm           | `^0.45.4`  | 0.45.4     |
+| @tanstack/react-table | `^9.3.1`   | 9.3.1      |
+| shoukaku              | `^4.1.1`   | 4.3.0      |
+| bullmq                | `^5.63.0`  | 5.81.5     |
+| zod                   | `^4.6.7`   | 4.6.7      |
+| marked                | `^16.4.2`  | 16.4.2     |
+| sanitize-html         | `^2.17.0`  | 2.18.1     |
+| vitest                | `^5.0.5`   | 5.0.5      |
+| @playwright/test      | `^1.64.1`  | 1.64.1     |
 
 **Consequence for the docs migration:** a Fumadocs requirement of
 `react >= 19.2.0` is **already satisfied by the locked install (19.3.1)**. The
-declared range `^19.1.0` is a *future-regeneration* risk, not a current
+declared range `^19.1.0` is a _future-regeneration_ risk, not a current
 `npm ci` incompatibility. Raising the declared range is therefore a hygiene
 change to be made **if and only if** Fumadocs is actually adopted — not a
 prerequisite invented in advance.
@@ -237,16 +237,16 @@ Check date for every entry: **2026-10-27**. Source type is stated explicitly.
 
 ### 6.1 YouTube / Lavalink
 
-| Source | Type | What it establishes |
-| --- | --- | --- |
-| `api.github.com/repos/lavalink-devs/youtube-source/releases` | **fetched** | Latest release is **1.18.2 (2026-07-27)**. No 1.18.3 exists. A version bump is therefore **not available** — this is now verified, not reported. |
-| `lavalink-devs/youtube-source` open issues (API list) | **fetched** | Recent: #250 (2026-10-13) ytsearch empty when IOS precedes WEB; #249 (2026-10-08) playlist layout; #248 (2026-10-08) SABR seeking; #247 (2026-09-26) auto-dubbed audio; #244 (2026-09-08) "why no 1.18.3"; #242 (2026-08-27) live streams; #240 (2026-08-21) login required; #236 (2026-08-19) IOS client; #229 (2026-08-17) remote poToken support |
-| issue #240 (chunks 1/5 read) | **fetched** | Reporter is on 1.18.2 and sees `TVHTML5: The page needs to be reloaded` / `MWEB: This video requires login`. **Critically**, that reporter runs `oauth.enabled: true` **and** `remoteCipher: https://cipher.kikkia.dev/` — a third-party cipher service — and explicitly answered **"I DO NOT confirm that this has been filled out truthfully."** Its client list (`TV, MWEB, WEB, MUSIC, WEBEMBEDDED, ANDROID_VR, TVHTML5_SIMPLY`) also differs from ours. |
-| `docker/lavalink/application.yml` | **fetched (local file)** | Our clients are `[MUSIC, ANDROID_VR, WEB, WEBEMBEDDED]`; `oauth.enabled: false`; **no** `remoteCipher`; `allowDirectVideoIds: false`; `allowDirectPlaylistIds: false`; LavaSrc `providers: []` |
-| `docker/lavalink/plugins.lock.json` | **fetched (local file)** | Lavalink 4.2.2; youtube-plugin **1.18.2** @ `158726dc…` sha256 `dd4b3bce…`, reviewed 2026-10-24 |
+| Source                                                       | Type                     | What it establishes                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api.github.com/repos/lavalink-devs/youtube-source/releases` | **fetched**              | Latest release is **1.18.2 (2026-07-27)**. No 1.18.3 exists. A version bump is therefore **not available** — this is now verified, not reported.                                                                                                                                                                                                                                                                                                             |
+| `lavalink-devs/youtube-source` open issues (API list)        | **fetched**              | Recent: #250 (2026-10-13) ytsearch empty when IOS precedes WEB; #249 (2026-10-08) playlist layout; #248 (2026-10-08) SABR seeking; #247 (2026-09-26) auto-dubbed audio; #244 (2026-09-08) "why no 1.18.3"; #242 (2026-08-27) live streams; #240 (2026-08-21) login required; #236 (2026-08-19) IOS client; #229 (2026-08-17) remote poToken support                                                                                                          |
+| issue #240 (chunks 1/5 read)                                 | **fetched**              | Reporter is on 1.18.2 and sees `TVHTML5: The page needs to be reloaded` / `MWEB: This video requires login`. **Critically**, that reporter runs `oauth.enabled: true` **and** `remoteCipher: https://cipher.kikkia.dev/` — a third-party cipher service — and explicitly answered **"I DO NOT confirm that this has been filled out truthfully."** Its client list (`TV, MWEB, WEB, MUSIC, WEBEMBEDDED, ANDROID_VR, TVHTML5_SIMPLY`) also differs from ours. |
+| `docker/lavalink/application.yml`                            | **fetched (local file)** | Our clients are `[MUSIC, ANDROID_VR, WEB, WEBEMBEDDED]`; `oauth.enabled: false`; **no** `remoteCipher`; `allowDirectVideoIds: false`; `allowDirectPlaylistIds: false`; LavaSrc `providers: []`                                                                                                                                                                                                                                                               |
+| `docker/lavalink/plugins.lock.json`                          | **fetched (local file)** | Lavalink 4.2.2; youtube-plugin **1.18.2** @ `158726dc…` sha256 `dd4b3bce…`, reviewed 2026-10-24                                                                                                                                                                                                                                                                                                                                                              |
 
 **Conclusion, stated as inference and not as fact:** issue #240's SABR /
-region / login narrative is a **plausible upstream hypothesis**. It is *not*
+region / login narrative is a **plausible upstream hypothesis**. It is _not_
 evidence about this deployment, because (a) the reporter's configuration differs
 materially from ours (OAuth on, third-party cipher service, different client
 list) and (b) the reporter declined the truthfulness attestation. The incident
@@ -255,33 +255,94 @@ failing item cannot be reproduced. See §7.
 
 ### 6.2 Documentation framework
 
-| Source | Type | Note |
-| --- | --- | --- |
-| Fumadocs v16 blog (handoff) | **snippet** | Claims React ≥ 19.2.0 + Next 16. Not re-verified this session; will be re-verified against package metadata before adoption. |
-| Nextra 4 | **snippet** | App Router only, Pagefind search |
-| `package-lock.json` | **verified** | Next 16.4.3, React 19.3.1 — both frameworks' stated floors are met by the locked tree |
+| Source                      | Type         | Note                                                                                                                         |
+| --------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| Fumadocs v16 blog (handoff) | **snippet**  | Claims React ≥ 19.2.0 + Next 16. Not re-verified this session; will be re-verified against package metadata before adoption. |
+| Nextra 4                    | **snippet**  | App Router only, Pagefind search                                                                                             |
+| `package-lock.json`         | **verified** | Next 16.4.3, React 19.3.1 — both frameworks' stated floors are met by the locked tree                                        |
 
 Decision deferred until Fumadocs/Nextra metadata is fetched directly (§13 slice 10).
 
 ### 6.3 Leveling curve
 
-| Source | Type | Note |
-| --- | --- | --- |
-| Carl-bot docs `levels.md` (handoff) | **snippet** | Curve `5n² + 50n + 100`, 15–25 XP default — **reported, not verified**; will be re-verified before use |
-| MEE6 / Dyno voice-leveling rules (handoff) | **snippet** | ≥2 humans, no AFK, no self/server-deafen — **reported** |
+| Source                                     | Type        | Note                                                                                                   |
+| ------------------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------ |
+| Carl-bot docs `levels.md` (handoff)        | **snippet** | Curve `5n² + 50n + 100`, 15–25 XP default — **reported, not verified**; will be re-verified before use |
+| MEE6 / Dyno voice-leveling rules (handoff) | **snippet** | ≥2 humans, no AFK, no self/server-deafen — **reported**                                                |
 
 ---
 
-## 7. Open questions requiring the user
+## 7. Operator decisions (answered 2026-10-27)
 
-1. **The exact failing YouTube video URL.** The audit ID
-   `ec6855f8-5803-4246-91ef-d80db9bc962f` does not identify the item, so no
-   reproduction is possible. Without it I will report the limitation rather than
-   claim a fix.
-2. **A disposable test server** for live template-apply, member role-edit and
-   voice-XP mutation checks.
-3. **OAuth / poToken opt-in** for YouTube: explicit operator decision (terms
-   risk).
+| Question                                    | Answer                               | Consequence                                                                                                                                                             |
+| ------------------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The exact failing YouTube video URL         | **Not available**                    | No reproduction is possible. Playback is reported as **unverified**; the music work is limited to diagnostics quality and configuration, and no claim of a fix is made. |
+| A disposable test server for live mutations | **Authorized**                       | Template apply, member role-edit and voice-XP may be exercised against a disposable guild. Never against the user's real server.                                        |
+| YouTube OAuth / poToken                     | **Keep the credential-free default** | `oauth.enabled: false`, no `pot`, no `remoteCipher`. Restricted items stay unavailable and are reported honestly.                                                       |
+
+## 7b. Slice log
+
+### Slice 3 — music diagnosis (committed `c795370`)
+
+Confirmed defects, both reproduced before the fix:
+
+1. **Per-client answers were collapsed.** The incident reported three different
+   sentences from three clients; `musicFailureCategory` classified the whole
+   blob at once and kept only the first regex match, discarding two thirds of
+   the evidence.
+2. **The summary was cut mid-word.** `slice(0, 300)` ended the operator-facing
+   sentence on `"...and O"`.
+
+Fixed with `parseClientFailureGroups` + `truncateAtWord` in
+`packages/core/src/diagnostics.ts`, and `musicFailureCategories` /
+`musicClientFailureGroups` in `apps/bot/src/features/music/source.ts`. The
+~490-character guidance paragraph moved from the 300-character summary to the
+unbounded `details` — a deliberate change, recorded in the commit and in the
+adjusted test.
+
+Checked and found **not** to be code defects (documented, not "fixed"):
+
+- _Markdown linkification of Java package names._ No Markdown renderer touches
+  audit text; the `marked` + `sanitize-html` pipeline renders repository-authored
+  `docs/` only.
+- _Version bump._ Verified against the releases API: **1.18.2 is still the
+  newest release**. There is nothing to upgrade to.
+
+### Slice 4 — template live refresh
+
+The gap was larger than "no polling". `waitForBotAction` (the bridge every
+dashboard mutation goes through) gives up after **30 attempts × 1s** and throws
+`"may still be processing"`. A capture or apply that takes longer than that was
+reported as an error **while the worker carried on without the UI** — the page
+lost track of work it had started, and a reload left no way back to it.
+
+| Requirement                          | How it is met                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Bounded polling during active work   | `useLiveRefresh` polls every 2s while work is in flight                                                |
+| Cleanup on navigation/unmount        | `AbortController` + `clearTimeout` in every effect cleanup                                             |
+| Discard stale responses              | `createSequenceGuard` — a ticket is honoured at most once, an older response is dropped                |
+| Backend work continues independently | Capture and apply now pass `awaitJob: false`; the queue owns them                                      |
+| Recover after reload/reconnect       | `GET /templates/active` + `getActiveTemplateRun` rediscover an in-flight run from the database         |
+| Stop polling when idle               | `idleMs: 0` for the run and capture-job pollers; `nextPollDelay` returns `null`                        |
+| Pause when hidden                    | No timer while `document.visibilityState !== "visible"`; one reconcile on return                       |
+| Clear errors and retry               | `retry()` resets the failure count and fetches immediately; backoff doubles to a 60s ceiling           |
+| Preserve unsaved builder edits       | The list refresh only replaces server-owned state; no draft is touched (the builder itself is slice 5) |
+| Accessible announcements             | `role="status"` banner plus an `aria-live="polite"` sentence naming the state and step counts          |
+
+**Verified against a running demo server** (`npm start` with `DEMO_MODE=true`):
+
+| Step                                                   | Result                                                                            |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------- |
+| `POST /templates`                                      | `201`, id returned; fingerprint `19-f94fa17b` reproduces the recorded baseline    |
+| `POST /templates/:id/preview`                          | `counts {create: 0, reuse: 19, skip: 0}`, `blockers []`                           |
+| `POST /templates/:id/apply`                            | `202 { runId, accepted, demo }`                                                   |
+| `GET /templates/runs/:id`                              | `state: simulated` (terminal)                                                     |
+| `GET /templates/active` with only terminal runs        | `{"run":null}` — a finished run is not rediscovered                               |
+| `GET /templates/active` with an injected `running` run | returns the run with its `templateId`, so a reloaded page re-selects the template |
+| Same run moved to another guild                        | `{"run":null}` for the original guild; `403` for the other — no cross-guild leak  |
+
+**Partial / not done in this slice:** the builder (draft editing, dirty state,
+unsaved-navigation guard) is slice 5; no live Discord apply was run.
 
 ---
 

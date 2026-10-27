@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { isDemo } from "@orbit/core/environment";
 import {
   parseTemplateDocument,
@@ -250,6 +250,50 @@ export async function updateTemplateRun(
       updatedAt: new Date(),
     })
     .where(eq(s.templateRuns.id, id));
+}
+
+/**
+ * The newest apply run this guild still has in flight, or `null`.
+ *
+ * A reload, a reconnect or a second tab must not lose sight of work the
+ * backend is already doing: the run is owned by the worker, not by the browser
+ * that asked for it, so it is rediscovered from the database rather than from
+ * anything the page kept in memory.
+ */
+export async function getActiveTemplateRun(
+  guildId: string
+): Promise<TemplateRun | null> {
+  const ACTIVE = ["queued", "running"];
+  const rows = isDemo()
+    ? ((await demoRead()).templateRuns ?? [])
+        .filter((r) => r.guildId === guildId && ACTIVE.includes(r.state))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    : await database()
+        .db.select()
+        .from(s.templateRuns)
+        .where(
+          and(
+            eq(s.templateRuns.guildId, guildId),
+            inArray(s.templateRuns.state, ACTIVE)
+          )
+        )
+        .orderBy(desc(s.templateRuns.createdAt))
+        .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    ...row,
+    plan: row.plan as Record<string, any>,
+    result: (row.result as Record<string, any> | null) ?? null,
+    createdAt:
+      row.createdAt instanceof Date
+        ? row.createdAt.toISOString()
+        : String(row.createdAt),
+    updatedAt:
+      row.updatedAt instanceof Date
+        ? row.updatedAt.toISOString()
+        : String(row.updatedAt),
+  } as TemplateRun;
 }
 
 export async function getTemplateRun(id: string): Promise<TemplateRun | null> {

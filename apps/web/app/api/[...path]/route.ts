@@ -49,6 +49,7 @@ import {
   getGuild,
   queryHistory,
   getResource,
+  getActiveTemplateRun,
   getTemplate,
   getTemplateRun,
   listMembers,
@@ -376,6 +377,13 @@ async function handle(req: Request, context: Context) {
           { status: 202 }
         );
       }
+      // Reload/reconnect recovery: the run belongs to the worker, not to the
+      // browser tab that started it, so a returning page asks the server what
+      // is still in flight rather than trusting anything it kept in memory.
+      if (path[3] === "active" && path.length === 4 && req.method === "GET")
+        return NextResponse.json({
+          run: await getActiveTemplateRun(guildId),
+        });
       if (path[3] === "runs" && path[4] && req.method === "GET") {
         const run = await getTemplateRun(path[4]);
         if (!run || run.guildId !== guildId)

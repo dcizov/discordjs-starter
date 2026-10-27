@@ -8,7 +8,13 @@ export type Workspace = {
     path: string,
     method?: string,
     body?: unknown,
-    headers?: Record<string, string>
+    headers?: Record<string, string>,
+    /**
+     * `signal` aborts the underlying request; `awaitJob: false` returns as soon
+     * as a bot action is queued instead of blocking on it, which is what long
+     * work (template capture/apply) needs.
+     */
+    options?: { signal?: AbortSignal; awaitJob?: boolean }
   ) => Promise<T>;
   saveConfig: (config: GuildConfig, optimistic?: boolean) => Promise<void>;
   navigate: (section: string) => void;

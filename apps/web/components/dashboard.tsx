@@ -51,16 +51,24 @@ export function Dashboard({
       path: string,
       method = "GET",
       body?: unknown,
-      headers?: Record<string, string>
+      headers?: Record<string, string>,
+      options?: { signal?: AbortSignal; awaitJob?: boolean }
     ): Promise<T> => {
       const base = `/api/guilds/${data.guild.id}`;
       const result = await request<any>(
         `${base}${path}`,
         method,
         body,
-        headers
+        headers,
+        options?.signal
       );
-      if (result?.jobId && method === "POST") {
+      // Most actions are short and their callers want confirmation, so waiting
+      // stays the default. Long-running work (a template capture or apply) opts
+      // out with `awaitJob: false` and follows the worker's own progress
+      // instead: blocking here for up to 30s only to throw "still processing"
+      // hid those jobs behind an error while the backend carried on without
+      // the UI.
+      if (result?.jobId && method === "POST" && options?.awaitJob !== false) {
         const job = await waitForBotAction(result.jobId, () =>
           request(`${base}/actions/${encodeURIComponent(result.jobId)}`)
         );
