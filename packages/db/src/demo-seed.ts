@@ -73,7 +73,12 @@ export function createDemo(): DemoState {
       "Orbit",
       "#8b5cf6",
       10,
-      (P.ManageRoles | P.ManageMessages | P.ModerateMembers).toString(),
+      (
+        P.ManageRoles |
+        P.ManageChannels |
+        P.ManageMessages |
+        P.ModerateMembers
+      ).toString(),
       true
     ),
     role(104, "Community", "#9c8aee", 2),

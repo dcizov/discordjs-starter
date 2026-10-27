@@ -11,11 +11,18 @@ import {
   Settings2,
   ShieldCheck,
   Tags,
+  UserRoundSearch,
   UsersRound,
   Wallet,
 } from "lucide-react";
 export const navigation = [
   { id: "overview", label: "Overview", icon: LayoutGrid, group: "workspace" },
+  {
+    id: "members",
+    label: "Members",
+    icon: UserRoundSearch,
+    group: "workspace",
+  },
   { id: "roles", label: "Self roles", icon: UsersRound, group: "workspace" },
   {
     id: "moderation",

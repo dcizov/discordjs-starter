@@ -451,15 +451,22 @@ async function handle(req: Request, context: Context) {
               state: "simulated",
               result: {
                 created: [],
-                reused: [],
+                reused: plan.items
+                  .filter((item) => item.action === "reuse")
+                  .map((item) => ({
+                    key: item.key,
+                    name: item.name,
+                    id: item.targetId,
+                  })),
                 failed: [],
                 configured: [],
                 message:
                   "Demo mode: nothing was created in a Discord server. This is the plan that a live apply would execute.",
               },
             });
+            // Same shape as the live branch, so the page reads one thing.
             return NextResponse.json(
-              { ...(await getTemplateRun(run.id)), demo: true },
+              { runId: run.id, accepted: true, demo: true },
               { status: 202 }
             );
           }
