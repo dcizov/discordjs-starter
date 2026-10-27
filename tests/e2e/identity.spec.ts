@@ -119,7 +119,11 @@ test("failed network images preserve initials and dimensions and can recover on 
     .locator('span[aria-hidden="true"]')
     .first();
   await expect(guildFallback).toHaveText("CC");
-  await expect(userFallback).toHaveText("JD");
+  // Initials come from the name the surface actually shows. This menu names the
+  // signed-in person by their nickname in this server ("Jamie"), so a broken
+  // picture falls back to one letter rather than initials from a name that is
+  // not on screen.
+  await expect(userFallback).toHaveText("J");
   expect((await guildFallback.boundingBox())?.width).toBe(33);
   expect((await userFallback.boundingBox())?.height).toBe(30);
   await page.screenshot({
