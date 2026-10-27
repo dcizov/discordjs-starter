@@ -176,14 +176,14 @@ Kept up to date as the pass progresses.
 
 ### Partial
 
-| Area                  | Exists                                                  | Missing                                                                                                                                                 |
-| --------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Template live refresh | One-shot `load()`; `GET /templates/runs/:id`            | No polling, no abort, no stale-response guard, no queued/running/step display without manual reload, no cleanup                                         |
-| Template editing      | Capture, preview, apply, delete                         | No PATCH/PUT, no duplicate, no blank create, no blueprints, no validation UI, no dirty state, no unsaved-navigation guard, no reference-integrity check |
-| Template retries      | Retry-safe "reuse by name" + fingerprint                | No persisted run-step → created-resource mapping, no renamed/duplicate handling, no concurrent-run arbitration, no crash-after-create recovery          |
-| Cross-server apply    | `assertTargetAllowed` + preview for a second guild      | No complete target picker/mapping UI, no execution-time recheck surfaced to the UI                                                                      |
-| Music diagnostics     | `diagnosticText` with secret redaction                  | No per-stage client taxonomy, no dedupe of repeated exception text, no bounded per-client summary                                                       |
-| Embeds                | `replies.ts`: `ReplyCard`, tones `info\|success\|error` | No `warning` tone, no identity/pagination/attribution primitives, 4 files still call `EmbedBuilder` directly, no fixtures                               |
+| Area                  | Exists                                                                                                | Missing                                                                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Template live refresh | One-shot `load()`; `GET /templates/runs/:id`                                                          | No polling, no abort, no stale-response guard, no queued/running/step display without manual reload, no cleanup                                         |
+| Template editing      | Capture, preview, apply, delete                                                                       | No PATCH/PUT, no duplicate, no blank create, no blueprints, no validation UI, no dirty state, no unsaved-navigation guard, no reference-integrity check |
+| Template retries      | Retry-safe "reuse by name" + fingerprint                                                              | No persisted run-step → created-resource mapping, no renamed/duplicate handling, no concurrent-run arbitration, no crash-after-create recovery          |
+| Cross-server apply    | `assertTargetAllowed` + preview for a second guild                                                    | No complete target picker/mapping UI, no execution-time recheck surfaced to the UI                                                                      |
+| Music diagnostics     | `diagnosticText` with secret redaction                                                                | No per-stage client taxonomy, no dedupe of repeated exception text, no bounded per-client summary                                                       |
+| Embeds                | `replies.ts`: `ReplyCard`, tones `info\|success\|error`                                               | No `warning` tone, no identity/pagination/attribution primitives, 4 files still call `EmbedBuilder` directly, no fixtures                               |
 | News adapters         | `rss` + `steam` + `webhook` implemented; the three unimplemented starters removed by migration `0009` | —                                                                                                                                                       |
 
 ### Absent (confirmed by search this session)
@@ -405,7 +405,97 @@ small pieces, and warns against the two things that produced this problem:
 speculative adapters, and adapters whose only implementation is "the
 administrator will supply a URL" — which is what RSS / Atom already means.
 
-**Not done:** webhook-based news ingestion was *not* removed. Orbit's
+**Not done:** webhook-based news ingestion was _not_ removed. Orbit's
 `webhook_secrets` table backs its own HMAC-signed ingestion endpoint and is
 unrelated to news-provider webhooks; deleting it would have been collateral
 damage.
+
+---
+
+## Slice 5 — editable template builder
+
+Templates were previously write-once: the only way to make one was to capture a
+live server, and the only edit the dashboard offered was delete. This slice adds
+a real editor, so a template can be started from a starter layout or from
+nothing, edited, copied and validated before anything touches Discord.
+
+### What was added
+
+**`packages/core/src/template-builder.ts`** (new, pure — no Discord calls, no
+I/O). Blueprints, blank documents, duplicate, rename, item ordering
+(`moveItem` / `canMoveUp` / `canMoveDown`), and `validateTemplateDocument`
+which reports issues as `{severity, path, message}` so the editor can point at
+the offending row instead of failing the whole save.
+
+**`packages/core/src/permission-bits.ts`** (new). A plain `Record<string,
+bigint>` mirroring discord.js `PermissionFlagsBits`. Duplicated deliberately:
+`packages/core` is bundled into the dashboard, and importing discord.js into a
+client component pulls `undici` and `node:async_hooks` into a browser build and
+fails the webpack compile. `tests/permission-bits.test.ts` asserts the table
+still matches discord.js (same key count, same values, Administrator `=== 8n`),
+so upstream drift is a test failure rather than a silent mismatch. The bot keeps
+using discord.js directly.
+
+**`apps/web/components/template-builder.tsx`** (new). A dialog with a start
+screen (three starter blueprints, each with a summary and a "best for" line,
+plus three blank kinds) and an editor with role rows, channel rows, permission
+grids and per-channel overwrites. State is local and seeded once, so the
+templates page's live-refresh poll cannot clobber typing; a `beforeunload`
+guard and a confirm-on-discard cover unsaved edits. Validation runs on every
+keystroke and is split into error and warning panels.
+
+**API** (`apps/web/app/api/[...path]/route.ts`, all under
+`/api/guilds/:guildId/templates`): `POST` now accepts `blueprint` or
+`blankKind`; `POST /:id/duplicate`; `PATCH /:id` with `{name?, document}`.
+Validation runs server-side on every one of these, not only in the browser, so a
+hand-crafted request cannot store a template with dangling references.
+
+**`updateTemplate`** added to `packages/db/src/templates.ts` — replaces the
+whole document rather than patching it, because a template's structure is
+internally cross-referenced (a channel points at a category key, bindings point
+at channel and role keys); a partial patch could leave half a reference.
+
+### Two real defects the tests caught
+
+- `duplicateTemplateDocument` used an object spread, which shares the role and
+  channel arrays. Editing a duplicate silently rewrote the source template. Now
+  `structuredClone(document)`.
+- `blankChannel` discarded its `overwrites`, `topic` and `nsfw` inputs and
+  always returned `[]` / `null` / `false`, so a caller could not build a channel
+  with permission overrides at all.
+
+One failing assertion was the test's fault, not the code's: a blank template
+legitimately produces the non-blocking empty-`structure` warning, so the
+assertion now checks errors only.
+
+### Verified
+
+- `npm run typecheck` clean; `eslint --max-warnings=0` clean on all touched
+  files; `npm run format` applied; `npm run build:web` succeeds.
+- `npx vitest run`: **1031 passed** (991 baseline + 34 template-builder + 6
+  permission-bits).
+- Live demo server (guild `120000000000000001`): blueprint create → 201 with
+  roles `[role:moderator, role:member]`, channels `[channel:information,
+channel:announcements, channel:general, channel:audit-log]`, bindings
+  resolved; blank create → 201 with `structure: {roles: [], channels: []}`;
+  duplicate → 201 with keys preserved; PATCH → 200 applying a rename and an
+  appended role; unknown blueprint → 404; dangling parent → 422;
+  Administrator-granting overwrite → 422. All mutating calls required
+  `content-type: application/json` and `Origin`.
+- The dashboard page renders in demo mode and the server-rendered HTML contains
+  the new "New template" and "Capture this server" buttons.
+
+### Not verified
+
+The builder dialog was never opened in a browser — this session has no browser
+tool, so no interaction or screenshot review happened. The dialog compiles, is
+included in the client bundle and the surrounding page SSRs, but its layout and
+interaction are unproven. "Edit template" and "Duplicate" are per-selection
+controls and do not appear until a template is chosen, which happens
+client-side; they are therefore absent from the server-rendered HTML by design.
+
+### Known pre-existing lint warning
+
+`npx eslint . --max-warnings=0` also flags `prettier.config.mjs` for an
+anonymous default export. That file is untouched by this work (tracked since the
+initial commit), so it was deliberately left alone.

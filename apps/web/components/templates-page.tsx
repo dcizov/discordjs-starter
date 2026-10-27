@@ -4,6 +4,8 @@ import {
   ArrowRight,
   Boxes,
   CheckCircle2,
+  Download,
+  Pencil,
   CircleSlash,
   Copy as CopyIcon,
   Layers,
@@ -14,6 +16,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLiveRefresh, isInFlight, isTerminal } from "@/lib/use-live-refresh";
+import { TemplateBuilderDialog } from "./template-builder";
+import type { StoredTemplate } from "./template-builder";
 import { PageHeader } from "./page-header";
 import { useWorkspace } from "./workspace";
 import { IdentityImage } from "./identity/image";
@@ -33,30 +37,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
-
-type StoredTemplate = {
-  id: string;
-  sourceGuildId: string;
-  name: string;
-  description: string;
-  kind: string;
-  version: number;
-  data: {
-    version: number;
-    kind: string;
-    name: string;
-    description: string;
-    omitted: string[];
-    structure?: {
-      roles: { key: string; name: string; color?: string | null }[];
-      channels: { key: string; name: string; type: string }[];
-    };
-    config?: Record<string, unknown>;
-  };
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-};
 
 type TemplateRun = {
   id: string;
@@ -100,6 +80,11 @@ export function TemplatesPage() {
   const [error, setError] = useState("");
   const [loadFailed, setLoadFailed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  // null = build a new template; a StoredTemplate = edit that one.
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [builderTemplate, setBuilderTemplate] = useState<StoredTemplate | null>(
+    null
+  );
   const [selected, setSelected] = useState<string>("");
   const [plan, setPlan] = useState<TemplatePlan | null>(null);
   const [planError, setPlanError] = useState("");
@@ -111,6 +96,7 @@ export function TemplatesPage() {
   const [run, setRun] = useState<TemplateRun | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [captureError, setCaptureError] = useState("");
+  const [duplicating, setDuplicating] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState("");
 
@@ -317,6 +303,34 @@ export function TemplatesPage() {
   }
 
   /**
+   * Copy a template under a new name.
+   *
+   * Keys are copied verbatim: they are the template's own addressing scheme,
+   * not Discord ids, so the copy stays portable.
+   */
+  async function duplicate(item: StoredTemplate) {
+    setDuplicating(true);
+    setError("");
+    try {
+      const copy = await api<StoredTemplate>(
+        `/templates/${item.id}/duplicate`,
+        "POST",
+        { name: `${item.name} (copy)` },
+        undefined,
+        { awaitJob: false }
+      );
+      await load();
+      if (copy?.id) setSelected(copy.id);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "The template could not be duplicated."
+      );
+    } finally {
+      setDuplicating(false);
+    }
+  }
+
+  /**
    * One sentence describing what the backend is doing right now, for the live
    * region and for the visible progress line. Progress is only claimed when a
    * run actually reports step counts; otherwise it says what it knows.
@@ -364,10 +378,26 @@ export function TemplatesPage() {
         description="Capture this server’s roles, channels and Orbit configuration, then apply it additively to a server you manage."
         badge="Additive"
       >
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus size={12} aria-hidden />
-          New template
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Download size={12} aria-hidden />
+            Capture this server
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setBuilderTemplate(null);
+              setBuilderOpen(true);
+            }}
+          >
+            <Plus size={12} aria-hidden />
+            New template
+          </Button>
+        </div>
       </PageHeader>
       <div className="mb-5 rounded-xl border bg-card/60 px-4 py-3.5 text-[11px] leading-relaxed text-muted-foreground">
         <p>
@@ -495,6 +525,28 @@ export function TemplatesPage() {
               </p>
             ) : (
               <>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setBuilderTemplate(template);
+                      setBuilderOpen(true);
+                    }}
+                  >
+                    <Pencil size={12} aria-hidden />
+                    Edit template
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={duplicating}
+                    onClick={() => void duplicate(template)}
+                  >
+                    <CopyIcon size={12} aria-hidden />
+                    {duplicating ? "Duplicating…" : "Duplicate"}
+                  </Button>
+                </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   Preview{" "}
                   <span className="font-medium text-foreground">
@@ -628,6 +680,12 @@ export function TemplatesPage() {
         </ul>
       </Card>
 
+      <TemplateBuilderDialog
+        open={builderOpen}
+        onOpenChange={setBuilderOpen}
+        template={builderTemplate}
+        onSaved={() => void load()}
+      />
       <CreateTemplateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}

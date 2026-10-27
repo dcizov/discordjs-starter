@@ -112,6 +112,48 @@ export async function saveTemplate(input: {
 }
 
 /**
+ * Replace a stored template's document.
+ *
+ * The whole document is replaced rather than patched field by field: a template
+ * is one validated unit, and a partial patch could leave a structure that
+ * references a role it no longer contains. The caller validates before calling.
+ */
+export async function updateTemplate(input: {
+  id: string;
+  name: string;
+  description: string;
+  document: ServerTemplateDocument;
+}): Promise<StoredTemplate | null> {
+  const data = parseTemplateDocument(input.document);
+  const fields = {
+    name: input.name,
+    description: input.description,
+    kind: data.kind,
+    version: data.version,
+    data: data as unknown as Record<string, any>,
+    updatedAt: new Date(),
+  };
+  if (isDemo()) {
+    const updated = await demoTransaction((store) => {
+      const existing = (store.templates ?? []).find((t) => t.id === input.id);
+      if (!existing) return null;
+      Object.assign(existing, {
+        ...fields,
+        updatedAt: new Date().toISOString(),
+      });
+      return existing;
+    });
+    return updated;
+  }
+  const [row] = await database()
+    .db.update(s.serverTemplates)
+    .set(fields)
+    .where(eq(s.serverTemplates.id, input.id))
+    .returning();
+  return row ? toStored(row) : null;
+}
+
+/**
  * Templates visible to one workspace.
  *
  * Scoped by the guild the template was captured *from* and by nothing else: a

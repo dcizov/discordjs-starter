@@ -35,6 +35,12 @@ import {
   previewTemplate,
   TEMPLATE_OMISSIONS,
 } from "@orbit/core/templates";
+import {
+  buildBlankTemplate,
+  buildFromBlueprint,
+  duplicateTemplateDocument,
+  validateTemplateDocument,
+} from "@orbit/core/template-builder";
 import { applyTargetFromSnapshot, assertTargetAllowed } from "@/lib/templates";
 import { deleteTemplate } from "@orbit/db";
 import { newsCard } from "@orbit/core/news-presentation";
@@ -52,6 +58,7 @@ import {
   getActiveTemplateRun,
   getTemplate,
   getTemplateRun,
+  updateTemplate,
   listMembers,
   listTemplates,
   putMusicState,
@@ -315,10 +322,58 @@ async function handle(req: Request, context: Context) {
                 structure: z.boolean().default(true),
                 config: z.boolean().default(true),
               })
-              .strict(),
+              .strict()
+              .optional(),
+            /**
+             * Build from a researched starter instead of capturing. Needs no
+             * Discord access, so it is saved directly rather than queued.
+             */
+            blueprint: z.string().min(1).max(40).optional(),
+            /** Create an empty template to build by hand. */
+            blankKind: z
+              .enum(["structure", "configuration", "both"])
+              .optional(),
           })
           .strict()
           .parse(await body(req));
+        // A blueprint or a blank needs no Discord access, so it is built and
+        // stored here instead of being queued for the bot.
+        if (input.blueprint || input.blankKind) {
+          const document = input.blueprint
+            ? buildFromBlueprint(input.blueprint, {
+                name: input.name,
+                description: input.description,
+              })
+            : buildBlankTemplate({
+                name: input.name,
+                description: input.description,
+                kind: input.blankKind!,
+              });
+          if (!document)
+            throw new HttpError(404, "That starter template is not available.");
+          const check = validateTemplateDocument(document);
+          if (check.issues.some((issue) => issue.severity === "error"))
+            throw new HttpError(
+              422,
+              `This starter cannot be saved: ${check.issues[0]!.message}`
+            );
+          const created = await saveTemplate({
+            sourceGuildId: guildId,
+            name: document.name,
+            description: document.description,
+            createdBy: actor.id,
+            document,
+          });
+          return NextResponse.json(
+            { ...created, blueprint: input.blueprint ?? null },
+            { status: 201 }
+          );
+        }
+        if (!input.include)
+          throw new HttpError(
+            400,
+            "Choose a starter, a blank template, or what to capture."
+          );
         if (!input.include.structure && !input.include.config)
           throw new HttpError(
             400,
@@ -396,6 +451,76 @@ async function handle(req: Request, context: Context) {
         if (!template) throw new HttpError(404, "Template not found");
         if (path.length === 4 && req.method === "GET")
           return NextResponse.json(template);
+
+        /**
+         * Duplicate. Keys are copied verbatim: they are the template's own
+         * addressing scheme, not Discord ids, so they stay valid anywhere.
+         */
+        if (
+          path[4] === "duplicate" &&
+          path.length === 5 &&
+          req.method === "POST"
+        ) {
+          const input = z
+            .object({ name: z.string().min(1).max(100) })
+            .strict()
+            .parse(await body(req));
+          const document = duplicateTemplateDocument(template.data, {
+            name: input.name,
+          });
+          const check = validateTemplateDocument(document);
+          if (check.issues.some((issue) => issue.severity === "error"))
+            throw new HttpError(
+              409,
+              `This template cannot be duplicated: ${check.issues[0]!.message}`
+            );
+          const copy = await saveTemplate({
+            sourceGuildId: template.sourceGuildId,
+            name: document.name,
+            description: document.description,
+            createdBy: actor.id,
+            document,
+          });
+          return NextResponse.json(copy, { status: 201 });
+        }
+
+        /**
+         * Save an edited document.
+         *
+         * Validation runs here, not only in the browser: the document is
+         * re-parsed against the schema and checked for dangling references, so
+         * a hand-crafted request cannot store a template that references a role
+         * it does not contain.
+         */
+        if (path.length === 4 && req.method === "PATCH") {
+          const input = z
+            .object({
+              name: z.string().min(1).max(100).optional(),
+              document: z.unknown(),
+            })
+            .strict()
+            .parse(await body(req));
+          const check = validateTemplateDocument(input.document);
+          const blocking = check.issues.filter(
+            (issue) => issue.severity === "error"
+          );
+          if (blocking.length)
+            throw new HttpError(
+              422,
+              `This template cannot be saved: ${blocking[0]!.message}`
+            );
+          if (!check.document)
+            throw new HttpError(422, "This template document is not valid.");
+          const saved = await updateTemplate({
+            id,
+            name: input.name?.trim() || check.document.name,
+            description: check.document.description,
+            document: check.document,
+          });
+          if (!saved) throw new HttpError(404, "Template not found");
+          return NextResponse.json(saved);
+        }
+
         if (path[4] === "preview" && req.method === "POST") {
           const { targetGuildId, mapping } = z
             .object({
