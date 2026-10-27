@@ -8,7 +8,7 @@
 - [ ] `ORBIT_SOURCE_REF` (optional) is the commit id you deployed, so the docs
       pages' "view the source" link points at the code that is actually running.
       Pass it at build time (`docker build --build-arg ORBIT_SOURCE_REF=$(git rev
-    parse HEAD)`, or `ORBIT_SOURCE_REF=…` before `npm run build`); unset links
+parse HEAD)`, or `ORBIT_SOURCE_REF=…` before `npm run build`); unset links
       to `main`. It is a build-time value, never read from a request.
 - [ ] `APP_URL` is the actual HTTPS origin (no trailing slash), proxy forwards trusted headers, secure cookies are enabled, and `APP_SECRET` is at least 32 random characters.
 - [ ] Database/Redis/Lavalink credentials are strong and held in a secret manager or protected environment files. No `NEXT_PUBLIC_*` secret variables exist.

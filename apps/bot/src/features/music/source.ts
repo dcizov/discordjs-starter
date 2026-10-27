@@ -1,5 +1,11 @@
 import { assertFeedUrl, isPublicAddress } from "@orbit/core";
-import { diagnosticText, errorDiagnostic } from "@orbit/core/diagnostics";
+import {
+  diagnosticText,
+  errorDiagnostic,
+  parseClientFailureGroups,
+  truncateAtWord,
+  type ClientFailureGroup,
+} from "@orbit/core/diagnostics";
 import {
   DEFAULT_MUSIC_SEARCH_PREFIX,
   providerUnavailableMessage,
@@ -133,12 +139,9 @@ export type MusicFailureCategory =
  * generic "something went wrong" text. The bucket names what the provider
  * answered; it does not claim one universal cause for every item in it.
  */
-export function musicFailureCategory(
-  exception: Partial<Exception>
-): MusicFailureCategory {
-  const text = `${exception.message ?? ""} ${exception.cause ?? ""}`;
+function classifyFailureText(text: string): MusicFailureCategory {
   if (
-    /requires? (?:a )?login|sign in to confirm|not a bot|confirm you.re not a bot|age.?restrict/i.test(
+    /requires? (?:a )?login|sign in to confirm|not a bot|confirm you.re not a bot|age.?restrict|video is unavailable|private video/i.test(
       text
     )
   )
@@ -160,6 +163,46 @@ export function musicFailureCategory(
   )
     return "network";
   return "unknown";
+}
+
+export function musicFailureCategory(
+  exception: Partial<Exception>
+): MusicFailureCategory {
+  return classifyFailureText(
+    `${exception.message ?? ""} ${exception.cause ?? ""}`
+  );
+}
+
+/**
+ * Every category the evidence supports, one per distinct per-client reason.
+ *
+ * Classifying the whole blob at once had to pick a winner by regex order, so an
+ * item that failed three clients for three different reasons was recorded as
+ * only the first of them: the incident that opened this work reported
+ * "requires login" (ANDROID_VR), "no supported audio streams" (WEB) and
+ * "video is unavailable" (WEB_EMBEDDED), and two of those three answers were
+ * being thrown away before an operator ever saw them.
+ *
+ * Backends that report no per-client lines fall back to classifying the whole
+ * message, which is the ordinary single-error case.
+ */
+export function musicFailureCategories(
+  exception: Partial<Exception>,
+  groups: ClientFailureGroup[] = musicClientFailureGroups(exception)
+): MusicFailureCategory[] {
+  if (!groups.length) return [musicFailureCategory(exception)];
+  const categories = new Set<MusicFailureCategory>();
+  for (const group of groups) categories.add(classifyFailureText(group.reason));
+  return [...categories];
+}
+
+/** Per-client failure groups, or `[]` when the backend reported none. */
+export function musicClientFailureGroups(
+  exception: Partial<Exception>
+): ClientFailureGroup[] {
+  return parseClientFailureGroups(
+    `${exception.message ?? ""}\n${exception.cause ?? ""}`
+  );
 }
 
 const CATEGORY_NEXT: Record<MusicFailureCategory, string> = {
@@ -194,12 +237,30 @@ export function musicSourceFailureReport(
     info?: MusicNodeInfo | null;
   }
 ) {
-  const category = musicFailureCategory(exception);
-  const details = musicSourceFailure(exception, context);
-  const summary = diagnosticText(
-    `${providerLabel(context.source)} ${context.stage === "playback" ? "playback" : "lookup"} failed (${category}). ${CATEGORY_NEXT[category]}`
-  );
-  return { summary: summary.slice(0, 300), details, category };
+  const groups = musicClientFailureGroups(exception);
+  const categories = musicFailureCategories(exception, groups);
+  const stage = context.stage === "playback" ? "playback" : "lookup";
+  const details = musicSourceFailure(exception, context, groups);
+  const headline = `${providerLabel(context.source)} ${stage} failed (${categories.join(", ")}).`;
+  const evidence = groups.length
+    ? `${groups
+        .map(
+          (group) =>
+            `${group.clients.join("/")}: ${group.reason.replace(/\.$/, "")}.`
+        )
+        .join(
+          " "
+        )} Full per-client report and next steps are in the event details.`
+    : CATEGORY_NEXT[categories[0]!];
+  const summary = diagnosticText(`${headline} ${evidence}`);
+  return {
+    // Word-safe: `slice(0, 300)` used to cut this mid-word ("...and O").
+    summary: truncateAtWord(summary, 300),
+    details,
+    category: categories[0]!,
+    categories,
+    groups,
+  };
 }
 
 export function musicSourceFailure(
@@ -208,26 +269,47 @@ export function musicSourceFailure(
     stage: "lookup" | "playback";
     source: string | null;
     info?: MusicNodeInfo | null;
-  }
+  },
+  groups: ClientFailureGroup[] = musicClientFailureGroups(exception)
 ) {
   const cause =
     exception.cause ||
     "Not supplied by Lavalink. Inspect the backend logs for the full Java exception.";
   const searchable = `${exception.message ?? ""} ${cause}`;
   const hint = sourceFailureHint(searchable, context.source);
-  return diagnosticText(
-    [
-      `${providerLabel(context.source)} track ${context.stage} failed.`,
-      `Message: ${exception.message || "No message supplied by Lavalink."}`,
-      `Severity: ${exception.severity || "unknown"}`,
-      `Cause: ${cause}`,
-      `Backend: ${musicNodeDescription(context.info)}`,
-      `Next: ${hint}`,
-      context.stage === "lookup"
-        ? "This is a source lookup failure, not a Discord voice-connection failure. No fallback source was used."
-        : "This failure occurred during audio playback, after track lookup.",
-    ].join("\n")
+  const lines = [
+    `${providerLabel(context.source)} track ${context.stage} failed.`,
+    `Message: ${exception.message || "No message supplied by Lavalink."}`,
+    `Severity: ${exception.severity || "unknown"}`,
+  ];
+  if (groups.length) {
+    // Clients that gave the same answer are listed together rather than
+    // repeating one sentence per client.
+    lines.push(`Clients: ${groups.length} distinct answer(s).`);
+    groups.forEach((group, index) => {
+      const category = classifyFailureText(group.reason);
+      lines.push(
+        `${index + 1}. ${group.clients.join(", ")}: ${group.reason} [${category}]`
+      );
+    });
+    // Every observed answer keeps its own next step, untruncated.
+    for (const category of musicFailureCategories(exception, groups))
+      lines.push(`Next (${category}): ${CATEGORY_NEXT[category]}`);
+    lines.push(
+      "Each client above is an independent answer from the provider. One client failing does not mean the others failed for the same reason."
+    );
+  } else {
+    lines.push(`Cause: ${cause}`);
+    lines.push(`Next: ${CATEGORY_NEXT[musicFailureCategory(exception)]}`);
+  }
+  lines.push(
+    `Backend: ${musicNodeDescription(context.info)}`,
+    `Also: ${hint}`,
+    context.stage === "lookup"
+      ? "This is a source lookup failure, not a Discord voice-connection failure. No fallback source was used."
+      : "This failure occurred during audio playback, after track lookup."
   );
+  return diagnosticText(lines.join("\n"));
 }
 
 /** Policy checks shared by the live player and the read-only music doctor. */

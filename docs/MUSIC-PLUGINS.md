@@ -34,23 +34,30 @@ There are ten plugin identities: these nine plus Soundy. There is no second Soun
 ### Why one specific YouTube item still fails (and what Orbit does about it)
 
 Observed on a production deployment (`youtube-source 1.18.2`, Lavalink 4.2.2,
-Lavaplayer 2.2.6, Soundy 1.1.0):
+Lavaplayer 2.2.6, Soundy 1.1.0); audit event
+`ec6855f8-5803-4246-91ef-d80db9bc962f`, 2026-10-27T12:03:39.191Z:
 
 ```text
+ANDROID_VR: This video requires login.
+WEB: No supported audio streams available.
+WEB_EMBEDDED: This video is unavailable.
 All clients failed to load the item.
-Client [ANDROID_VR] failed: This video requires login.
-Client [WEB] failed: No supported audio streams available.
 ```
 
 This is a **provider restriction raised after lookup, during playback**. It is not
 a Discord voice handshake failure, not an URL-validation rejection (the URL was
-accepted and resolved), and not a plugin conflict — both failures come from two
-different clients of the same source manager. Upstream documents exactly this
+accepted and resolved), and not a plugin conflict — all three failures come from
+three different clients of the same source manager. Upstream documents exactly this
 class of error as "requests flagged by YouTube"; the documented ways to change the
 outcome are OAuth (a signed-in session) or a `poToken`, with the important caveat
 that neither is a guaranteed fix ("not a silver bullet"), and OAuth means lending a
 YouTube account to the backend — upstream advises a burner account because of the
 risk. Terms and account risk are the operator's decision, not a default.
+
+> **The audit ID does not identify the video.** No failing URL was captured with
+> the incident, so the item cannot be reproduced and no fix can be verified as
+> fixing _that_ item. Everything below is configuration hygiene and diagnostics
+> quality, not a proven repair.
 
 Orbit therefore ships the credential-free client list, keeps `oauth.enabled: false`
 and `pot` unset, and never supplies cookies or account tokens implicitly. If an
@@ -88,8 +95,27 @@ doctor is the next step for whoever can read the backend logs.
 
 What was checked and ruled out for that report:
 
-- **Version**: 1.18.2 is the newest youtube-source release (published 2026-07-27,
-  checked 2026-10-26), so this is not an outdated-plugin problem.
+- **Version**: 1.18.2 is the newest youtube-source release (published
+  2026-07-27; **re-verified directly against the releases API on 2026-10-27** —
+  there is still no 1.18.3). So this is not an outdated-plugin problem and there
+  is no upgrade to apply. A version bump would be theatre.
+- **Upstream issue #240 is _not_ evidence about this deployment.** It is the most
+  cited report for this error text, so it is worth stating the differences
+  precisely rather than inheriting its conclusions:
+  - The reporter runs `oauth.enabled: true` **and** `remoteCipher.url:
+https://cipher.kikkia.dev/` — a third-party cipher service. Orbit's
+    configuration has `oauth.enabled: false` and **no** `remoteCipher`, which
+    stays the default.
+  - The reporter enables seven clients (`TV, MWEB, WEB, MUSIC, WEBEMBEDDED,
+ANDROID_VR, TVHTML5_SIMPLY`); Orbit enables four, and `TV` — the one whose
+    playback requires sign-in — is not among them.
+  - The reporter explicitly answered the issue template's attestation with "I DO
+    NOT confirm that this has been filled out truthfully."
+  - Issues #244 (2026-09-08, "why was there no 1.18.3"), #250 (2026-10-13,
+    client ordering affects search) and #248 (2026-10-08, SABR seeking) show the
+    same area is still in flux upstream.
+  - The SABR / region / rollout explanation in that thread is therefore a
+    **plausible upstream hypothesis**, not a verified cause of this incident.
 - **Client list**: the configured list is upstream's own default
   (`DEFAULT_CLIENTS = MUSIC, ANDROID_VR, WEB, WEBEMBEDDED` in
   `YoutubeAudioSourceManager`), and none of those four is OAuth-only. `TV` is the
@@ -104,6 +130,50 @@ What was checked and ruled out for that report:
 Because Orbit also treats a bare identifier as search text, `/play` now answers
 that case with an explicit "paste the full link" hint instead of a generic empty
 result.
+
+### Per-client evidence in the failure report
+
+Three clients answered the incident above with three **different** sentences.
+Reporting one category for all of them hides two thirds of the evidence, so the
+report is now built per client:
+
+| Where                                    | What it contains                                                                                                                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Audit **summary** (≤300 chars, one line) | `YouTube playback failed (provider-login, no-streams). ANDROID_VR: This video requires login. WEB: No supported audio streams available. WEB_EMBEDDED: This video is unavailable. …` |
+| Audit **details** (unbounded)            | One numbered line per distinct answer with the clients that gave it and its category, then the full next-step text for **every** observed category                                   |
+
+Rules the implementation follows:
+
+- **Each client line is classified on its own.** `musicFailureCategories` returns
+  every category the evidence supports; `category` remains the first for
+  backwards compatibility. Previously the whole blob resolved to a single
+  category by regex order and the other answers were discarded.
+- **Identical answers are grouped, not repeated.** Three clients saying "requires
+  login" produce one entry listing all three, instead of the same sentence three
+  times. Grouping is case-insensitive so `This video requires login.` and
+  `this video requires login` are one answer.
+- **Java stack frames are dropped.** `\tat dev.lavalink…(Client.java:77)` lines
+  and a reason that ran into its own frame are evidence for the Lavalink log,
+  not for an audit row.
+- **Truncation is word-safe.** `slice(0, 300)` used to end the summary mid-word
+  (`…and O`). `truncateAtWord` cuts at the last space and always ends with `…`
+  when it cut anything.
+- **The guidance text is no longer squeezed into the summary.** It is ~490
+  characters and the summary is capped at 300, so it now lives in `details`
+  where an operator reads it whole rather than half of it.
+- **Backends that report no per-client lines are unaffected.** Ordinary
+  single-reason failures (`HTTP 429`, `SocketTimeoutException`, …) fall back to
+  classifying the whole message, exactly as before.
+
+Two reported symptoms were checked against the code and are **not** code defects
+here, so nothing was changed for them:
+
+- _"Markdown linkification of Java package names."_ No Markdown renderer touches
+  audit text: the bespoke `marked` + `sanitize-html` pipeline renders
+  repository-authored `docs/` files only. The audit summary and details are
+  rendered as plain text.
+- _"Duplicated per-client exception text."_ The duplication was **real** but it
+  is now handled by grouping (above) rather than by suppressing information.
 
 Items that require a login, are private, region-locked, removed, DRM-protected or
 otherwise provider-restricted can remain unplayable. Orbit reports that plainly

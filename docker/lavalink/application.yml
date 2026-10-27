@@ -43,6 +43,15 @@ plugins:
     # (upstream's own example list). None of them needs credentials, and none of
     # them can bypass a provider restriction: an item that YouTube only serves to
     # a signed-in session still fails here, and stays failed.
+    #
+    # Verified 2026-10-27: 1.18.2 is still the newest youtube-source release, so
+    # there is no upgrade that addresses a playback restriction. Do not add
+    # third-party cipher services (remoteCipher), cookies, harvested tokens or
+    # proxy rotation. Upstream issue #240 — the most cited report for the
+    # "requires login" text — ran OAuth AND remoteCipher AND a seven-client list
+    # including TV, and its reporter declined the template's truthfulness
+    # attestation, so its SABR/region explanation is a hypothesis about that
+    # setup, not a diagnosis of this one. See docs/MUSIC-PLUGINS.md.
     clients: [MUSIC, ANDROID_VR, WEB, WEBEMBEDDED]
     # Opt-in only, never shipped credentials. See docs/MUSIC-PLUGINS.md for the
     # documented OAuth (burner account) and poToken options, their terms and the

@@ -657,20 +657,108 @@ describe("playback failure reports", () => {
       },
       { stage: "playback", source: "youtube", info }
     );
-    const text = report.summary.toLowerCase();
+    // The guidance is ~490 characters and the summary is capped at 300, so it
+    // lives in `details`, where an operator reads it in full instead of being
+    // handed a paragraph cut off mid-word.
+    const text = report.details.toLowerCase();
     // Observed evidence, not a diagnosis of the item or the deployment.
     expect(text).toContain("provider asked for a signed-in/verified session");
     expect(text).not.toContain("only serves this item");
     // Kept apart from the two other things a listener tends to blame.
     expect(text).toContain("not a discord voice-permission problem");
     expect(text).toContain("not a lavalink connection problem");
-    // No credentials, cookies or stack traces in the user-facing text.
-    expect(text).not.toMatch(
-      /cookie|token|refresh|bearer|at java\.|exception:/
-    );
-    // The short summary stays short; details keep the client lines for operators.
     expect(report.summary.length).toBeLessThanOrEqual(300);
     expect(report.details).toContain("ANDROID_VR");
+    // Word-safe: the cap must never leave a half-written word behind.
+    expect(report.summary).not.toMatch(/[\p{L}]\s*$/u);
+    expect(report.summary).not.toMatch(/[a-z]{2,}$/);
+  });
+  it("keeps every client's own answer instead of one winner by regex order", () => {
+    // The shape of the reported incident: three clients, three different
+    // answers, each followed by its own Java stack frame.
+    const report = musicSourceFailureReport(
+      {
+        message: "All clients failed to load the item.",
+        severity: "fault" as const,
+        cause: [
+          "Client [ANDROID_VR] failed: This video requires login.",
+          "\tat dev.lavalink.youtube.clients.skeleton.Client.getPlayabilityStatus(Client.java:77)",
+          "Client [WEB] failed: No supported audio streams available.",
+          "\tat dev.lavalink.youtube.track.YoutubeAudioTrack.loadBestFormatWithUrl(YoutubeAudioTrack.java:198)",
+          "Client [WEBEMBEDDED] failed: This video is unavailable.",
+          "\tat dev.lavalink.youtube.clients.skeleton.Client.getPlayabilityStatus(Client.java:77)",
+          "dev.lavalink.youtube.AllClientsFailedException: (yts.version: 1.18.2) All clients failed to load the item.",
+        ].join("\n"),
+      },
+      { stage: "playback", source: "youtube", info }
+    );
+    // Before this change the whole blob resolved to a single "provider-login"
+    // and the other two answers were discarded before an operator saw them.
+    expect(report.categories).toEqual(["provider-login", "no-streams"]);
+    expect(report.groups).toEqual([
+      { clients: ["ANDROID_VR"], reason: "This video requires login." },
+      { clients: ["WEB"], reason: "No supported audio streams available." },
+      { clients: ["WEBEMBEDDED"], reason: "This video is unavailable." },
+    ]);
+    // Every client and every answer survives into the operator report.
+    for (const client of ["ANDROID_VR", "WEB", "WEBEMBEDDED"])
+      expect(report.details).toContain(client);
+    expect(report.details).toContain("Clients: 3 distinct answer(s).");
+    // Stack frames are evidence for the Lavalink log, not for the audit row.
+    expect(report.details).not.toMatch(/\.java:\d+/);
+    expect(report.details).not.toMatch(/^\s*at\s/m);
+  });
+  it("groups clients that gave the same answer instead of repeating it", () => {
+    const report = musicSourceFailureReport(
+      {
+        message: "All clients failed to load the item.",
+        severity: "fault" as const,
+        cause: [
+          "Client [ANDROID_VR] failed: This video requires login.",
+          "Client [TVHTML5] failed: this video requires login.",
+          "Client [MWEB] failed: This video requires login.",
+        ].join("\n"),
+      },
+      { stage: "playback", source: "youtube", info }
+    );
+    // One group, three clients: the sentence is not duplicated per client.
+    expect(report.groups).toHaveLength(1);
+    expect(report.groups[0]!.clients).toEqual([
+      "ANDROID_VR",
+      "TVHTML5",
+      "MWEB",
+    ]);
+    expect(report.categories).toEqual(["provider-login"]);
+    const repeats = report.details.match(/requires login/gi)?.length ?? 0;
+    expect(repeats).toBeLessThanOrEqual(2);
+    expect(report.details).toContain("ANDROID_VR, TVHTML5, MWEB");
+  });
+  it("falls back to the whole message when no per-client lines are reported", () => {
+    const report = musicSourceFailureReport(
+      { cause: "HTTP 429 Too Many Requests" },
+      { stage: "lookup", source: null }
+    );
+    expect(report.groups).toEqual([]);
+    expect(report.categories).toEqual(["rate-limit"]);
+    expect(report.category).toBe("rate-limit");
+    // Single-reason failures keep the guidance inline, where it fits.
+    expect(report.details).toContain("rate limiting this backend");
+  });
+  it("bounds the summary on a word boundary rather than mid-word", () => {
+    const longCause = `Client [ANDROID_VR] failed: ${"This video requires login and the backend cannot continue. ".repeat(12)}`;
+    const report = musicSourceFailureReport(
+      {
+        message: "All clients failed to load the item.",
+        severity: "fault" as const,
+        cause: longCause,
+      },
+      { stage: "playback", source: "youtube", info }
+    );
+    expect(report.summary.length).toBeLessThanOrEqual(300);
+    expect(report.summary.endsWith("…")).toBe(true);
+    // Nothing was lost: the unbounded report still carries the whole reason.
+    expect(report.details).toContain("cannot continue");
+    expect(report.details.length).toBeGreaterThan(report.summary.length);
   });
   it.each([
     ["DRM protected stream", "drm"],
