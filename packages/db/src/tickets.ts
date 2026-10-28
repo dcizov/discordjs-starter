@@ -566,3 +566,45 @@ export async function clearTranscript(
     .set({ transcript: null, transcriptTruncated: false, updatedAt: now() })
     .where(and(eq(s.tickets.guildId, guildId), eq(s.tickets.id, id)));
 }
+
+/** Every guild that has ever opened a ticket, for the maintenance sweep. */
+export async function listGuildsWithTickets(): Promise<string[]> {
+  if (isDemo()) {
+    const state = await demoRead();
+    return [
+      ...new Set(Object.values(state.tickets ?? {}).map((r) => r.guildId)),
+    ];
+  }
+  const rows = await database()
+    .db.selectDistinct({ guildId: s.tickets.guildId })
+    .from(s.tickets);
+  return rows.map((r) => r.guildId);
+}
+
+/**
+ * Mark a ticket whose channel has been lost.
+ *
+ * The record is kept, not deleted. An operator may still need to know the
+ * ticket was opened, and what is already gone cannot be recovered — but the
+ * channel id is cleared so nothing tries to post into a deleted channel.
+ */
+export async function markTicketOrphaned(
+  guildId: string,
+  id: string
+): Promise<void> {
+  const at = now();
+  if (isDemo()) {
+    await demoTransaction((state) => {
+      const row = state.tickets?.[id];
+      if (row && row.guildId === guildId) {
+        row.channelId = null;
+        row.updatedAt = at.toISOString();
+      }
+    });
+    return;
+  }
+  await database()
+    .db.update(s.tickets)
+    .set({ channelId: null, updatedAt: at })
+    .where(and(eq(s.tickets.guildId, guildId), eq(s.tickets.id, id)));
+}

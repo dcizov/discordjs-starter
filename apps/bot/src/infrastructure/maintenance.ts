@@ -3,6 +3,7 @@ import { emptyMusic, putMusicState, setHealth } from "@orbit/db";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { logger } from "@orbit/core/logger";
 import type { MusicService } from "../features/music/service";
+import { sweepTickets } from "../features/tickets/maintenance";
 import {
   breakSessionsAfterRestart,
   tickVoiceXp,
@@ -105,11 +106,31 @@ export async function startMaintenance(
     () => track(reconcile(), "Roster reconciliation failed"),
     3600000
   );
+  /*
+    Ticket sweep: auto-close quiet tickets, mark orphans, expire transcripts.
+    Hourly is deliberate. Auto-close is measured in hours, so sweeping more
+    often would do nothing but spend API calls, and a ticket is not a thing
+    anyone wants closed within minutes of going quiet.
+  */
+  const ticketSweep = () =>
+    sweepTickets(client).then(
+      (r) => {
+        if (r.autoClosed || r.orphans || r.transcriptsCleared || r.failures)
+          logger.info({ ...r }, "Ticket sweep finished");
+      },
+      (error) =>
+        logger.warn({ error: errorDiagnostic(error) }, "Ticket sweep failed")
+    );
+  const ticketTimer = setInterval(
+    () => track(ticketSweep(), "Ticket sweep failed"),
+    3600000
+  );
   function clear() {
     clearInterval(heartbeat);
     clearInterval(syncTimer);
     clearInterval(rosterTimer);
     clearInterval(voiceTimer);
+    clearInterval(ticketTimer);
   }
   signal.addEventListener("abort", clear, { once: true });
   return async () => {

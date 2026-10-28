@@ -51,10 +51,12 @@ describe("owned bot maintenance", () => {
     expect(f.state).toHaveBeenCalledOnce();
     // One sweep at startup, after the guild list is known.
     expect(f.roster).toHaveBeenCalledOnce();
-    // Heartbeat, guild snapshot, roster reconciliation and the voice XP tick.
-    // The fourth arrived with leveling, and it is owned here like the others
-    // so a shutdown clears it rather than leaving it running.
-    expect(vi.getTimerCount()).toBe(4);
+    // Heartbeat, guild snapshot, roster reconciliation, the voice XP tick and
+    // the hourly ticket sweep. The count is asserted so a new timer has to
+    // acknowledge itself here, which is what makes `clear()` trustworthy: the
+    // test's real point is the assertion below, that every one of them is gone
+    // after abort.
+    expect(vi.getTimerCount()).toBe(5);
     await vi.advanceTimersByTimeAsync(30000);
     expect(f.beat).toHaveBeenCalledTimes(2);
     // The hourly sweep is not the 30-second beat: nothing extra yet.
