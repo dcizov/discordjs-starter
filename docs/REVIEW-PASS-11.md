@@ -232,13 +232,21 @@ would otherwise be invisible.
 | Both suites actually catch the shipped bug                                                     | reverted the guard / reintroduced the bad `listId`, re-ran                       | 5 and 3 tests failed  |
 | Typecheck, lint, build                                                                         | `npm run typecheck`, `npm run lint`, `npm run build:web`                         | clean                 |
 | Full unit suite                                                                                | `npx vitest run`                                                                 | 1355 passed, 99 files |
+| The e2e, in CI                                                                                 | run **40736694475** (`9dab865`), Playwright/Chromium                             | **10 passed**         |
 
-**Not verified:** `tests/e2e/leveling.spec.ts` has never been executed. This
-sandbox cannot install a browser (`npx playwright install chromium` fails; the
-download host is not reachable), so the e2e — arrow keys, mobile viewport,
-axe, save round-trip — is unrun. The jsdom tests above cover the same tab and
-identity logic against the real component, but they do not cover keyboard
-navigation, layout, or axe.
+**The e2e did run.** This sandbox cannot install a browser (`npx playwright
+install chromium` fails — the download host is not reachable), so the spec was
+written unrun and reported that way in the commit. CI executed it on the first
+push: the `verify` job went from 89 to 99 passing e2e, the exact count of tests
+in `tests/e2e/leveling.spec.ts`, with 6 screenshots passed and 6 skipped
+unchanged. Both jobs `success`. `failOnFlakyTests: true` is set, so a retried
+pass would have failed the job — none of these were retried into green.
+
+That covers arrow keys / Home / End, the dialog's on-open viewport position and
+single-scroll-container check, per-tab field isolation, the save round-trip,
+the curve table, leaderboard identity, the 390px case, and axe at WCAG 2.1/2.2
+AA on both the page and the open dialog. Still unverified: a human looking at
+it in Firefox, which Section 5 addresses.
 
 ---
 
