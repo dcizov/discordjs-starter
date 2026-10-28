@@ -62,7 +62,7 @@ test("members are searched and filtered through the server", async ({
   const rows = table.locator("tbody tr");
   // The footer states one accurate range over the server's own total. Every
   // row the roster holds is reachable here, including the member who left.
-  await expect(table.getByText(/Showing 1–16 of 16/)).toBeVisible();
+  await expect(table.getByText(/Showing 1–17 of 17/)).toBeVisible();
 
   const search = page.getByRole("searchbox", {
     name: "Search the member directory",
@@ -75,7 +75,7 @@ test("members are searched and filtered through the server", async ({
   await expect(table.getByText(/Showing 1–1 of 1/)).toBeVisible();
 
   await search.fill("");
-  await expect(rows).toHaveCount(16);
+  await expect(rows).toHaveCount(17);
   // The facet filters the same roster by kind, and a bot is labelled as one.
   await chooseFacet(page, "Filter members", "Bots");
   await expect(rows).toHaveCount(1);
@@ -101,6 +101,55 @@ test("a member's detail dialog opens from its row menu and closes on Escape", as
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
+});
+
+/*
+ * The overflow branch, asserted on purpose rather than left to whoever happens
+ * to hold three roles.
+ *
+ * The member list shows two role badges and a "+N" button for the rest, and
+ * that button is the only `<Tooltip>` in the app. It is also the only branch
+ * that renders conditionally on data, which is exactly the kind of branch a
+ * browser test has to reach deliberately: it shipped once with no
+ * `TooltipProvider` mounted anywhere, and the page crashed for precisely the
+ * members with the most roles.
+ *
+ * The demo seed carries "Over Load" with six roles so this branch is always
+ * exercised, not incidentally covered.
+ */
+test("a member with more roles than fit shows a +N button and its tooltip", async ({
+  page,
+}) => {
+  await page.goto(`${root}/members`);
+  await hydrated(page);
+  const table = page.getByRole("region", { name: "Member directory" });
+  const row = table.locator("tbody tr", { hasText: "Over Load" });
+  await expect(row).toHaveCount(1);
+
+  // Two badges are drawn, the rest are collapsed into one control.
+  const button = row.getByRole("button", { name: /more roles/ });
+  await expect(button).toBeVisible();
+  await expect(button).toHaveText("+4");
+
+  // Hovering opens the tooltip and names every hidden role. This is the
+  // assertion that would have caught the crash: with no provider mounted,
+  // the page threw before this control could be reached at all.
+  await button.hover();
+  const tooltip = page.getByRole("tooltip");
+  await expect(tooltip).toBeVisible();
+  // Six held, two drawn as badges, four named here. Sorted by hierarchy, the
+  // two highest are the visible ones.
+  const text = (await tooltip.textContent()) ?? "";
+  for (const name of ["Orbit", "Console gaming", "PC gaming", "Community"])
+    expect(text).toContain(name);
+  // The two already drawn must not be repeated inside the tooltip.
+  expect(text).not.toContain("Admin");
+  expect(text).not.toContain("Moderator");
+  // The button carries the same list for a screen reader, so the tooltip is
+  // not the only way to reach it.
+  const label = await button.getAttribute("aria-label");
+  expect(label).toContain("4 more roles");
+  expect(label).toContain("Orbit");
 });
 
 test("every column menu entry has a name", async ({ page }) => {

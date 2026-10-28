@@ -792,6 +792,32 @@ export function createDemo(): DemoState {
       joinedDaysAgo: 4,
       roles: [],
     }),
+    member(16, {
+      /*
+       * The overflow case, and it is here on purpose.
+       *
+       * The member list collapses a row's roles to two badges and shows a
+       * "+N" button for the rest, and that button is the only place in the
+       * app that renders a `<Tooltip>`. Before this member existed, whether
+       * the overflow branch rendered at all depended on whoever happened to
+       * hold three roles — which is how a missing TooltipProvider reached
+       * production. Now the branch is always exercised, and the name is
+       * distinctive enough for a browser test to find it without depending on
+       * sort order.
+       */
+      username: "over.load",
+      globalName: "Over Load",
+      nickname: "Over",
+      joinedDaysAgo: 300,
+      roles: [
+        roles[0].id,
+        roles[1].id,
+        roles[2].id,
+        roles[3].id,
+        roles[4].id,
+        roles[5].id,
+      ],
+    }),
   ];
   return {
     version: 1,

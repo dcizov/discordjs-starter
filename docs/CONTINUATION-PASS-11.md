@@ -1376,12 +1376,12 @@ detail linked from the member page is still unbuilt.
 Built in the order the decisions get harder: pure rules, then storage, then
 commands, then the sweep. Four commits.
 
-| Part | What | Tests |
-| ---- | ---- | ----- |
-| 1 | Pure rules in `packages/core/src/tickets.ts` | 44 |
-| 2 | `packages/db/src/tickets.ts` + migration `0012_tickets` | 28 |
-| 3 | `/ticket` command, channel creation, overwrites | 21 |
-| 4 | Hourly sweep + `docs/TICKETS.md` | 14 |
+| Part | What                                                    | Tests |
+| ---- | ------------------------------------------------------- | ----- |
+| 1    | Pure rules in `packages/core/src/tickets.ts`            | 44    |
+| 2    | `packages/db/src/tickets.ts` + migration `0012_tickets` | 28    |
+| 3    | `/ticket` command, channel creation, overwrites         | 21    |
+| 4    | Hourly sweep + `docs/TICKETS.md`                        | 14    |
 
 **1323 tests / 96 files** at the end, up from 1259 / 93.
 
@@ -1389,7 +1389,7 @@ commands, then the sweep. Four commits.
 
 **The opener may close their own ticket, always.** Making someone wait for
 staff to do that is the most annoying thing a ticket system can do. They may
-never *claim*, because "claim" means "I am handling this". Reopening is
+never _claim_, because "claim" means "I am handling this". Reopening is
 staff-only: reopening your own closed ticket to add a parting shot is a thing
 people do.
 
@@ -1407,7 +1407,7 @@ what they said.
 
 **A permission error is not proof a channel is gone.** The sweep checks whether
 an open ticket's channel still exists; `Missing Access` means the bot cannot
-*see* it, not that it is deleted. Deleting a live ticket's record on that basis
+_see_ it, not that it is deleted. Deleting a live ticket's record on that basis
 would be far worse than leaving an orphan alone.
 
 **Transcripts are read before the channel is deleted**, because once the channel

@@ -240,7 +240,14 @@ describe("member directory", () => {
   it("reports Discord's count and the stored row count separately, and never calls an account count a roster", async () => {
     const page = await listMembers(DEMO_GUILD_ID, {});
     expect(page.counts.guildMemberCount).toBe(15);
-    expect(page.counts.syncedMembers).toBe(15);
+    /*
+     * Corrected 15 -> 16 when the demo roster gained "Over Load", the member
+     * added deliberately to hold more roles than the list can display. It is a
+     * stored roster row, so `syncedMembers` (rows) moves while
+     * `guildMemberCount` (Discord's own tally for this fixture guild) does not
+     * -- which is the distinction this test exists to make.
+     */
+    expect(page.counts.syncedMembers).toBe(16);
     expect(page.counts.economyAccounts).toBeLessThanOrEqual(
       page.counts.syncedMembers
     );
