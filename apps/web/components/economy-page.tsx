@@ -203,7 +203,7 @@ export function EconomyPage() {
         ]}
       />
       {tab === "overview" ? (
-        <TabPanel id="economy" tab="overview">
+        <TabPanel listId="economy" value="overview" active={tab}>
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <Card className="self-start">
               <SectionHeader
@@ -394,7 +394,7 @@ export function EconomyPage() {
           </div>
         </TabPanel>
       ) : (
-        <TabPanel id="economy" tab={tab}>
+        <TabPanel listId="economy" value={tab} active={tab}>
           {tab === "shop" && (
             <div className="mb-4">
               <SearchInput

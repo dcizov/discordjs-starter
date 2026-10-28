@@ -123,7 +123,7 @@ const role = (
  * which is how a stale member count survived a seed fix and came back looking
  * like a product bug. Demo state is disposable, so a mismatch is regenerated.
  */
-export const DEMO_SEED_VERSION = 2;
+export const DEMO_SEED_VERSION = 3;
 
 export function createDemo(): DemoState {
   const roles = [
@@ -204,6 +204,15 @@ export function createDemo(): DemoState {
   ];
   const config = structuredClone(defaultConfig);
   config.auditChannelId = channels[2].id;
+  /*
+   * Levels & XP is on in the demo.
+   *
+   * `modules.xp` defaults to false, and `xpBoard` was never seeded either, so
+   * the Levels page showed its paused empty state in the only environment
+   * everyone can open. Both halves are seeded now: the module is enabled here,
+   * and `xp.totals` below gives the board rows to list.
+   */
+  config.modules.xp = true;
   const guild: Guild = {
     id: DEMO_GUILD_ID,
     name: "The Cozy Corner",
@@ -838,6 +847,51 @@ export function createDemo(): DemoState {
    * changes.
    */
   guild.memberCount = members.filter((m) => m.present).length;
+  /**
+   * Leveling state.
+   *
+   * Before this was seeded, the demo leaderboard could only ever render its
+   * empty state: `listXpLeaderboard` filters on `total > 0`, and nothing ever
+   * wrote a total. The Levels page therefore demonstrated nothing in the one
+   * environment everyone can open, and there was no way to assert that a row
+   * resolves its identity from the roster.
+   *
+   * Only members of the seeded roster are given totals, so every row joins a
+   * real name rather than falling back to an id - with one deliberate
+   * exception: `...0499` has XP but no roster entry, which is what a member
+   * who left looks like, and the board must show a bare id for them rather
+   * than invent a name.
+   */
+  const xpTotals: NonNullable<DemoState["xp"]>["totals"] = {};
+  {
+    const board: [string, number, number, number][] = [
+      // userId, message XP, voice XP, adjustment
+      [DEMO_USER_ID, 18400, 6200, 0],
+      ["120000000000000401", 15200, 4100, 250],
+      ["120000000000000402", 12800, 3000, 0],
+      ["120000000000000403", 9600, 7200, -150],
+      ["120000000000000405", 7100, 1400, 0],
+      ["120000000000000406", 4300, 2600, 0],
+      ["120000000000000407", 2100, 900, 0],
+      ["120000000000000409", 640, 120, 0],
+      // Earned XP, no roster row: a member who has left.
+      ["120000000000000499", 8800, 0, 0],
+    ];
+    for (const [userId, messageXp, voiceXp, adjustedXp] of board) {
+      xpTotals[`${guild.id}:${userId}`] = {
+        guildId: guild.id,
+        userId,
+        total: messageXp + voiceXp + adjustedXp,
+        messageXp,
+        voiceXp,
+        adjustedXp,
+        lastMessageAt: minutesAgo(12),
+        lastMessageHash: null,
+        updatedAt: minutesAgo(12),
+      };
+    }
+  }
+
   return {
     version: DEMO_SEED_VERSION,
     guilds: [
@@ -881,6 +935,7 @@ export function createDemo(): DemoState {
     music: { [guild.id]: music },
     operations: {},
     inventory: {},
+    xp: { totals: xpTotals, events: {} },
   };
 }
 export function demoHealth(): ServiceHealth[] {

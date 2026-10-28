@@ -146,6 +146,102 @@ recorded here rather than silently omitted.
 
 ---
 
+## Section 1 — Defect D: Levels & XP tabs all stacked
+
+|          |                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Severity | High                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Evidence | `apps/web/components/ui/tabs.tsx` (old `TabPanel({ id, tab })`); `apps/web/components/leveling-page.tsx:163,209,213` (page tabs) and `:457,518,625,713,818` (settings tabs)                                                                                                                                                                                                                                                                        |
+| Impact   | Every section of the Levels page rendered at once, stacked vertically, so switching tabs appeared to do nothing. `aria-controls` pointed at `leveling-panel-board` while the element that rendered was `board-panel-board`, so the tab/panel relationship did not exist for assistive technology. The settings dialog mounted all five panels inside a nested `max-h-[50vh]` scroll box, and opening it scrolled the title and tab bar off-screen. |
+| Status   | **fixed**                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+
+### Root cause
+
+`TabPanel` took `{ id, tab }` and rendered unconditionally:
+
+```tsx
+/** Panel for the active tab. Render exactly one, with the same `id` and `tab`. */
+export function TabPanel({ id, tab, ... }) {
+  return <div role="tabpanel" id={tabPanelId(id, tab)} aria-labelledby={tabId(id, tab)} …>
+```
+
+The docstring asked the caller to do two things — pass the _list_ id, and
+render exactly one panel — and nothing enforced either. `leveling-page.tsx`
+read the argument names as "this panel's id" and passed a **tab** id where the
+**list** id was expected, for all eight panels, and rendered every panel
+unconditionally. Each panel then derived its own id from its own name, so the
+ids could never agree with the tab bar's.
+
+Nothing threw and nothing warned. That is the whole finding: **a contract
+expressed as a comment is not a contract.** This is the second such primitive
+in two days — `TooltipProvider` crashed a page because a caller could omit it,
+and `TabPanel` silently rendered the wrong thing because a caller could pass
+the wrong string.
+
+### Decision: change the signature, do not add a runtime invariant
+
+Three options were considered.
+
+| Option                                                                                             | Verdict                                                                                                                                                                                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **A.** `TabPanel({ listId, value, active })`, returning `null` unless `value === active`           | **Chosen.** Stacking is not expressible. Renaming the props made the compiler list every one of the ten call sites, so no caller was missed. Both ids derive from one `listId`, so they cannot disagree. No context, no runtime registry.                                                                                      |
+| **B.** `TabBar` provides a context; `TabPanel` reads it                                            | Rejected. It hides the coupling, makes a panel illegal outside a matching bar (a problem for the two bars that pass `controls={false}` and render no panel at all), and a wrong `listId` becomes a silently-missing context at runtime instead of a type error. Option A's rename already forces every caller to be looked at. |
+| **C.** Keep `{ id, tab }`, add a dev-mode invariant that throws when two panels for one list mount | Rejected. It only catches one of the two failure modes — it would not have caught `leveling-page.tsx`, which passed a _wrong_ id rather than a _duplicate_ one. A dev-only throw also cannot fire in production, where the user actually found this.                                                                           |
+
+The invariant in option C is worth having in one specific form, and it is
+implemented as a **test** rather than a runtime check:
+`tests/tabs-contract.test.tsx` and `tests/leveling-page.test.tsx` both fail if
+the guard is removed or if a page passes its own tab name as `listId`.
+Verified by reverting each and re-running: 5 and 3 tests fail respectively.
+
+### Also fixed
+
+- **Nested scroll box** — the settings form's `max-h-[50vh] overflow-y-auto`
+  is gone. `DialogContent` already caps at `max-h-[88vh]`, so the dialog now
+  has exactly one scroll container. Asserted in the e2e by counting scrollable
+  descendants of the dialog.
+- **Focus on open** — `LevelingSettings` passes `onOpenAutoFocus` that pins
+  `scrollTop` to 0, focuses the first field of the active tab with
+  `preventScroll: true`, and only then nudges the dialog's own scroll box if
+  that field is genuinely below the fold. Previously Radix focused the first
+  tabbable descendant — deep inside the last of five stacked panels — and the
+  browser scrolled both containers down to reach it.
+
+### Demo data was hiding the page
+
+The Levels page could not have been exercised in demo mode at all:
+
+- `modules.xp` defaults to `false` (`packages/core/src/config.ts:48`), so the
+  board rendered the "Levels are paused" empty state;
+- `createDemo()` never wrote `xp.totals`, and `listXpLeaderboard` filters on
+  `total > 0`, so even with the module on the board was empty.
+
+Both are now seeded: `config.modules.xp = true` and nine XP rows, eight of them
+for seeded roster members and one (`120000000000000499`) deliberately with XP
+but no roster entry, so the "shown as an id, not an invented name" path is
+exercised too. `DEMO_SEED_VERSION` bumped 2 → 3, because a stored
+`.data/demo.json` is only regenerated on a version change and the new seed
+would otherwise be invisible.
+
+### Verification
+
+| What                                                                                           | How                                                                              | Result                |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------- |
+| `TabPanel` contract                                                                            | `npx vitest run tests/tabs-contract.test.tsx`                                    | 8 passed              |
+| The real `LevelingPage` renders one panel per list, joins roster identity, swaps settings tabs | `npx vitest run tests/leveling-page.test.tsx` (jsdom, real component, real seed) | 6 passed              |
+| Both suites actually catch the shipped bug                                                     | reverted the guard / reintroduced the bad `listId`, re-ran                       | 5 and 3 tests failed  |
+| Typecheck, lint, build                                                                         | `npm run typecheck`, `npm run lint`, `npm run build:web`                         | clean                 |
+| Full unit suite                                                                                | `npx vitest run`                                                                 | 1355 passed, 99 files |
+
+**Not verified:** `tests/e2e/leveling.spec.ts` has never been executed. This
+sandbox cannot install a browser (`npx playwright install chromium` fails; the
+download host is not reachable), so the e2e — arrow keys, mobile viewport,
+axe, save round-trip — is unrun. The jsdom tests above cover the same tab and
+identity logic against the real component, but they do not cover keyboard
+navigation, layout, or axe.
+
+---
+
 ## Process notes
 
 - CI was **red on every commit since `84c9c7f`** and was not checked for

@@ -136,23 +136,46 @@ export function TabBar({
   );
 }
 
-/** Panel for the active tab. Render exactly one, with the same `id` and `tab`. */
+/**
+ * Panel for one tab. Renders nothing unless that tab is the active one.
+ *
+ * The previous signature was `TabPanel({ id, tab })`, with `id` documented as
+ * the *list* id and a comment asking the caller to render exactly one panel.
+ * Both were easy to get wrong and nothing enforced either: a caller read the
+ * argument names as "this panel's id", passed a tab id where the list id was
+ * expected, and rendered every panel unconditionally. Every section then
+ * stacked on top of every other, and `aria-controls` pointed at an element
+ * that was never rendered (`leveling-panel-board` versus `board-panel-board`).
+ *
+ * A comment asking politely is not a contract. This one is: panels cannot
+ * stack, because every tab except the active one returns `null`, and the ids
+ * cannot disagree, because both derive from the same `listId`.
+ *
+ * `active` is required rather than defaulted so a caller must say which tab is
+ * selected — the mistake this replaces was a caller that never said.
+ */
 export function TabPanel({
-  id,
-  tab,
+  listId,
+  value,
+  active,
   className,
   children,
 }: {
-  id: string;
-  tab: string;
+  /** The `TabBar`'s id, e.g. "leveling". Both panel ids derive from it. */
+  listId: string;
+  /** The tab this panel belongs to, e.g. "board". */
+  value: string;
+  /** The currently selected tab id. */
+  active: string;
   className?: string;
   children: React.ReactNode;
 }) {
+  if (value !== active) return null;
   return (
     <div
       role="tabpanel"
-      id={tabPanelId(id, tab)}
-      aria-labelledby={tabId(id, tab)}
+      id={tabPanelId(listId, value)}
+      aria-labelledby={tabId(listId, value)}
       // Focusable so keyboard users can reach the panel content after the bar.
       tabIndex={0}
       className={cn("focus-visible:outline-none", className)}

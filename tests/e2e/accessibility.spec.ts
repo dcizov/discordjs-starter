@@ -208,6 +208,7 @@ for (const [label, theme] of [
       [`${guild}/audit`, "main"],
       [`${guild}/settings`, "main"],
       [`${guild}/music`, "main"],
+      [`${guild}/xp`, "main"],
       ["/docs", "main"],
       ["/docs/workflows", "main"],
     ];

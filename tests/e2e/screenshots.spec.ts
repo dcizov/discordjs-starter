@@ -152,6 +152,7 @@ test.describe("visual evidence", () => {
       [`${root}/audit`, "audit"],
       [`${root}/settings`, "settings-config-form"],
       [`${root}/economy`, "economy"],
+      [`${root}/xp`, "levels"],
       [`${root}/channels`, "channels"],
       [`${root}/templates`, "templates"],
       [`${root}/members`, "members"],

@@ -160,7 +160,7 @@ export function LevelingPage() {
         onChange={setTab}
       />
 
-      <TabPanel id="board" tab={tab}>
+      <TabPanel listId="leveling" value="board" active={tab}>
         <Card className="mt-4">
           <SectionHeader
             title="Who has been showing up"
@@ -206,11 +206,11 @@ export function LevelingPage() {
         </Card>
       </TabPanel>
 
-      <TabPanel id="curve" tab={tab}>
+      <TabPanel listId="leveling" value="curve" active={tab}>
         <CurveCard />
       </TabPanel>
 
-      <TabPanel id="rewards" tab={tab}>
+      <TabPanel listId="leveling" value="rewards" active={tab}>
         <RewardsCard onEdit={() => setSettings(true)} rewards={xp.rewards} />
       </TabPanel>
 
@@ -375,6 +375,46 @@ function RewardsCard({
 const CHANNELS_OF = (channels: { id: string; name: string }[]) =>
   channels.map((c) => ({ value: c.id, label: c.name }));
 
+/**
+ * Fields inside the rendered (active) panel, in document order. Used to decide
+ * what "the first field" means on open.
+ */
+const SETTINGS_FIELD_SELECTOR = [
+  '[role="tabpanel"] input',
+  '[role="tabpanel"] select',
+  '[role="tabpanel"] textarea',
+  '[role="tabpanel"] button',
+].join(", ");
+
+/**
+ * Dialogs opened with the header scrolled off-screen before this was added:
+ * all five settings panels mounted at once, Radix focused the first tabbable
+ * descendant, and the browser obediently scrolled both the dialog and the
+ * form's own nested scroll box down to reveal it. Only one panel mounts now,
+ * but the scroll position is still whatever the browser decides, so pin it.
+ *
+ * Starts at the top (title, module switch and tab bar all visible), focuses
+ * the first field of the active tab with `preventScroll`, and only then nudges
+ * the dialog's own scroll box if that field is genuinely below the fold.
+ */
+function focusFirstField(event: Event) {
+  const content = event.currentTarget as HTMLElement | null;
+  if (!content) return;
+  event.preventDefault();
+  content.scrollTop = 0;
+  const first = content.querySelector<HTMLElement>(SETTINGS_FIELD_SELECTOR);
+  if (!first) {
+    content.focus({ preventScroll: true });
+    return;
+  }
+  first.focus({ preventScroll: true });
+  const field = first.getBoundingClientRect();
+  const box = content.getBoundingClientRect();
+  if (field.bottom > box.bottom) {
+    content.scrollTop += field.bottom - box.bottom + 12;
+  }
+}
+
 function LevelingSettings({
   onClose,
   enabled,
@@ -401,7 +441,7 @@ function LevelingSettings({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" onOpenAutoFocus={focusFirstField}>
         <DialogHeader>
           <DialogTitle>Make levels feel like your server</DialogTitle>
           <DialogDescription>
@@ -439,7 +479,7 @@ function LevelingSettings({
         />
 
         <form
-          className="max-h-[50vh] space-y-5 overflow-y-auto pr-1"
+          className="space-y-5"
           onSubmit={async (e) => {
             e.preventDefault();
             setBusy(true);
@@ -454,7 +494,7 @@ function LevelingSettings({
             }
           }}
         >
-          <TabPanel id="messages" tab={tab}>
+          <TabPanel listId="leveling-settings" value="messages" active={tab}>
             <div className="flex items-center justify-between py-2">
               <span className="text-[12px]">Award XP for messages</span>
               <Switch
@@ -515,7 +555,7 @@ function LevelingSettings({
             </p>
           </TabPanel>
 
-          <TabPanel id="voice" tab={tab}>
+          <TabPanel listId="leveling-settings" value="voice" active={tab}>
             <div className="flex items-center justify-between py-2">
               <span className="text-[12px]">Award XP for voice</span>
               <Switch
@@ -622,7 +662,7 @@ function LevelingSettings({
             </p>
           </TabPanel>
 
-          <TabPanel id="exclusions" tab={tab}>
+          <TabPanel listId="leveling-settings" value="exclusions" active={tab}>
             <Field
               label="Channels that never earn"
               hint="Announcements or anything you would rather keep quiet."
@@ -710,7 +750,7 @@ function LevelingSettings({
             </div>
           </TabPanel>
 
-          <TabPanel id="rewards" tab={tab}>
+          <TabPanel listId="leveling-settings" value="rewards" active={tab}>
             <div className="flex items-center justify-between py-2">
               <div>
                 <p className="text-[12px]">Keep every reward earned</p>
@@ -815,7 +855,7 @@ function LevelingSettings({
             </p>
           </TabPanel>
 
-          <TabPanel id="announce" tab={tab}>
+          <TabPanel listId="leveling-settings" value="announce" active={tab}>
             <div className="flex items-center justify-between py-2">
               <span className="text-[12px]">Announce level ups</span>
               <Switch
