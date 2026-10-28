@@ -27,7 +27,7 @@ import {
   Settings2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import {
@@ -220,36 +220,110 @@ export function DataTable<T extends { id: string }>({
     setClientPage(0);
   }, [searchValue, facetValues]);
 
+  /*
+   * The latest columns and row actions, read through refs.
+   *
+   * `@tanstack/react-table` renders a cell with:
+   *
+   *     isReactComponent(Comp) ? React.createElement(Comp, props) : Comp
+   *
+   * where `Comp` is `columnDef.cell`. When that function's identity changes,
+   * React sees a *different element type* and unmounts the entire cell subtree
+   * before mounting the new one — it does not reconcile, because the types do
+   * not match. Callers pass `columns` as an inline array, so the identity
+   * changed on every render of the page, and every cell in every table was
+   * torn down and rebuilt on every render.
+   *
+   * The visible symptom was a row menu that closed itself: opening the
+   * dropdown, or any background data refresh, re-rendered the page and
+   * unmounted the open Radix menu out from under the pointer. The same
+   * mechanism dropped focus and reset uncontrolled state inside cells.
+   *
+   * The fix is to give each column one stable `cell` function for as long as
+   * the column exists, and have that function look its column up by key at
+   * call time — so the identity is stable but the data is never stale.
+   */
+  const columnsRef = useRef(columns);
+  columnsRef.current = columns;
+  const rowActionsRef = useRef(rowActions);
+  rowActionsRef.current = rowActions;
+
+  /**
+   * The current column for `key`, falling back to the one the definition was
+   * built from. The fallback is required so a caller can never receive
+   * `undefined`: a column that has disappeared is still drawn until the
+   * signature change rebuilds the definitions, and drawing it beats crashing.
+   */
+  const columnAt = useCallback(
+    (
+      key: string,
+      fallback: (typeof columns)[number]
+    ): (typeof columns)[number] =>
+      columnsRef.current.find((c) => c.key === key) ?? fallback,
+    // Stable by construction: it reads only through the ref, so it never has a
+    // dependency that changes. That is what lets `columnDefs` depend on it
+    // without rebuilding on every render.
+    []
+  );
+
+  // Rebuild only when the set of columns genuinely changes, not whenever a
+  // caller happens to build a new array with the same contents.
+  const columnSignature = columns
+    .map(
+      (c) =>
+        `${c.key}:${c.sortValue ? "sort" : "-"}:${c.canHide === false ? "fixed" : "hide"}`
+    )
+    .join("|");
+  const hasRowActions = !!rowActions;
+
   const columnDefs = useMemo<ColumnDef<TableFeatures, T>[]>(() => {
-    const defs: ColumnDef<TableFeatures, T>[] = columns.map((column) => ({
-      id: column.key,
-      header: () => column.header ?? column.label,
-      cell: ({ row }) => column.render(row.original),
-      // A client list sorts through TanStack's row model; a server list passes
-      // its field to the API and leaves the page untouched.
-      enableSorting: server ? false : column.sortValue ? true : false,
-      accessorFn: column.sortValue
-        ? (row: T) => column.sortValue!(row)
-        : undefined,
-      enableHiding: column.canHide !== false,
-      meta: { align: column.align },
-    }));
-    if (rowActions) {
+    const defs: ColumnDef<TableFeatures, T>[] = columnsRef.current.map(
+      (column) => {
+        const key = column.key;
+        return {
+          id: key,
+          header: () => {
+            const c = columnAt(key, column);
+            return c.header ?? c.label;
+          },
+          cell: ({ row }) => columnAt(key, column).render(row.original),
+          // A client list sorts through TanStack's row model; a server list
+          // passes its field to the API and leaves the page untouched.
+          enableSorting: server ? false : column.sortValue ? true : false,
+          accessorFn: (row: T) => {
+            const c = columnAt(key, column);
+            return c.sortValue ? c.sortValue(row) : undefined;
+          },
+          enableHiding: column.canHide !== false,
+          meta: { align: column.align },
+        };
+      }
+    );
+    if (hasRowActions) {
       defs.push({
         id: "__actions",
         header: () => <span className="sr-only">Actions</span>,
-        cell: ({ row }) => (
-          <RowActions
-            label={rowActions.label(row.original)}
-            items={rowActions.items(row.original)}
-          />
-        ),
+        cell: ({ row }) => {
+          const actions = rowActionsRef.current;
+          if (!actions) return null;
+          return (
+            <RowActions
+              label={actions.label(row.original)}
+              items={actions.items(row.original)}
+            />
+          );
+        },
         enableHiding: false,
         enableSorting: false,
       });
     }
     return defs;
-  }, [columns, rowActions, server]);
+    // `columnSignature` is not read in the body — the body reads the ref — but
+    // it is the dependency that makes the definitions rebuild when the set of
+    // columns changes. Without it a column added or removed at runtime would
+    // never appear, which is why the rule's suggestion is wrong here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columnSignature, hasRowActions, server, columnAt]);
 
   const totalItems = pagination?.total ?? rows.length;
   const pageIndex = server ? Math.max(0, pagination!.page - 1) : clientPage;

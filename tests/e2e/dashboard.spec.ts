@@ -123,6 +123,9 @@ test("role panels have working create, preview, publish, edit, and delete flows"
 test("moderation rules validate, persist, filter, and delete", async ({
   page,
 }) => {
+  // The default 45s budget cannot hold the deliberate wait for a refresh
+  // cycle below, and raising it here keeps it scoped to this one test.
+  test.setTimeout(120_000);
   // A name of its own. Playwright retries a failed test in a database that the
   // first attempt already wrote to, and a fixed name then produces two rows
   // that only make the retry fail with an ambiguous-locator error.
@@ -147,15 +150,50 @@ test("moderation rules validate, persist, filter, and delete", async ({
   await expect(
     page.getByRole("switch", { name: `Toggle ${name}` })
   ).not.toBeChecked();
-  // The switch persists through a refresh, and the row menu is opened on a
-  // table that is not still re-rendering the response.
+  /*
+   * The switch persists through a refresh.
+   *
+   * This reload used to be a workaround, not a check: the row menu closed
+   * itself as soon as anything re-rendered the table, so the test reloaded the
+   * page to get a table that had stopped moving. That hid a real defect — a
+   * menu that flickers shut on a human's screen — behind a passing assertion.
+   *
+   * The reload stays, but as what it always should have been: proof that the
+   * toggle was written to the server and not only held in component state.
+   * The menu is exercised on the live table further down, while data is
+   * refreshing underneath it.
+   */
   await visit(page, `${root}/moderation`);
   await page.getByPlaceholder("Search automod rules…").fill(name);
   await expect(page.getByText(name, { exact: true })).toBeVisible();
   await expect(
     page.getByRole("switch", { name: `Toggle ${name}` })
   ).not.toBeChecked();
+
+  /*
+   * An open row menu must survive the background refresh.
+   *
+   * The dashboard refetches on an interval and when the tab regains focus.
+   * `DataTable` used to rebuild every cell renderer on each of those renders,
+   * which gave `@tanstack/react-table` a new component type per cell and made
+   * React unmount the cell — taking the open menu with it. The regression is
+   * pinned at the component level in tests/data-table-stability.test.tsx;
+   * this is the end-to-end half, against the real table and the real refresh.
+   */
   await page.getByRole("button", { name: `Actions for ${name}` }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Delete automod rule" })
+  ).toBeVisible();
+  // Outlast one refresh cycle: the dashboard polls every 30 seconds, so a
+  // menu that closes on re-render will not survive this.
+  await page.waitForTimeout(32_000);
+  await expect(menu).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Delete automod rule" })
+  ).toBeVisible();
+
   await page.getByRole("menuitem", { name: "Delete automod rule" }).click();
   await page
     .getByRole("button", { name: "Delete configuration", exact: true })

@@ -6,6 +6,21 @@ export default defineConfig({
   workers: 1,
   timeout: 45000,
   retries: process.env.CI ? 1 : 0,
+  /*
+   * A test that fails and then passes on retry is a broken test, not a pass.
+   *
+   * The retry exists so a CI run reports every failing spec in one go instead
+   * of stopping at the first, which is worth keeping — but reporting the run as
+   * green because the second attempt happened to succeed hid an intermittent
+   * product defect for as long as the retry was enabled. A row menu that
+   * unmounted itself mid-interaction depended on when a background refresh
+   * landed, so it passed on CI and failed on a real machine.
+   *
+   * With this set, a retried pass still prints the diagnostic but fails the
+   * job. The retry keeps its value as a diagnostic; it loses its ability to
+   * rubber-stamp a flaky test.
+   */
+  failOnFlakyTests: true,
   // Keep failures readable through the Checks API when the log-download CDN
   // is unavailable to a restricted development environment.
   reporter: process.env.CI ? [["list"], ["github"]] : "list",

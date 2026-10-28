@@ -81,6 +81,7 @@
     "@electric-sql/pglite": "^0.5.11",
     "@eslint/js": "^9.38.0",
     "@playwright/test": "^1.64.1",
+    "@vitejs/plugin-react": "^6.1.2",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^22.19.0",
