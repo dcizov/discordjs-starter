@@ -1,5 +1,18 @@
 import { test, expect, type Page } from "@playwright/test";
 import { chooseOption } from "./support/ui";
+import { getCommandCatalog } from "@orbit/core/command-catalog";
+import { defaultConfig } from "@orbit/core/config";
+
+/*
+ * Expected counts are derived from the registration definitions, the same
+ * source the server builds its catalog from, instead of being written down.
+ *
+ * Hardcoded totals went stale twice — 47 and 32 here, against a real 57 and 36
+ * — which is the worst possible failure for this kind of assertion: the page
+ * was correct every time and the test was wrong every time, so every new
+ * command looked like a regression.
+ */
+const expected = getCommandCatalog(defaultConfig);
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, path: string) {
@@ -33,9 +46,12 @@ test("commands are discoverable, derived from registration, searchable, and filt
   await expect(
     page.getByRole("heading", { name: "One command away." })
   ).toBeVisible();
-  await expect(page.getByRole("article")).toHaveCount(47);
+  await expect(page.getByRole("article")).toHaveCount(expected.invocationCount);
   await expect(
-    page.getByText("Showing 47 of 47 command invocations", { exact: false })
+    page.getByText(
+      `Showing ${expected.invocationCount} of ${expected.invocationCount} command invocations`,
+      { exact: false }
+    )
   ).toBeVisible();
   await expect(
     page.getByText("it does not check what Discord currently has", {
@@ -69,8 +85,8 @@ test("commands are discoverable, derived from registration, searchable, and filt
   expect(await catalog.json()).toMatchObject({
     source: "registration-definitions",
     registrationVerified: false,
-    rootCount: 32,
-    invocationCount: 47,
+    rootCount: expected.rootCount,
+    invocationCount: expected.invocationCount,
   });
   expect(
     (await page.request.get("/api/guilds/990000000000000999/commands")).status()
@@ -114,7 +130,7 @@ test("command reference handles a failed load and retries instead of showing an 
     page.getByText("The command reference couldn’t load.", { exact: true })
   ).toBeVisible();
   await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await expect(page.getByRole("article")).toHaveCount(47);
+  await expect(page.getByRole("article")).toHaveCount(expected.invocationCount);
 });
 test("audit detail copies the exact stored multiline error and full event JSON", async ({
   page,

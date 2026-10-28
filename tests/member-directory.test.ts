@@ -239,14 +239,22 @@ describe("member directory", () => {
 
   it("reports Discord's count and the stored row count separately, and never calls an account count a roster", async () => {
     const page = await listMembers(DEMO_GUILD_ID, {});
-    expect(page.counts.guildMemberCount).toBe(15);
     /*
-     * Corrected 15 -> 16 when the demo roster gained "Over Load", the member
-     * added deliberately to hold more roles than the list can display. It is a
-     * stored roster row, so `syncedMembers` (rows) moves while
-     * `guildMemberCount` (Discord's own tally for this fixture guild) does not
-     * -- which is the distinction this test exists to make.
+     * Corrected 15 -> 16 on both counts, and the two now agree.
+     *
+     * "Over Load" was added deliberately, to hold more roles than the member
+     * list can display. It is a present roster row, so the stored count moved;
+     * Discord's tally did not, because the demo's `memberCount` was a literal
+     * that had drifted from the roster it describes. It is derived from the
+     * present rows now, so the two cannot disagree again.
+     *
+     * That does not make this assertion redundant. What it pins is that the
+     * page exposes two separately named numbers rather than one ambiguous
+     * "members" figure, and that the roster count is never the economy's
+     * account count. The case where Discord's tally genuinely differs from the
+     * rows we hold belongs to the database path, not the demo.
      */
+    expect(page.counts.guildMemberCount).toBe(16);
     expect(page.counts.syncedMembers).toBe(16);
     expect(page.counts.economyAccounts).toBeLessThanOrEqual(
       page.counts.syncedMembers

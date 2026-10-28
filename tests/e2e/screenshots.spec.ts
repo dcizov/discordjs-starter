@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page, type Request } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -29,17 +29,89 @@ const outputDir = resolve("visual-evidence");
 const desktop = { width: 1440, height: 900 };
 const mobile = { width: 390, height: 844 };
 
+/**
+ * Follow the requests a page makes, so a networkidle timeout can explain
+ * itself.
+ *
+ * "networkidle timed out" is one of the least useful failures a browser test can
+ * produce: it says the page never went quiet without saying what kept it busy.
+ * It is also how a polling defect on one page surfaces as a failure of a
+ * different page — a run poller hammering the rate limiter starved the member
+ * directory, and the only symptom here was that this page never went idle.
+ *
+ * `page.on("request")` and `page.on("requestfinished")` are attached per call so
+ * the counters describe the page being opened rather than the whole run.
+ */
+function trackRequests(page: Page) {
+  const inflight = new Map<string, number>();
+  const counts = new Map<string, number>();
+  const onRequest = (request: Request) => {
+    const url = request.url();
+    inflight.set(url, (inflight.get(url) ?? 0) + 1);
+    counts.set(url, (counts.get(url) ?? 0) + 1);
+  };
+  const onSettled = (request: Request) => {
+    const url = request.url();
+    const left = (inflight.get(url) ?? 0) - 1;
+    if (left > 0) inflight.set(url, left);
+    else inflight.delete(url);
+  };
+  page.on("request", onRequest);
+  page.on("requestfinished", onSettled);
+  page.on("requestfailed", onSettled);
+  return {
+    counts,
+    inflight,
+    detach() {
+      page.off("request", onRequest);
+      page.off("requestfinished", onSettled);
+      page.off("requestfailed", onSettled);
+    },
+    /** A readable diagnosis, used when waiting for stillness fails. */
+    describe(limit = 15) {
+      const byCount = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([url, n]) => `  ${String(n).padStart(6)}x  ${url}`)
+        .join("\n");
+      const pending = [...inflight.keys()]
+        .slice(0, limit)
+        .map((url) => `  PENDING  ${url}`)
+        .join("\n");
+      return [
+        `Most-requested URLs for this page (${counts.size} distinct, ${[...counts.values()].reduce((a, b) => a + b, 0)} total):`,
+        byCount || "  (none)",
+        pending ? `Still in flight:\n${pending}` : "Still in flight: (none)",
+      ].join("\n");
+    },
+  };
+}
+
 async function open(page: Page, url: string) {
-  await page.goto(url);
-  await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
-    timeout: 20000,
-  });
-  // Animations make two runs differ for no reason; let them finish first.
-  await page.waitForLoadState("networkidle");
-  await page.addStyleTag({
-    content:
-      "*,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important}",
-  });
+  const traffic = trackRequests(page);
+  try {
+    await page.goto(url);
+    await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
+      timeout: 20000,
+    });
+    // Animations make two runs differ for no reason; let them finish first.
+    try {
+      await page.waitForLoadState("networkidle", { timeout: 15000 });
+    } catch (cause) {
+      // Carry the diagnosis into the GitHub annotation instead of leaving a
+      // bare timeout: which URL was asked for most, and what never settled.
+      throw new Error(
+        `Network never went idle on ${url}.\n${traffic.describe()}`,
+        { cause }
+      );
+    }
+    await page.addStyleTag({
+      content:
+        "*,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important}",
+    });
+  } finally {
+    traffic.detach();
+  }
 }
 
 /**

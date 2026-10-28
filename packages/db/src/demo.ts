@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { createDemo, type DemoState } from "./demo-seed";
+import { createDemo, DEMO_SEED_VERSION, type DemoState } from "./demo-seed";
 // Demo is deliberately single-process. Live services always use PostgreSQL.
 const globalStore = globalThis as unknown as {
   orbitDemoLock?: Promise<unknown>;
@@ -16,12 +16,21 @@ function storePath() {
   );
 }
 async function load(): Promise<DemoState> {
+  let parsed: DemoState;
   try {
-    return JSON.parse(await readFile(storePath(), "utf8"));
+    parsed = JSON.parse(await readFile(storePath(), "utf8"));
   } catch (e: any) {
     if (e.code !== "ENOENT") throw e;
     return createDemo();
   }
+  /*
+   * A stored demo is disposable, so a file seeded by an older build is
+   * regenerated rather than carried forward. Without this, any change to the
+   * seed is invisible to whoever already has a `.data/demo.json`, and the
+   * result looks like a product bug rather than a stale fixture.
+   */
+  if (parsed?.version !== DEMO_SEED_VERSION) return createDemo();
+  return parsed;
 }
 export async function demoTransaction<T>(
   fn: (data: DemoState) => T | Promise<T>

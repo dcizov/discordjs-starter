@@ -115,6 +115,16 @@ const role = (
   permissions,
   managed,
 });
+/**
+ * Bumped whenever the seeded demo changes shape or content.
+ *
+ * A stored demo file is used verbatim, so without this a change to the seed
+ * would silently not apply to anyone who already had a `.data/demo.json` —
+ * which is how a stale member count survived a seed fix and came back looking
+ * like a product bug. Demo state is disposable, so a mismatch is regenerated.
+ */
+export const DEMO_SEED_VERSION = 2;
+
 export function createDemo(): DemoState {
   const roles = [
     role(101, "Admin", "#e16b73", 15, "8"),
@@ -199,11 +209,13 @@ export function createDemo(): DemoState {
     name: "The Cozy Corner",
     icon: DEMO_GUILD_ICON,
     installed: true,
-    // Discord counts the members it currently has, so this matches the present
-    // rows below (the departed sample member is not counted). Real guilds keep
-    // Discord's own number, which is why the members screen reports both the
-    // synchronized row count and Discord's count separately.
-    memberCount: 15,
+    // Discord counts the members it currently has. Real guilds keep Discord's
+    // own number, which is why the members screen reports it separately from
+    // the synchronized row count; the demo has no Discord behind it, so the
+    // correct value is the number of present rows, assigned from `members`
+    // once they exist below. It was written as a literal and drifted the first
+    // time someone added a member.
+    memberCount: 0,
     config,
     roles: roles.map((item) => ({
       ...item,
@@ -819,8 +831,15 @@ export function createDemo(): DemoState {
       ],
     }),
   ];
+  /*
+   * Discord's tally and the rows we hold are the same number in the demo,
+   * because there is no Discord behind it to disagree with. Deriving it keeps
+   * the overview card, the members API and the roster in step when the roster
+   * changes.
+   */
+  guild.memberCount = members.filter((m) => m.present).length;
   return {
-    version: 1,
+    version: DEMO_SEED_VERSION,
     guilds: [
       guild,
       {
