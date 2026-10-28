@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   assertFreshBotAction,
+  BOT_ACTION_MAX_AGE_MS,
   BotActionPendingError,
   BotActionUnavailableError,
   MUSIC_ACTION_MAX_AGE_MS,
@@ -133,9 +134,29 @@ describe("stopped bots never replay old music requests", () => {
       assertFreshBotAction("music", 1000, 1001 + MUSIC_ACTION_MAX_AGE_MS)
     ).toThrow("expired");
     expect(() => assertFreshBotAction("music", NaN)).toThrow("expired");
+    /*
+     * Corrected: this asserted that a non-music action never expires, which
+     * was the defect rather than the specification. Only `music` had an age
+     * limit, so a panel publication or a template apply queued during a worker
+     * outage executed whenever the worker returned — hours or days later.
+     *
+     * Non-music actions now share one generous window (15 minutes rather than
+     * music's 30 seconds) because they are deliberate configuration changes,
+     * not live queue state, and a window that short would fail on any ordinary
+     * restart.
+     */
     expect(() =>
-      assertFreshBotAction("publish-panel", 0, 1000000)
+      assertFreshBotAction("publish-panel", 0, BOT_ACTION_MAX_AGE_MS)
     ).not.toThrow();
+    expect(() =>
+      assertFreshBotAction("publish-panel", 0, BOT_ACTION_MAX_AGE_MS + 1)
+    ).toThrow("waited too long");
+    expect(() =>
+      assertFreshBotAction("apply-template", 0, BOT_ACTION_MAX_AGE_MS + 1)
+    ).toThrow("waited too long");
+    expect(() => assertFreshBotAction("member-roles", NaN)).toThrow(
+      "no usable timestamp"
+    );
   });
 });
 

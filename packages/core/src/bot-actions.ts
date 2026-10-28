@@ -1,5 +1,19 @@
 /** Shared protocol for the dashboard's live bot action bridge. No Discord I/O. */
 export const MUSIC_ACTION_MAX_AGE_MS = 30_000;
+/**
+ * How long any other queued action stays valid.
+ *
+ * Music is 30 seconds because a queue is live state: playing a track someone
+ * asked for before a restart is a surprise, not a service. The rest — publishing
+ * a panel, applying a template, editing roles — are deliberate configuration
+ * changes, so they get a generous window that survives a worker restart without
+ * letting an operator's click from last Tuesday execute now.
+ *
+ * This used to apply to `music` alone, which meant every other action had no
+ * bound at all: a job queued during an outage executed whenever the worker came
+ * back, however long that took.
+ */
+export const BOT_ACTION_MAX_AGE_MS = 15 * 60_000;
 
 export class BotActionUnavailableError extends Error {
   readonly status = 503;
@@ -18,13 +32,21 @@ export function assertFreshBotAction(
   timestamp: number,
   now = Date.now()
 ) {
-  if (
-    name === "music" &&
-    (!Number.isFinite(timestamp) || now - timestamp > MUSIC_ACTION_MAX_AGE_MS)
-  )
+  if (!Number.isFinite(timestamp)) {
     throw new Error(
-      "This music request expired while waiting for the bot. Nothing was played by this request. Check the current queue and submit a fresh request."
+      name === "music"
+        ? "This music request expired while waiting for the bot. Nothing was played by this request. Check the current queue and submit a fresh request."
+        : "This request has no usable timestamp, so it was not run. Submit it again."
     );
+  }
+  const maxAge =
+    name === "music" ? MUSIC_ACTION_MAX_AGE_MS : BOT_ACTION_MAX_AGE_MS;
+  if (now - timestamp <= maxAge) return;
+  throw new Error(
+    name === "music"
+      ? "This music request expired while waiting for the bot. Nothing was played by this request. Check the current queue and submit a fresh request."
+      : "This request waited too long for the bot and was not run. Nothing was changed. Refresh the page and try again."
+  );
 }
 
 export type BotActionStatus = {
