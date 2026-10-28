@@ -168,6 +168,9 @@ export function TemplatesPage() {
    * it from polling once the job has finished.
    */
   useLiveRefresh<{ state: string; error?: string | null }>({
+    // No job, no URL to build. Guarding here rather than inside the hook keeps
+    // `/actions/null` off the wire entirely.
+    enabled: !!captureJobId,
     fetcher: (signal) =>
       api(`/actions/${captureJobId}`, "GET", undefined, undefined, { signal }),
     active: !!captureJobId,
@@ -226,6 +229,9 @@ export function TemplatesPage() {
    * nothing left to poll, and a finished run must not keep generating requests.
    */
   const runFeed = useLiveRefresh<TemplateRun>({
+    // Same guard for the run: `/templates/runs/null` was the single largest
+    // contributor to the 15,000-request trace.
+    enabled: !!runId,
     fetcher: (signal) =>
       api(`/templates/runs/${runId}`, "GET", undefined, undefined, { signal }),
     active: !!runId && isInFlight(run?.state),

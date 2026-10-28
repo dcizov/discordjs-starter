@@ -18,6 +18,63 @@ export function duration(ms: number) {
   const s = Math.floor(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
+/**
+ * A failed HTTP response, carrying what the caller needs to react to it.
+ *
+ * A bare `Error` lost the status code, which meant nothing upstream could tell
+ * "the server is rate-limiting me, stop asking" from "that request was
+ * malformed" or "the worker is down" — so every failure was retried on the
+ * same schedule. 429 in particular has to be recognisable: retrying it is what
+ * keeps the client rate-limited.
+ */
+export class HttpError extends Error {
+  readonly status: number;
+  /** `Retry-After` in milliseconds, when the server sent a usable one. */
+  readonly retryAfterMs: number | null;
+
+  constructor(
+    status: number,
+    message: string,
+    retryAfterMs: number | null = null
+  ) {
+    super(message);
+    this.name = "HttpError";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+/** Narrowing helper: `isHttpError(e, 429)` reads better than a status fetch. */
+export function isHttpError(
+  error: unknown,
+  status?: number
+): error is HttpError {
+  if (!(error instanceof HttpError)) return false;
+  return status === undefined || error.status === status;
+}
+
+/**
+ * Parse a `Retry-After` header into milliseconds.
+ *
+ * It is legal either as a number of seconds or as an HTTP date, and a value we
+ * cannot read must be treated as absent rather than as zero — guessing zero is
+ * how a retry loop becomes a hammering loop.
+ */
+export function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  const seconds = Number(trimmed);
+  if (trimmed !== "" && Number.isFinite(seconds)) {
+    if (seconds < 0) return null;
+    return Math.round(seconds * 1000);
+  }
+  const at = Date.parse(trimmed);
+  if (!Number.isFinite(at)) return null;
+  const delta = at - Date.now();
+  // Already elapsed, or nonsense: fall back to the caller's own backoff.
+  return delta > 0 ? delta : null;
+}
+
 export async function request<T = any>(
   url: string,
   method = "GET",
@@ -33,6 +90,10 @@ export async function request<T = any>(
   });
   const result = await r.json();
   if (!r.ok)
-    throw new Error(result.error ?? "Something went wrong. Please try again.");
+    throw new HttpError(
+      r.status,
+      result?.error ?? "Something went wrong. Please try again.",
+      parseRetryAfter(r.headers.get("retry-after"))
+    );
   return result;
 }

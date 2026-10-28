@@ -33,6 +33,12 @@ export type PollInputs = {
   activeMs?: number;
   /** Poll interval while idle; 0 disables idle polling entirely. */
   idleMs?: number;
+  /**
+   * A `Retry-After` the server asked for, in milliseconds. Honoured when it
+   * is longer than the backoff we would otherwise have used, and ignored when
+   * it is absent or unparseable.
+   */
+  retryAfterMs?: number | null;
 };
 
 /**
@@ -51,11 +57,28 @@ export function nextPollDelay({
   hidden,
   activeMs = ACTIVE_POLL_MS,
   idleMs = IDLE_POLL_MS,
+  retryAfterMs = null,
 }: PollInputs): number | null {
   if (hidden) return null;
-  if (failures > 0) return backoffDelay(failures, active ? activeMs : idleMs);
-  if (active) return activeMs;
-  return idleMs > 0 ? idleMs : null;
+  /*
+   * Resolve the interval for this state first, and let a zero interval end the
+   * decision here.
+   *
+   * `idleMs: 0` means "there is nothing to poll once the work has settled", and
+   * that promise has to survive a failure too. The previous version branched on
+   * `failures` before it looked at the interval, and backing off from a base of
+   * zero is zero — so a rate-limited tab rescheduled itself with a delay of
+   * 0ms, forever. That is what produced ~350 requests/second against
+   * `/templates/runs/null`: the request was wrong, but the loop is what turned
+   * a wrong request into 15,000 of them.
+   */
+  const base = active ? activeMs : idleMs;
+  if (base <= 0) return null;
+  if (failures <= 0) return base;
+  const backoff = backoffDelay(failures, base);
+  return typeof retryAfterMs === "number" && retryAfterMs > 0
+    ? Math.max(backoff, retryAfterMs)
+    : backoff;
 }
 
 /**
@@ -66,7 +89,8 @@ export function nextPollDelay({
  * would wait for.
  */
 export function backoffDelay(failures: number, base: number): number {
-  if (failures <= 1 || base <= 0) return Math.max(base, 0);
+  if (base <= 0) return 0;
+  if (failures <= 1) return base;
   const exponent = Math.min(failures - 1, 20);
   return Math.min(base * 2 ** exponent, MAX_BACKOFF_MS);
 }

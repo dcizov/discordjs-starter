@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createSequenceGuard, nextPollDelay } from "./live-refresh";
+import { isHttpError } from "./utils";
 
 export type LiveRefreshOptions<T> = {
   /**
@@ -9,6 +10,16 @@ export type LiveRefreshOptions<T> = {
    * request is superseded or the component goes away.
    */
   fetcher: (signal: AbortSignal) => Promise<T>;
+  /**
+   * Whether there is anything to poll at all.
+   *
+   * This is deliberately separate from `active`: `active` says "work is in
+   * flight, so poll quickly", while `enabled` says "there is no id yet, so do
+   * not ask". Without it a page that builds its URL from state that starts out
+   * `null` requests `/templates/runs/null` — a request that can only ever fail,
+   * and which the old failure path then retried without delay.
+   */
+  enabled?: boolean;
   /**
    * Poll while this is true. The caller derives it from the data (a run still
    * reporting `queued` or `running`, a job not yet finished), so fast polling
@@ -46,6 +57,7 @@ export type LiveRefreshResult<T> = {
  */
 export function useLiveRefresh<T>({
   fetcher,
+  enabled = true,
   active = false,
   activeMs,
   idleMs,
@@ -64,17 +76,38 @@ export function useLiveRefresh<T>({
   const busy = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controller = useRef<AbortController | null>(null);
+  // A `Retry-After` the last failure asked us to respect.
+  const retryAfter = useRef<number | null>(null);
+  /**
+   * Set when the server has told us to stop asking — a 429 above all.
+   *
+   * Rate limiting is not an outage: polling through it spends the client's
+   * whole budget and starves every other surface on the page, which is exactly
+   * how the member directory came to render "Too many requests". The error is
+   * surfaced once and `retry()` is the only way back in, so the loop is a
+   * person's decision rather than the timer's.
+   */
+  const halted = useRef(false);
   // Read through refs so the callbacks stay referentially stable and the
   // effects do not resubscribe on every render.
   const latest = useRef({
     fetcher,
     onUpdate,
+    enabled,
     active,
     activeMs,
     idleMs,
     visible,
   });
-  latest.current = { fetcher, onUpdate, active, activeMs, idleMs, visible };
+  latest.current = {
+    fetcher,
+    onUpdate,
+    enabled,
+    active,
+    activeMs,
+    idleMs,
+    visible,
+  };
 
   const clearTimer = useCallback(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -92,6 +125,8 @@ export function useLiveRefresh<T>({
   const planNext = useCallback(() => {
     clearTimer();
     if (!mounted.current) return;
+    if (halted.current) return;
+    if (!latest.current.enabled) return;
     const {
       active: isActive,
       activeMs: a,
@@ -102,6 +137,7 @@ export function useLiveRefresh<T>({
       active: isActive,
       failures: failures.current,
       hidden: !isVisible,
+      retryAfterMs: retryAfter.current,
       ...(a !== undefined ? { activeMs: a } : {}),
       ...(i !== undefined ? { idleMs: i } : {}),
     });
@@ -111,6 +147,15 @@ export function useLiveRefresh<T>({
 
   const run = useCallback(async () => {
     if (!mounted.current) return;
+    /*
+     * The null guard, at the source.
+     *
+     * A caller builds its URL from state that is legitimately empty before the
+     * operator picks anything. Rather than have every caller remember to check,
+     * or match on "null" in a string it should never have built, the hook asks
+     * `enabled` before it asks the network.
+     */
+    if (!latest.current.enabled) return;
     // Never stack requests: if one is still running, the schedule will poll
     // again when it settles.
     if (busy.current) return;
@@ -126,6 +171,7 @@ export function useLiveRefresh<T>({
       if (!mounted.current || own.signal.aborted) return;
       if (!guard.current.isCurrent(ticket)) return;
       failures.current = 0;
+      retryAfter.current = null;
       setData(value);
       setError(null);
       setUpdatedAt(Date.now());
@@ -136,7 +182,15 @@ export function useLiveRefresh<T>({
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       if (!guard.current.isCurrent(ticket)) return;
       failures.current += 1;
-      setError(cause instanceof Error ? cause : new Error(String(cause)));
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      if (isHttpError(cause)) {
+        retryAfter.current = cause.retryAfterMs;
+        // 429 is the server saying "stop", so stop. Backoff honours
+        // Retry-After for other failures; retrying a rate limit just keeps
+        // the client rate-limited and starves the rest of the page.
+        if (cause.status === 429) halted.current = true;
+      }
+      setError(error);
     } finally {
       busy.current = false;
       if (mounted.current) setRefreshing(false);
@@ -155,6 +209,13 @@ export function useLiveRefresh<T>({
   }, [clearTimer]);
 
   useEffect(() => {
+    if (!enabled) {
+      // Nothing to fetch yet, so nothing to schedule either. `planNext` would
+      // reach the same conclusion, but only after the fetcher had built a URL
+      // out of an id that does not exist yet.
+      clearTimer();
+      return;
+    }
     if (immediate) void run();
     else planNext();
     // Mount-only: `run`/`planNext` are stable and every later trigger is
@@ -171,7 +232,14 @@ export function useLiveRefresh<T>({
       const isVisible = document.visibilityState === "visible";
       latest.current.visible = isVisible;
       setVisible(isVisible);
-      if (isVisible) {
+      /*
+       * This handler used to call `run()` whenever the tab became visible, with
+       * no regard for whether there was anything to fetch. Since it also runs
+       * once on mount, every dashboard surface with a not-yet-chosen id fired a
+       * request for `/…/null` the moment it appeared — the original source of
+       * the traffic in the trace.
+       */
+      if (isVisible && latest.current.enabled && !halted.current) {
         clearTimer();
         void run();
       } else {
@@ -183,11 +251,40 @@ export function useLiveRefresh<T>({
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [clearTimer, run]);
 
+  /*
+   * Losing the thing being polled is a lifecycle event, not a change of
+   * schedule: clear the id and the surface stops, immediately and without
+   * waiting for a pending timer. Leaving the timer armed meant a run poller
+   * kept issuing requests after the operator navigated to another section.
+   */
+  const wasEnabled = useRef(enabled);
+  useEffect(() => {
+    if (enabled === wasEnabled.current) return;
+    wasEnabled.current = enabled;
+    if (!enabled) {
+      clearTimer();
+      // Abort rather than ignore: an in-flight request would otherwise settle
+      // and re-plan from a run the page is no longer looking at.
+      controller.current?.abort();
+      busy.current = false;
+      setRefreshing(false);
+    } else {
+      halted.current = false;
+      failures.current = 0;
+      retryAfter.current = null;
+      void run();
+    }
+  }, [enabled, clearTimer, run]);
+
   // Becoming active is the interesting transition: fetch at once instead of
   // waiting out a slow idle interval. Becoming inactive just re-plans, which
   // drops the fast timer.
   const wasActive = useRef(active);
   useEffect(() => {
+    if (!enabled) {
+      clearTimer();
+      return;
+    }
     if (active && !wasActive.current) {
       clearTimer();
       void run();
@@ -195,16 +292,24 @@ export function useLiveRefresh<T>({
       planNext();
     }
     wasActive.current = active;
-  }, [active, clearTimer, planNext, run]);
+  }, [active, enabled, clearTimer, planNext, run]);
 
   const refresh = useCallback(() => {
     failures.current = 0;
+    retryAfter.current = null;
+    halted.current = false;
     clearTimer();
     void run();
   }, [clearTimer, run]);
 
+  /*
+   * The way back in after a 429, and the only one: a person asked, so the
+   * schedule resumes with a clean failure count.
+   */
   const retry = useCallback(() => {
     failures.current = 0;
+    retryAfter.current = null;
+    halted.current = false;
     setError(null);
     clearTimer();
     void run();
