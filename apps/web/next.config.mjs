@@ -75,6 +75,21 @@ const config = {
         pathname: "/avatars/*/*.webp",
         search: "?size=128",
       },
+      /*
+       * Discord's default avatars: the coloured disc served for an account
+       * that never uploaded one. Different path (`/embed/avatars/`), PNG
+       * rather than WebP, and no query string — so it needs its own pattern.
+       * Without it `next/image` rejects the URL at render time
+       * ("Invalid src prop ... not configured under images"), which turns
+       * every member without a custom avatar into initials again.
+       */
+      {
+        protocol: "https",
+        hostname: "cdn.discordapp.com",
+        port: "",
+        pathname: "/embed/avatars/*.png",
+        search: "",
+      },
     ],
   },
   async headers() {

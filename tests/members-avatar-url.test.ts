@@ -63,6 +63,7 @@ vi.mock("@orbit/core/queue", () => ({
 }));
 
 import { GET } from "../apps/web/app/api/[...path]/route";
+import { defaultAvatarUrl } from "../apps/web/lib/discord-images";
 
 const GUILD = "120000000000000001";
 const USER = "120000000000000099";
@@ -71,6 +72,18 @@ const USER = "120000000000000099";
 const HASH = "a".repeat(32);
 /** A guild-specific avatar hash — a different URL shape entirely. */
 const GUILD_HASH = "b".repeat(32);
+
+/**
+ * Discord's default-avatar index for a snowflake, computed here so the
+ * expectation is independent of the implementation.
+ *
+ * `Number(BigInt(id) >> 22n) % 6` is what `@discordjs/rest`'s
+ * `calculateUserDefaultAvatarIndex` does, which is what discord.js's
+ * `User#defaultAvatarURL` calls. Deliberately restated rather than imported,
+ * so a change in the app's copy of the arithmetic fails the test instead of
+ * silently agreeing with itself.
+ */
+const defaultIndex = (userId: string) => Number(BigInt(userId) >> 22n) % 6;
 
 function member(overrides: Record<string, unknown> = {}) {
   return {
@@ -167,20 +180,76 @@ describe("GET /guilds/:id/members derives avatar URLs", () => {
     );
   });
 
-  it("sends null for a member with no avatar, rather than omitting the field", async () => {
+  it("falls back to Discord's default avatar when no hash is recorded", async () => {
+    // The half that shipped as null: most of a real server has never uploaded
+    // an avatar, and each of those members was drawn as two initials.
     const body = await fetchRoster([member({ avatar: null })]);
-    expect(body.rows[0].avatarUrl).toBeNull();
-    // Required on the wire: the key must exist even when the value is null,
-    // or the client cannot tell "no avatar" from "never derived".
+    expect(body.rows[0].avatarUrl).toBe(
+      `https://cdn.discordapp.com/embed/avatars/${defaultIndex(USER)}.png`
+    );
+    // Required on the wire: the key must exist, or the client cannot tell
+    // "no avatar" from "never derived".
     expect("avatarUrl" in body.rows[0]).toBe(true);
+  });
+
+  it("derives the default index from the snowflake, exactly as discord.js does", async () => {
+    // One id per index. If the arithmetic were wrong in a way that happened
+    // to produce 0, a single-id test would not notice.
+    const ids = [
+      "120000000000000000",
+      "120000000004194304",
+      "120000000008388608",
+      "120000000012582912",
+      "120000000016777216",
+      "120000000020971520",
+    ];
+    const body = await fetchRoster(
+      ids.map((userId) => member({ userId, avatar: null }))
+    );
+    expect(body.rows.map((r) => r.avatarUrl)).toEqual(
+      ids.map(
+        (userId) =>
+          `https://cdn.discordapp.com/embed/avatars/${defaultIndex(userId)}.png`
+      )
+    );
+    // And the indices really are all six, in order.
+    expect(ids.map(defaultIndex)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  /*
+   * The legacy branch, tested against the helper rather than the route.
+   *
+   * The roster stores no discriminator — Discord retired them for new
+   * accounts — so the route can only ever reach the snowflake branch. The
+   * `discriminator % 5` rule still has to be right for an old account whose
+   * discriminator we do hold, which is why it is implemented and tested here
+   * rather than deleted as unreachable.
+   */
+  it("uses the discriminator for a legacy account instead", () => {
+    // 1234 % 5 === 4, and the snowflake branch would have given 0.
+    expect(defaultAvatarUrl("120000000000000401", "1234")).toBe(
+      "https://cdn.discordapp.com/embed/avatars/4.png"
+    );
+    // "0" and "0000" mean "no discriminator", so they fall back to the id.
+    expect(defaultAvatarUrl("120000000000000401", "0")).toBe(
+      defaultAvatarUrl("120000000000000401")
+    );
+    // Anything that is not a 1-4 digit number is not a discriminator.
+    expect(defaultAvatarUrl("120000000000000401", "wat")).toBe(
+      defaultAvatarUrl("120000000000000401")
+    );
   });
 
   it("rejects a hash that is not a Discord hash instead of building a junk URL", async () => {
     const body = await fetchRoster([member({ avatar: "not-a-hash" })]);
-    expect(body.rows[0].avatarUrl).toBeNull();
+    // Not turned into `/avatars/<id>/not-a-hash.webp`, which would 404. It
+    // falls through to the default, which always resolves.
+    expect(body.rows[0].avatarUrl).toBe(
+      `https://cdn.discordapp.com/embed/avatars/${defaultIndex(USER)}.png`
+    );
   });
 
-  it("gives every row a URL, including bots", async () => {
+  it("gives every row a URL, including the bot", async () => {
     // The reported symptom was that all 61 rows fell back to initials, the
     // bot included.
     const body = await fetchRoster([
@@ -200,8 +269,17 @@ describe("GET /guilds/:id/members derives avatar URLs", () => {
     expect(body.rows).toHaveLength(3);
     expect(body.rows[0].avatarUrl).toContain(`/avatars/120000000000000401/`);
     expect(body.rows[1].avatarUrl).toContain(`/avatars/${GUILD_HASH}`);
-    // The row with no avatar is honestly null, and still carries the key.
-    expect(body.rows[2].avatarUrl).toBeNull();
-    expect("avatarUrl" in body.rows[2]).toBe(true);
+    // The bot with no recorded hash gets its default, not initials.
+    expect(body.rows[2].avatarUrl).toBe(
+      `https://cdn.discordapp.com/embed/avatars/${defaultIndex("120000000000000402")}.png`
+    );
+    // Not one row is null.
+    expect(body.rows.every((r) => typeof r.avatarUrl === "string")).toBe(true);
+  });
+
+  it("leaves null only for an id that is not a snowflake", async () => {
+    const body = await fetchRoster([member({ userId: "not-a-snowflake" })]);
+    expect(body.rows[0].avatarUrl).toBeNull();
+    expect("avatarUrl" in body.rows[0]).toBe(true);
   });
 });

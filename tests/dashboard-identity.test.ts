@@ -135,7 +135,19 @@ describe("dashboard identity projection and tenant boundary", () => {
     });
     const result = await loadDashboard(gid);
     expect(result.user.avatar).toBeNull();
-    expect(result.user.avatarUrl).toBeNull();
+    /*
+     * Corrected: `avatarUrl` used to be asserted null here. A person with no
+     * uploaded avatar now resolves to Discord's own default for their id, so
+     * the account menu shows the same disc Discord shows rather than two
+     * initials. `avatar` — the stored hash — is still null above, which is the
+     * part that says "this person never uploaded one".
+     *
+     * Guilds are the contrast: Discord has no default guild icon, so an absent
+     * icon stays null rather than being given a placeholder.
+     */
+    expect(result.user.avatarUrl).toBe(
+      "https://cdn.discordapp.com/embed/avatars/0.png"
+    );
     expect(result.guild.iconUrl).toBeNull();
     expect(result.guild.icon).toBeNull();
     expect(result.guilds[0].icon).toBeNull();
@@ -244,9 +256,15 @@ describe("dashboard identity projection and tenant boundary", () => {
     const result = await loadDashboard(gid);
     expect(result.accounts.map((a) => a.avatarUrl)).toEqual([
       `https://cdn.discordapp.com/avatars/${uid}/${avatar}.webp?size=128`,
-      null,
-      // An unusable hash is not turned into a URL that would 404.
-      null,
+      // Corrected: both of these were asserted null.
+      //
+      // "Legacy member" has no captured hash, and now gets Discord's default
+      // for their id — same as any account that never uploaded one.
+      "https://cdn.discordapp.com/embed/avatars/0.png",
+      // "Broken hash" keeps its original meaning: an unusable hash is not
+      // turned into a URL that would 404. It now falls through to the default
+      // instead of to null, and the default always resolves.
+      "https://cdn.discordapp.com/embed/avatars/0.png",
     ]);
     // The wallet is the same identity, resolved the same way.
     expect(result.wallet?.avatarUrl).toBe(result.accounts[0].avatarUrl);
