@@ -375,46 +375,6 @@ function RewardsCard({
 const CHANNELS_OF = (channels: { id: string; name: string }[]) =>
   channels.map((c) => ({ value: c.id, label: c.name }));
 
-/**
- * Fields inside the rendered (active) panel, in document order. Used to decide
- * what "the first field" means on open.
- */
-const SETTINGS_FIELD_SELECTOR = [
-  '[role="tabpanel"] input',
-  '[role="tabpanel"] select',
-  '[role="tabpanel"] textarea',
-  '[role="tabpanel"] button',
-].join(", ");
-
-/**
- * Dialogs opened with the header scrolled off-screen before this was added:
- * all five settings panels mounted at once, Radix focused the first tabbable
- * descendant, and the browser obediently scrolled both the dialog and the
- * form's own nested scroll box down to reveal it. Only one panel mounts now,
- * but the scroll position is still whatever the browser decides, so pin it.
- *
- * Starts at the top (title, module switch and tab bar all visible), focuses
- * the first field of the active tab with `preventScroll`, and only then nudges
- * the dialog's own scroll box if that field is genuinely below the fold.
- */
-function focusFirstField(event: Event) {
-  const content = event.currentTarget as HTMLElement | null;
-  if (!content) return;
-  event.preventDefault();
-  content.scrollTop = 0;
-  const first = content.querySelector<HTMLElement>(SETTINGS_FIELD_SELECTOR);
-  if (!first) {
-    content.focus({ preventScroll: true });
-    return;
-  }
-  first.focus({ preventScroll: true });
-  const field = first.getBoundingClientRect();
-  const box = content.getBoundingClientRect();
-  if (field.bottom > box.bottom) {
-    content.scrollTop += field.bottom - box.bottom + 12;
-  }
-}
-
 function LevelingSettings({
   onClose,
   enabled,
@@ -441,7 +401,7 @@ function LevelingSettings({
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg" onOpenAutoFocus={focusFirstField}>
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Make levels feel like your server</DialogTitle>
           <DialogDescription>

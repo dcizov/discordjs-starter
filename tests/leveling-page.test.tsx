@@ -32,6 +32,8 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -48,7 +50,8 @@ class NoopResizeObserver {
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver ??= NoopResizeObserver as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver ??=
+  NoopResizeObserver as unknown as typeof ResizeObserver;
 
 /**
  * The dashboard projection for the XP board, mirroring `withXpIdentity` in
@@ -180,6 +183,58 @@ describe("Levels page", () => {
     expect(within(region).getByText("You")).toBeTruthy();
   });
 
+  /*
+   * Radix's own focus handling must be enough.
+   *
+   * The dialog used to carry a page-specific `onOpenAutoFocus` handler that
+   * pinned `scrollTop` to 0 and focused the first field manually. It was added
+   * on the theory that the browser would scroll somewhere unhelpful. The real
+   * cause of the scroll-to-bottom was the five stacked panels inside a nested
+   * scroller — both now gone — and with one panel and one scroll container
+   * Radix focuses the first tabbable descendant (the tab bar, at the top) and
+   * the dialog simply opens at the top.
+   *
+   * The handler is deleted. This test is what says that was safe: no page
+   * code touches focus or scroll, and the dialog still opens with its title
+   * and first field inside the content box and the content unscrolled.
+   *
+   * What it cannot check is geometry — jsdom reports every rectangle as 0, so
+   * "inside the content box" here means DOM containment, and `toBeInViewport`
+   * in `tests/e2e/leveling.spec.ts` is what actually proves the pixels.
+   */
+  it("opens at the top on its own, with no page-level focus choreography", () => {
+    mount(<LevelingPage />);
+    // No per-page focus override: the source must not mention one.
+    const source = readFileSync(
+      resolve(process.cwd(), "apps/web/components/leveling-page.tsx"),
+      "utf8"
+    );
+    expect(source).not.toContain("onOpenAutoFocus");
+
+    fireEvent.click(screen.getByRole("button", { name: "Leveling settings" }));
+
+    const content = screen.getByRole("dialog");
+    // The content box is unscrolled.
+    expect(content.scrollTop).toBe(0);
+
+    // Title, tab bar and the first field are all inside it.
+    const title = within(content).getByText(
+      "Make levels feel like your server"
+    );
+    expect(content.contains(title)).toBe(true);
+    const tabBar = within(content).getByRole("tablist", {
+      name: "Leveling settings sections",
+    });
+    expect(content.contains(tabBar)).toBe(true);
+    const firstField = within(content).getByLabelText("Minimum per message");
+    expect(content.contains(firstField)).toBe(true);
+
+    // And they are in that order, so the header is above the fields rather
+    // than scrolled away beneath them.
+    const order = content.compareDocumentPosition(firstField);
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("opens settings on the Messages tab with a single panel", () => {
     mount(<LevelingPage />);
     fireEvent.click(screen.getByRole("button", { name: "Leveling settings" }));
@@ -228,7 +283,9 @@ describe("Levels page", () => {
       const panels = screen
         .getAllByRole("tabpanel")
         .filter((panel) => panel.id.startsWith("leveling-settings-panel-"));
-      expect(panels, `"${tab}" should mount one settings panel`).toHaveLength(1);
+      expect(panels, `"${tab}" should mount one settings panel`).toHaveLength(
+        1
+      );
       expect(
         within(dialog).queryByLabelText(present),
         `"${tab}" should show "${present}"`
