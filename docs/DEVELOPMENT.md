@@ -203,6 +203,8 @@ See [music setup and troubleshooting](MUSIC.md). Inspect/redact logs and diagnos
 
 **Ordinary source edits:** save on the host. Next hot reloads; `tsx watch` restarts the affected bot/worker process. A bot restart interrupts in-memory voice sessions; queue snapshots are not an automatic voice-session restore. Polling is enabled for Docker Desktop bind-mount reliability. On a native Linux filesystem, you can set `WATCHPACK_POLLING=false` and `CHOKIDAR_USEPOLLING=false` if file events work reliably.
 
+**Content-Security-Policy:** the dev build's policy is deliberately looser than production's — `script-src` includes `'unsafe-eval'` and `connect-src` includes plaintext `ws:`, because Next's dev server serves eval source maps and needs an unencrypted HMR socket. Production omits both. If you tighten the CSP in `apps/web/next.config.mjs`, check `npm run dev` as well as `npm start`: a policy that blocks `eval` breaks the dev server before React hydrates, which looks like "no control responds" rather than a header problem. `tests/csp.test.ts` asserts the two environments differ.
+
 **Environment changes:** container environment variables do not hot reload. Recreate app services to reload `.env`:
 
 ```sh

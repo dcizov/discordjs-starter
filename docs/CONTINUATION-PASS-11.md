@@ -155,6 +155,28 @@ news ingestion. It must not be touched by the news cleanup.
 
 Kept up to date as the pass progresses.
 
+### Verification checklist before calling a slice done
+
+The e2e suite runs against `npm start` (a production bundle), so it sees one
+environment only. These are the checks that exist to catch what it cannot:
+
+1. **`npm run dev` hydrates.** Load `/dashboard/<id>/overview` on the dev
+   server, click one control, and confirm the browser console is free of
+   errors. A CSP that blocks `eval` breaks hydration on every dev page and
+   looks like "nothing is clickable" rather than a header problem — that
+   shipped in `3f17d1c` and no check noticed for two commits. `tests/csp.test.ts`
+   now asserts the dev and production policies differ, which catches the
+   header itself but not every way hydration can break.
+2. **A client component is untested until a browser renders it.** Typecheck,
+   lint, the unit suite and `build:web` were all green throughout the Tooltip
+   crash, the `TabPanel` stacking defect and all four stale e2e assertions.
+3. **Screenshots must be looked at, not counted.** A passing screenshot step
+   proves the page rendered, not that it is laid out correctly.
+4. **After every pull on the real deployment:** `npm ci` → `npm run build` →
+   `npm run db:migrate` → `npm run commands:register` → restart web, bot and
+   worker. **A running `next start` does not pick up a new build**; stale
+   processes serving pre-build code have twice been reported as product bugs.
+
 ### Implemented (verified in code / by the baseline run)
 
 | Area                                        | State                                                                                                                                                 |
