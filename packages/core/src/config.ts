@@ -296,6 +296,32 @@ export const sourceSchema = base.extend({
     keywords: z.array(z.string().min(1).max(80)).max(20).default([]),
     tags: z.array(z.string().min(1).max(30)).max(10).default([]),
     intervalMinutes: z.number().int().min(5).max(1440).default(30),
+    /**
+     * How many of the newest items to post the first time this source is
+     * fetched — or the first time after it is re-enabled. `0` (the default)
+     * means post nothing: a feed's existing back catalogue is not news, and
+     * dumping it into a channel on day one is how a news bot gets removed.
+     *
+     * Capped at 5. The value exists so an operator can prove the feed works
+     * end-to-end, not so a source can be used to backfill a channel.
+     *
+     * See `docs/NEWS-FORMATTING.md` for what comparable bots do here.
+     */
+    firstFetchPostCount: z.number().int().min(0).max(5).default(0),
+    /**
+     * The feed identity as of the last time this source was primed.
+     *
+     * Priming is recording a feed's current contents as already seen and
+     * posting nothing. Keyed on the identity rather than on a timestamp so
+     * that pointing the source at a different URL — or switching it between
+     * RSS and Steam — invalidates it for free: the identity changes, so the
+     * next fetch primes again instead of dumping a different feed's back
+     * catalogue into the channel.
+     *
+     * Cleared when the source is disabled, so re-enabling primes again
+     * rather than posting everything that accrued while it was off.
+     */
+    primedFeed: z.string().optional(),
     notificationRoleId: optionalId,
     embedColor: z
       .string()

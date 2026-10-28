@@ -17,6 +17,7 @@ import {
   resourceSchemas,
   safeText,
 } from "@orbit/core";
+import { feedIdentity } from "@orbit/core/feed-identity";
 import { isDemo } from "@orbit/core/environment";
 import { diagnosticText } from "@orbit/core/diagnostics";
 import { and, desc, eq, sql } from "drizzle-orm";
@@ -247,6 +248,29 @@ export async function saveResource(
       prior?.data.adapter === data.adapter &&
       prior?.data.url === data.url &&
       prior?.data.appId === data.appId;
+    /*
+     * Priming — "this feed's current contents have been seen, post nothing" —
+     * belongs to a feed and to a period of continuous operation. Either one
+     * ending invalidates it, so the next fetch primes again instead of
+     * posting a backlog the operator was never shown.
+     *
+     * Disabled: the source was off, so anything published meanwhile is a
+     * backlog. Re-enabling starts clean.
+     *
+     * Feed changed: a different feed's back catalogue is not something this
+     * source has already seen.
+     *
+     * The worker compares the identity too, because it is the only thing that
+     * knows a priming fetch actually succeeded; this is the half it can do
+     * from a save alone.
+     */
+    if (
+      !parsed.enabled ||
+      feedIdentity({ kind, id, data: parsed.data }) !==
+        feedIdentity(prior ?? {})
+    ) {
+      delete data.primedFeed;
+    }
     // Configuration alone is not evidence that an external service is healthy.
     data.health = unchanged
       ? (prior?.data.health ?? "setup_required")
@@ -601,15 +625,29 @@ export async function reserveDelivery(
   input: Omit<
     Delivery,
     "id" | "status" | "attempts" | "error" | "createdAt" | "deliveredAt"
-  >
+  >,
+  /**
+   * Reserve the row as "seen, do not post" rather than as a pending delivery.
+   *
+   * A source's first fetch must leave a record for every item it declined to
+   * post. Dropping them silently is not enough: the next poll has no memory
+   * of them, so it finds the whole back catalogue again and posts it — the
+   * storm, deferred by one poll instead of prevented.
+   */
+  options: { primed?: boolean } = {}
 ) {
+  const status: Delivery["status"] = options.primed ? "skipped" : "pending";
   if (isDemo())
     return demoTransaction((d) => {
+      // Mirrors the `delivery_feed_deduplication` index exactly. `sourceId`
+      // is deliberately absent: the row id of the resource says nothing
+      // about the feed, and keying on it is what made a recreated source
+      // re-post everything it had ever posted.
       if (
         d.deliveries.some(
           (v) =>
             v.guildId === input.guildId &&
-            v.sourceId === input.sourceId &&
+            v.feedIdentity === input.feedIdentity &&
             v.externalId === input.externalId &&
             v.channelId === input.channelId
         )
@@ -618,7 +656,7 @@ export async function reserveDelivery(
       const row: Delivery = {
         ...input,
         id: randomUUID(),
-        status: "pending",
+        status,
         attempts: 0,
         error: null,
         createdAt: new Date().toISOString(),
@@ -629,7 +667,7 @@ export async function reserveDelivery(
     });
   const [row] = await database()
     .db.insert(s.deliveries)
-    .values(input)
+    .values({ ...input, status })
     .onConflictDoNothing()
     .returning();
   return row ? serialize<Delivery>(row) : null;

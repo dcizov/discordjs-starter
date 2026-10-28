@@ -20,6 +20,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { authorize, HttpError } from "@/lib/auth";
 import { loadDashboard, withAuditAvatarUrl } from "@/lib/dashboard";
 import { toMembersPageWire } from "@/lib/member-wire";
+import { feedIdentity } from "@orbit/core/feed-identity";
 import { assertOrigin, body, rateLimit } from "@/lib/security";
 import type { MembersPageWire, ResourceKind } from "@orbit/core";
 import { encrypt, resourceSchemas, snowflake } from "@orbit/core";
@@ -853,6 +854,7 @@ async function handle(req: Request, context: Context) {
           const r = await reserveDelivery({
             guildId,
             sourceId: id!,
+            feedIdentity: feedIdentity(resource),
             externalId: `test-${randomUUID()}`,
             title: `Test message from ${resource.name}`,
             url: "",

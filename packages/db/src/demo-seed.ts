@@ -19,6 +19,7 @@ import {
   defaultConfig,
 } from "@orbit/core";
 import { randomUUID } from "node:crypto";
+import { feedIdentity } from "@orbit/core/feed-identity";
 export type DemoState = {
   communityPosts?: import("@orbit/core/community").CommunityPost[];
   version: number;
@@ -123,7 +124,7 @@ const role = (
  * which is how a stale member count survived a seed fix and came back looking
  * like a product bug. Demo state is disposable, so a mismatch is regenerated.
  */
-export const DEMO_SEED_VERSION = 3;
+export const DEMO_SEED_VERSION = 4;
 
 export function createDemo(): DemoState {
   const roles = [
@@ -591,6 +592,9 @@ export function createDemo(): DemoState {
     id: randomUUID(),
     guildId: guild.id,
     sourceId: steam.id,
+    // Derived from the source the same way the real writer does, so the demo
+    // exercises the same key rather than a fabricated one.
+    feedIdentity: feedIdentity(steam),
     externalId: `seed-${i}`,
     title: [
       "Dota 2: the latest community update",

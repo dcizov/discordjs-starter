@@ -216,6 +216,43 @@ reports `fresh`, `overdue`, `never-checked` or `unknown`, with the measured age
 and no score. A paused source says no check is expected; an unreadable timestamp
 says freshness is unknown. Covered by `tests/source-freshness.test.ts`.
 
+## Deduplication and the first fetch (2026-10-28)
+
+Formatting is only half of what a reader sees; the other half is _how much_ of a
+feed arrives at once. Two rules govern that, and both came out of the same
+failure — adding a source, or deleting one and adding it again, could publish a
+feed's entire existing contents into a channel in one go.
+
+**The key is the feed, not the source row.** Deliveries are deduplicated by
+`(guild_id, channel_id, feed_identity, external_id)`
+(`delivery_feed_deduplication`), replacing a key that included `source_id`. The
+row id of the resource says nothing about the feed being read, so deleting a
+source and adding it again with the same URL used to give every item a fresh key
+and re-post the whole feed. Full reasoning, including why a webhook source is
+identified by its row instead, is in
+[Integrations → Deduplication and a source's first fetch](./INTEGRATIONS.md#deduplication-and-a-sources-first-fetch-2026-10-28).
+
+**The first fetch posts nothing.** A source's first poll records the feed's
+current contents as `skipped` and posts none of them; only items that appear in
+a later poll are new. This is the convention every comparable feed bot follows —
+BotKit's RSS tutorial states it directly: "The very first poll only records
+what's already in the feed; it doesn't publish any of it… Only items that show
+up in a later poll count as new" (<https://botkit.fedify.dev/tutorial/rss-bot>,
+read 2026-10-28), and MonitoRSS exposes the same decision as an operator switch,
+`sendFirstCycle` (<https://docs.monitorss.xyz/configuration/bot-configuration>,
+read 2026-10-28). **Post on first check** in the source editor is the opt-in:
+the newest N items (0–5, default 0) so an operator can prove a feed works end
+to end.
+
+The recording matters as much as the silence. Skipping an item without leaving a
+row would only defer the problem by one poll: the next poll would find the same
+back catalogue with nothing to compare it against, and post it after all.
+
+Covered by `tests/feed-identity.test.ts` (the migration's SQL backfill against
+the TypeScript identity, over real PostgreSQL) and
+`tests/news-repost-storm.test.ts` (recreate, channel move, restart mid-batch,
+first fetch with and without N).
+
 ## Remaining work
 
 - Open Graph / Steam store header images need a dedicated SSRF-reviewed fetcher.

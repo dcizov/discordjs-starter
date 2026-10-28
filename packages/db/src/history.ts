@@ -5,6 +5,7 @@ import {
   eq,
   getTableColumns,
   ilike,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -217,6 +218,10 @@ export async function queryHistory(
   if (kind === "deliveries") {
     const condition = and(
       eq(s.deliveries.guildId, guildId),
+      // Primed items (`skipped`) are the record of what a source's first
+      // fetch declined to post. They are not deliveries, so they are not
+      // history: this tab is "successful deliveries, retries and errors".
+      ne(s.deliveries.status, "skipped"),
       query
         ? or(ilike(s.deliveries.title, term), ilike(s.deliveries.error, term))
         : undefined,

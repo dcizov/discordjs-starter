@@ -122,6 +122,7 @@ export function ResourceEditor({
       keywords: [],
       tags: [],
       intervalMinutes: 30,
+      firstFetchPostCount: 0,
       notificationRoleId: "",
       embedColor: "#8b5cf6",
       includeSummary: true,
@@ -832,6 +833,22 @@ export function ResourceEditor({
                   </div>
                 </Field>
               </div>
+              <Field
+                label="Post on first check"
+                hint="A source's first fetch records what is already in the feed and posts none of it, because a back catalogue is not news. Raise this to post the newest few instead, to prove the source works end to end."
+              >
+                <Input
+                  type="number"
+                  min="0"
+                  max="5"
+                  aria-label="Post on first check"
+                  value={values.firstFetchPostCount ?? 0}
+                  disabled={values.adapter === "webhook"}
+                  onChange={(e) =>
+                    set("firstFetchPostCount", Number(e.target.value))
+                  }
+                />
+              </Field>
               {notificationSelect}
               <div className="flex items-center justify-between">
                 <span className="text-xs">Include a short summary</span>

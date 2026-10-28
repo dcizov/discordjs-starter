@@ -1,6 +1,8 @@
 import { reconcileCommunityPosts } from "./community";
 import type { Resource } from "@orbit/core";
 import { fingerprint, safeText } from "@orbit/core";
+import { feedIdentity } from "@orbit/core/feed-identity";
+import { planFirstFetch } from "@orbit/core/feed-priming";
 import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { pollDeals, pollSource } from "@orbit/core/feeds";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
@@ -92,6 +94,28 @@ async function main() {
         )
       );
   }
+  /**
+   * Record that this source's current contents have been seen.
+   *
+   * Written after the dispatch, not before: if the poll throws, the source is
+   * not marked primed and the next poll primes again rather than posting a
+   * half-delivered back catalogue.
+   */
+  async function markPrimed(source: Resource) {
+    await database()
+      .db.update(schema.resources)
+      .set({
+        data: sql`${schema.resources.data} || ${JSON.stringify({
+          primedFeed: feedIdentity(source),
+        })}::jsonb`,
+      })
+      .where(
+        and(
+          eq(schema.resources.guildId, source.guildId),
+          eq(schema.resources.id, source.id)
+        )
+      );
+  }
   async function poll(job: Job) {
     const source = await getResource(job.data.guildId, job.data.resourceId);
     if (!source || !source.enabled || !["source", "deal"].includes(source.kind))
@@ -129,12 +153,49 @@ async function main() {
       items = items.filter(
         (i) => Date.now() - new Date(i.publishedAt).getTime() < 7 * 86400000
       );
-      if (!source.data.lastChecked && source.kind === "source")
-        items = items.slice(0, 3);
-      const count = await dispatchItems(source, items);
+      // A source's first fetch is not news.
+      //
+      // Everything already sitting in the feed is recorded as seen and posts
+      // nothing; only items that appear in a *later* poll count as new. That
+      // is the convention every comparable feed bot follows (see
+      // docs/NEWS-FORMATTING.md): without it, adding a source dumps its whole
+      // front page into the channel the moment it is saved.
+      //
+      // Priming is keyed on the feed identity, so pointing the source at a
+      // different URL, or switching it between RSS and Steam, primes again
+      // rather than silently treating a different feed's back catalogue as
+      // already seen.
+      let primed = 0;
+      let postNewest: number | undefined;
+      if (
+        source.kind === "source" &&
+        source.data.primedFeed !== feedIdentity(source)
+      ) {
+        const plan = planFirstFetch(
+          items,
+          source.data.firstFetchPostCount ?? 0
+        );
+        // Post-then-skip, in one list: everything past the first `postNewest`
+        // entries is reserved as `skipped`, which is the record that it was
+        // seen. Dropping them instead would only defer the storm by one poll.
+        items = [...plan.post, ...plan.skip];
+        primed = plan.skip.length;
+        postNewest = plan.post.length;
+      }
+      const count = await dispatchItems(
+        source,
+        items,
+        postNewest === undefined ? {} : { postNewest }
+      );
+      if (postNewest !== undefined) await markPrimed(source);
       await updateSourceHealth(source, true);
       logger.info(
-        { guildId: source.guildId, sourceId: source.id, queued: count },
+        {
+          guildId: source.guildId,
+          sourceId: source.id,
+          queued: count,
+          primed,
+        },
         "Source checked"
       );
     } catch (e: any) {

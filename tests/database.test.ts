@@ -4,6 +4,7 @@ import * as community from "../packages/db/src/community";
 import * as communityStore from "../packages/db/src/store";
 import * as ownHistory from "../packages/db/src/history";
 import { defaultConfig } from "@orbit/core";
+import { feedIdentity } from "@orbit/core/feed-identity";
 import {
   audit,
   activityCounts,
@@ -326,6 +327,7 @@ describe("persistent feed deduplication and tenant isolation", () => {
   const delivery = (extra: Record<string, any> = {}) => ({
     guildId: g1,
     sourceId: "source-a",
+    feedIdentity: "rss:https://example.com/feed",
     externalId: "event-1",
     title: "Community update",
     url: "https://example.com/story",
@@ -339,18 +341,52 @@ describe("persistent feed deduplication and tenant isolation", () => {
     expect(results.filter(Boolean)).toHaveLength(1);
     expect(await database().db.select().from(s.deliveries)).toHaveLength(1);
   });
-  it("allows the same event in a different server, source, or destination", async () => {
+  it("allows the same event in a different server or destination", async () => {
     await reserveDelivery(delivery());
     expect(await reserveDelivery(delivery())).toBeNull();
     expect(
       await reserveDelivery(delivery({ guildId: g2, channelId: ids.channel2 }))
     ).not.toBeNull();
     expect(
-      await reserveDelivery(delivery({ sourceId: "source-b" }))
-    ).not.toBeNull();
-    expect(
       await reserveDelivery(delivery({ channelId: ids.channel2 }))
     ).not.toBeNull();
+  });
+
+  it("does not re-post a feed just because the source row was recreated", () => {
+    /*
+     * Corrected: this asserted that `sourceId: "source-b"` produced a new
+     * delivery. That was the defect, written down as the spec — it is
+     * precisely why deleting and recreating a source re-posted the whole
+     * feed. The key is the feed, so a different source row pointing at the
+     * same feed is now the same delivery and is refused.
+     */
+    expect(
+      feedIdentity({
+        kind: "source",
+        id: "aaa",
+        data: { url: "https://example.com/feed/" },
+      })
+    ).toBe(
+      feedIdentity({
+        kind: "source",
+        id: "bbb",
+        data: { url: "https://example.com/feed" },
+      })
+    );
+    // A genuinely different feed is still a different delivery.
+    expect(
+      feedIdentity({
+        kind: "source",
+        id: "aaa",
+        data: { url: "https://example.com/other" },
+      })
+    ).not.toBe(
+      feedIdentity({
+        kind: "source",
+        id: "aaa",
+        data: { url: "https://example.com/feed" },
+      })
+    );
   });
   it("never reads, updates, or deletes another server’s resource by ID", async () => {
     const r = await saveResource(

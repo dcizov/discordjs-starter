@@ -40,6 +40,86 @@ no URL it stays `setup_required` with the same guidance as any other unconfigure
 feed. If you were relying on a specific publisher feed, verify the publisher's
 current supported endpoint and paste it in.
 
+### Deduplication and a source's first fetch (2026-10-28)
+
+Two rules decide what gets posted. Both exist because of the same failure: adding
+a news source, or deleting one and adding it again, could dump a feed's entire
+existing contents into a channel at once — the _re-post storm_.
+
+**A delivery is deduplicated against the feed, not against the source row.**
+Deliveries were keyed on `(guild_id, source_id, external_id, channel_id)`.
+`source_id` is the id of the `resources` row, which says nothing about the feed
+being read, so deleting a source and adding it again with the same URL gave
+every item a brand-new key and the next poll re-posted the whole feed. The key
+is now `(guild_id, channel_id, feed_identity, external_id)`
+(`delivery_feed_deduplication`), where `feed_identity` names the feed itself —
+the normalized URL for RSS/Atom, `steam:<appId>` for Steam. Two source rows
+pointing at the same feed are the same feed, which is the whole point.
+`channel_id` stays in the key, so moving a feed to a new channel posts there
+once instead of staying silent. `source_id` is kept for display and history
+only, and is deliberately not a foreign key: deliveries outlive their source by
+design.
+
+Two feeds are the same when their URLs differ only by case, scheme, a `www.`
+host, a fragment or trailing slashes. Feed URLs are required to be HTTPS, so the
+scheme is not part of the comparison. The normalization is implemented twice —
+once in TypeScript (`packages/core/src/feed-identity.ts`, used at delivery time)
+and once in SQL (migration `0013_feed_identity`, used to backfill existing
+rows) — and `tests/feed-identity.test.ts` applies the real migration to a real
+PostgreSQL and asserts the two agree byte for byte. If they drift, an old row
+and a new row for the same feed disagree and the feed is re-posted, which is
+the exact bug this exists to fix, so the normalization is deliberately too
+small to get wrong: no URL parsing, no query re-ordering, no port arithmetic.
+
+A webhook source is the exception, on purpose: it is identified by its row id.
+A pushed feed has no upstream to name — the row owns the endpoint URL and the
+signing secret — so recreating one genuinely creates a new feed and must not
+inherit the old one's history.
+
+**A source's first fetch posts nothing.** Everything already in the feed is
+recorded as seen (`status: "skipped"`) and only items that appear in a _later_
+poll count as new. A feed's existing contents are not news; without this, adding
+a source publishes its whole front page the moment it is saved.
+
+This is the established convention, not an Orbit invention:
+
+- **BotKit (Fedify)**, _Building an RSS bot_, <https://botkit.fedify.dev/tutorial/rss-bot>
+  (read 2026-10-28): "The very first poll only records what's already in the
+  feed; it doesn't publish any of it. Without that check, the bot's first run
+  would dump the feed's entire current front page onto its followers the moment
+  it started, which is not what 'new entries' should mean. Only items that show
+  up in a later poll count as new." Their implementation sets a `firstPoll`
+  flag, seeds the seen set with every current item, and returns.
+- **MonitoRSS**, _Bot configuration_, <https://docs.monitorss.xyz/configuration/bot-configuration>
+  (read 2026-10-28) exposes the same decision as an operator switch rather than
+  a default: `sendFirstCycle` — "Send unseen messages on the first feed cycle
+  that were not caught during bot downtime after it has been restarted."
+- The same axis is named explicitly by hosted feed monitors, e.g. Apify's
+  `bruco3/feed-monitor` ("seed only: remember the current items and deliver
+  nothing, so the next run is already 'new only'") and `insight.solutions/rss-feed-monitor`
+  (`firstRunBehavior`: `emit-all` vs `baseline-only`).
+
+So: seed-only is the default, with an opt-in to emit. Orbit follows that shape.
+**Post on first check** in the source editor is that opt-in — the newest N items
+(0–5, default 0) are posted so an operator can prove a feed works end to end,
+and everything else is recorded as seen. Skipped items are not deliveries: they
+are excluded from the delivery history, and they are never enqueued.
+
+Priming is keyed on the feed identity, so pointing a source at a different URL —
+or switching it between RSS and Steam — primes it again rather than treating a
+different feed's back catalogue as already seen. Pausing a source clears its
+priming, so re-enabling starts clean instead of posting everything that accrued
+while it was off.
+
+Migration `0013_feed_identity` is forward-looking. It backfills every existing
+delivery from the source that produced it, and nothing is deleted: rows whose
+source is already gone keep their history under a namespace no live feed can
+collide with (`deleted-source:<id>`), and rows that collide under the stricter
+key are disambiguated by the source that produced them rather than removed. A
+source deleted _before_ the migration ran left rows whose feed URL is
+unrecoverable, and a source recreated for that feed will post again; inventing
+an identity for them would be worse than admitting we do not know it.
+
 ### Adding a future provider
 
 A provider is only worth adding when it has a documented, public interface.

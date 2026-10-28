@@ -462,6 +462,16 @@ export const deliveries = pgTable(
       .notNull()
       .references(() => guilds.id, { onDelete: "cascade" }),
     sourceId: text("source_id").notNull(),
+    /**
+     * What this delivery is deduplicated against.
+     *
+     * `sourceId` is the row id of the resource that produced it, so it
+     * changed every time a source was deleted and recreated — and the
+     * worker re-posted the whole feed. `feedIdentity` names the feed
+     * itself (normalized URL, or `steam:<appId>`), so it survives that.
+     * `sourceId` is still stored, for display and history only.
+     */
+    feedIdentity: text("feed_identity").notNull().default(""),
     externalId: text("external_id").notNull(),
     title: text("title").notNull(),
     url: text("url").notNull(),
@@ -484,11 +494,20 @@ export const deliveries = pgTable(
     messageId: text("message_id"),
   },
   (t) => [
-    uniqueIndex("delivery_deduplication").on(
+    /*
+     * The dedupe key. Replaces `delivery_deduplication`, which included
+     * `source_id`; see the note on `feedIdentity`.
+     *
+     * This index is the guarantee, not a check in application code: the
+     * worker restarts mid-batch and races itself, and only the database can
+     * decide that race. `reserveDelivery` inserts with
+     * `onConflictDoNothing()`.
+     */
+    uniqueIndex("delivery_feed_deduplication").on(
       t.guildId,
-      t.sourceId,
-      t.externalId,
-      t.channelId
+      t.channelId,
+      t.feedIdentity,
+      t.externalId
     ),
     index("delivery_guild_date_idx").on(t.guildId, t.createdAt),
   ]

@@ -272,11 +272,21 @@ export type Delivery = {
   id: string;
   guildId: string;
   sourceId: string;
+  /**
+   * The feed this delivery came from, not the source row. Survives deleting
+   * and recreating a source for the same feed, which `sourceId` does not.
+   */
+  feedIdentity: string;
   externalId: string;
   title: string;
   url: string;
   channelId: string;
-  status: "pending" | "sending" | "delivered" | "failed";
+  /**
+   * `skipped` is not a delivery. It is the record that a feed's first fetch
+   * saw this item and chose not to post it, which is what keeps the next
+   * poll from discovering the same back catalogue all over again.
+   */
+  status: "pending" | "sending" | "delivered" | "failed" | "skipped";
   attempts: number;
   error: string | null;
   createdAt: string;
