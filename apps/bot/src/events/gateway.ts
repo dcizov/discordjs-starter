@@ -10,6 +10,7 @@ import { errorDiagnostic } from "@orbit/core/diagnostics";
 import { onInteraction } from "../interactions/dispatch";
 import { onMessage } from "../features/moderation/messages";
 import { awardMessageXp, noteVoiceState } from "../features/leveling/earn";
+import { noteTicketActivity } from "../features/tickets/activity";
 import { handleReaction } from "../features/roles/panels";
 import type { MusicService } from "../features/music/service";
 import { removeGuild, syncGuild } from "../infrastructure/guild-sync";
@@ -63,6 +64,15 @@ export function attachGatewayEvents(
       logger.warn(
         { guildId: message.guildId, error: errorDiagnostic(error) },
         "Message XP failed"
+      )
+    );
+    // A reply in a ticket restarts its auto-close clock. Runs alongside the
+    // other per-message work, so a failure here cannot affect XP or
+    // moderation.
+    void noteTicketActivity(message).catch((error) =>
+      logger.warn(
+        { guildId: message.guildId, error: errorDiagnostic(error) },
+        "Ticket activity failed"
       )
     );
   });

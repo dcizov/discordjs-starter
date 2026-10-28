@@ -1368,3 +1368,82 @@ dialog, the announcement preview and the progress bar are all unreviewed. The
 page has never been loaded against a real guild, so the shape of the data
 reaching it (`data.xpBoard`) is asserted by type but not observed. Member XP
 detail linked from the member page is still unbuilt.
+
+---
+
+## Slice 14 — Tickets (parts 1-4)
+
+Built in the order the decisions get harder: pure rules, then storage, then
+commands, then the sweep. Four commits.
+
+| Part | What | Tests |
+| ---- | ---- | ----- |
+| 1 | Pure rules in `packages/core/src/tickets.ts` | 44 |
+| 2 | `packages/db/src/tickets.ts` + migration `0012_tickets` | 28 |
+| 3 | `/ticket` command, channel creation, overwrites | 21 |
+| 4 | Hourly sweep + `docs/TICKETS.md` | 14 |
+
+**1323 tests / 96 files** at the end, up from 1259 / 93.
+
+### Decisions worth keeping
+
+**The opener may close their own ticket, always.** Making someone wait for
+staff to do that is the most annoying thing a ticket system can do. They may
+never *claim*, because "claim" means "I am handling this". Reopening is
+staff-only: reopening your own closed ticket to add a parting shot is a thing
+people do.
+
+**A stranger is told whose ticket it is, not that they lack a role.** Telling
+someone they lack a role invites them to go and get one.
+
+**`@everyone` is denied ViewChannel first**, then the opener, support roles and
+the bot are allowed. Without the explicit deny, a category that grants
+ViewChannel would leave every ticket public — the worst possible default for a
+support channel.
+
+**The opener's overwrites exclude ManageMessages.** Bot authors are routinely
+asked for it and it is always a mistake: it lets someone destroy the record of
+what they said.
+
+**A permission error is not proof a channel is gone.** The sweep checks whether
+an open ticket's channel still exists; `Missing Access` means the bot cannot
+*see* it, not that it is deleted. Deleting a live ticket's record on that basis
+would be far worse than leaving an orphan alone.
+
+**Transcripts are read before the channel is deleted**, because once the channel
+is gone there is nothing to read. Failing to build one still closes the ticket —
+closing is what stops the channel existing.
+
+**An unknown last-activity timestamp is not stale.** A missing timestamp must
+not silently close a ticket someone is still waiting on an answer to. A clock
+that ran backwards is treated the same way.
+
+### Two stale assertions corrected, not worked around
+
+- `tests/bot-maintenance.test.ts` pinned the timer count at 4; the sweep makes
+  it 5. The count is asserted so a new timer has to acknowledge itself, which
+  is what makes `clear()` trustworthy.
+- `tests/command-catalog.test.ts` root count 35 → 36 and invocations 52 → 57
+  for the new `/ticket` root.
+
+### Adding a module breaks eight places, and now they all say so
+
+`configSchema`, the hand-written `GuildConfig` mirror, `ModuleKey`,
+`commandModuleLabels`, `moduleRoots`, `MODULE_DOCS`, `HELP_ORDER` and the
+overview toolkit — plus a ninth: the **strict** `modules` schema in
+`templates.ts`, which rejects template capture with an unrecognized key until
+the new module is listed there. Seven of the nine break the build;
+`HELP_ORDER` now does too, since it became a `Record`.
+
+### Not built
+
+- **Dashboard config surface.** Settings are only reachable by editing the
+  database.
+- **The panel** — a posted message with an "Open a ticket" button. Members must
+  use `/ticket open` for now.
+
+### Not verified
+
+No live Discord server. No ticket channel has been created, no overwrites
+written, no transcript rendered from a real channel, and the sweep has never
+run against real data. All of it is tested against mocks and PGlite.
