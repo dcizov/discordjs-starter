@@ -123,7 +123,15 @@ test("a member with more roles than fit shows a +N button and its tooltip", asyn
   await page.goto(`${root}/members`);
   await hydrated(page);
   const table = page.getByRole("region", { name: "Member directory" });
-  const row = table.locator("tbody tr", { hasText: "Over Load" });
+  /*
+   * Matched on the handle, not the display name.
+   *
+   * The seed member is `over.load` with the global name "Over Load" and the
+   * nickname "Over". Where a nickname exists the row shows the nickname with
+   * the handle beneath it, so the global name is never rendered and a filter on
+   * "Over Load" finds no row — which is what a browser run reported.
+   */
+  const row = table.locator("tbody tr", { hasText: "over.load" });
   await expect(row).toHaveCount(1);
 
   // Two badges are drawn, the rest are collapsed into one control.

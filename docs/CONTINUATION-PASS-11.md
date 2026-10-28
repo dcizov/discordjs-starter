@@ -1447,3 +1447,100 @@ the new module is listed there. Seven of the nine break the build;
 No live Discord server. No ticket channel has been created, no overwrites
 written, no transcript rendered from a real channel, and the sweep has never
 run against real data. All of it is tested against mocks and PGlite.
+
+---
+
+## Correction — CI was red for all of the above, and I did not notice
+
+Every slice above was reported as verified on the strength of typecheck, lint,
+the unit suite and `build:web`. All four were genuinely green. What none of them
+covered is that **CI had been failing since `84c9c7f`**, a commit on the parent
+branch that predates this branch's work, and that the e2e suite had therefore
+not executed in CI at any point during it.
+
+The failure was always the same step, and it runs _before_ `npm run test:e2e`:
+
+```
+Run npx playwright test tests/e2e/screenshots.spec.ts   ← failed here, every run
+Run npm run test:e2e                                    ← never reached
+```
+
+`db47e6cf6` was the last green run. `84c9c7f` broke the step. Twenty runs later
+the streak was still unbroken, and I had looked at none of them.
+
+### The defect behind it
+
+`84c9c7f` introduced bounded polling for template captures and apply runs. A
+browser trace of a single 45-second test showed:
+
+```
+   7884  /api/guilds/…/actions/null
+   7881  /api/guilds/…/templates/runs/null
+      2  /api/guilds/…/templates
+      1  /api/guilds/…/templates/active
+  15649  responses with status 429
+```
+
+Roughly 350 requests/second from a page doing nothing. Three independent causes:
+
+1. **No null guard.** The visibility handler called the fetcher whenever the tab
+   became visible, including once on mount, regardless of whether there was an
+   id to build a URL from. The hook had no concept of "there is nothing to
+   poll", so a page whose URL is built from not-yet-chosen state asked for
+   `/templates/runs/null`.
+2. **Zero-delay loop.** `nextPollDelay` branched on the failure count before it
+   resolved the interval, and backing off from a base of zero is zero. With
+   `idleMs: 0` — "stop once the work settles" — every failure rescheduled at
+   0ms. The wrong request was a bug; this is what multiplied it by fifteen
+   thousand.
+3. **No lifecycle stop.** Clearing the tracked id left the timer armed, so the
+   poller kept issuing requests after the operator navigated elsewhere.
+
+The rate limiter then starved the Members page, which rendered "The member
+directory couldn't load. Too many requests." and never reached networkidle — so
+a defect on the templates page presented as a failure of the member directory.
+
+### Which slices were reported clean while CI was red
+
+Reported verified, and verified by the four checks named above, but **not**
+covered by any executed browser test:
+
+| Slice                 | Commits                             | Browser coverage at the time             |
+| --------------------- | ----------------------------------- | ---------------------------------------- |
+| §1 Members refactor   | `c015dae48`, `95c7214`, `9fc3edeb4` | none — e2e had not run since `db47e6cf6` |
+| §2 Leveling / XP      | `98432331c` … `b2fc54320`           | none                                     |
+| `HELP_ORDER`          | `94545e472`                         | none                                     |
+| §3 Tickets, parts 1–5 | `390f8940f` … `096470081`           | none                                     |
+| Tooltip crash fix     | `2c25731`                           | none — written, never executed           |
+
+The Tooltip defect is the clearest illustration. `TooltipProvider` was exported
+from `components/ui/tooltip.tsx` and mounted nowhere in the app, so the Members
+page crashed for anyone holding more roles than a row can display. It was found
+by a human opening a browser, not by CI, at a commit where typecheck and
+`build:web` were both green. That is what prompted the standing rule: **a green
+`build:web` proves a client component compiles, not that it runs.**
+
+### The fix
+
+- `122a848` — `enabled` on the hook (nothing to poll, nothing asked), the
+  interval resolved before the backoff so a zero interval ends the decision
+  there, lifecycle abort when the id is cleared or the component unmounts, and a
+  429 surfaced once instead of retried. `Retry-After` is honoured for other
+  failures via a new `HttpError` carrying status and retry-after. Nine new tests
+  in `tests/live-refresh.test.ts`, verified by reverting the source and
+  watching exactly nine fail. The rate limiter was examined and **not** changed:
+  it correctly rejected the traffic.
+- `ed99f5a` — the stale assertions the run reached once it could breathe
+  (hardcoded 47/32 command counts, the demo's drifted `memberCount`, and a spec
+  following a button the builder slice had repurposed), plus a permanent
+  navigation-leak test and networkidle diagnostics in `screenshots.spec.ts`.
+
+`122a848` was the first commit on this branch where the screenshots step
+**passed**, which is what allowed `npm run test:e2e` to run at all.
+
+### What this changes about the record above
+
+Every "Verification" section in this document means: typecheck, lint
+`--max-warnings=0`, the unit suite and `build:web` all passed, and the browser
+suite **did not run**. Read "Not verified" sections as understated rather than
+as the complete list of what was untested.

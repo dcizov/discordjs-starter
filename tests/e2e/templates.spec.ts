@@ -60,8 +60,16 @@ test("a template is captured, previewed and recorded as a demo apply", async ({
   await expect(page.getByText(/Plan fingerprint/)).toBeVisible();
 
   await page.getByRole("button", { name: "Apply this plan" }).click();
+  /*
+   * The copy appears twice on purpose: once in the visible result card, once in
+   * an sr-only polite live region, so a state change is announced and not only
+   * animated. A bare getByText therefore matched two elements. Assert on the
+   * one that is actually shown, not on the announcement.
+   */
   await expect(
-    page.getByText("Demo preview — nothing was created")
+    page.locator("p:not(.sr-only)", {
+      hasText: "Demo preview — nothing was created",
+    })
   ).toBeVisible();
   await expect(
     page.getByText(/Demo mode: nothing was created in a Discord server/)
