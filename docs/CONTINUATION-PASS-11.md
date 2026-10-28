@@ -1544,3 +1544,25 @@ Every "Verification" section in this document means: typecheck, lint
 `--max-warnings=0`, the unit suite and `build:web` all passed, and the browser
 suite **did not run**. Read "Not verified" sections as understated rather than
 as the complete list of what was untested.
+
+### Green again
+
+Run [40692365862](https://github.com/dcizov/discordjs-starter/actions/runs/40692365862),
+commit `f4719cc` — the first fully green run on this branch.
+
+| Job          | Conclusion                                                               |
+| ------------ | ------------------------------------------------------------------------ |
+| `verify`     | success (lint, typecheck, 1337 unit tests, build, 6 screenshots, 89 e2e) |
+| `containers` | success                                                                  |
+
+`122a848` got the screenshots step passing; `ed99f5a` and `f4719cc` cleared the
+e2e failures it had been hiding. The last green run before this was `db47e6cf6`,
+twenty runs earlier.
+
+Two things this should have made routine:
+
+- **Check `gh run list` after every push.** The streak was visible in one
+  command for the entire branch and I ran it once, at the very end.
+- **A client component is untested until a browser renders it.** The Tooltip
+  crash and all four stale e2e assertions were invisible to typecheck, lint,
+  the unit suite and `build:web` — all four were green throughout.
