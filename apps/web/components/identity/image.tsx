@@ -46,6 +46,17 @@ function ImageWithFallback({ name, src, kind, size }: Props) {
           width={size}
           height={size}
           alt=""
+          /*
+           * Bundled illustrations are served from `/public` and are SVGs. Next's
+           * optimizer refuses SVG unless `dangerouslyAllowSVG` is turned on,
+           * which would permit script-bearing SVG for every image in the app —
+           * a real risk taken to solve a cosmetic one. Assets we ship
+           * ourselves need no optimization anyway, so they bypass it.
+           *
+           * Discord CDN avatars keep going through the optimizer; they are
+           * remote, already WebP, and allowlisted in `next.config.mjs`.
+           */
+          unoptimized={src.startsWith("/")}
           className="absolute inset-0 size-full object-cover"
           onError={() => setFailed(true)}
         />

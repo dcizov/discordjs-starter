@@ -3,7 +3,12 @@ import {
   membersQueryString,
   type MemberFilter,
 } from "@orbit/core/members-query";
-import type { GuildRole, Member, MembersPage, RosterSync } from "@orbit/core";
+import type {
+  GuildRole,
+  MemberWire,
+  MembersPageWire,
+  RosterSync,
+} from "@orbit/core";
 import type { PresentableRole } from "@orbit/core/roles";
 import {
   AlertTriangle,
@@ -52,7 +57,7 @@ import { relativeTime } from "@/lib/utils";
  * tell whether the list in front of them is the whole guild, a partial sweep, or
  * a failure that left the previous rows in place.
  */
-type MemberRow = Member & { id: string };
+type MemberRow = MemberWire & { id: string };
 
 export function MembersPage() {
   const { api, data } = useWorkspace();
@@ -87,13 +92,13 @@ export function MembersPage() {
     field: "displayName" | "joinedAt" | "username";
     dir: "asc" | "desc";
   }>({ field: "displayName", dir: "asc" });
-  const [result, setResult] = useState<MembersPage | null>(null);
+  const [result, setResult] = useState<MembersPageWire | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncNote, setSyncNote] = useState("");
-  const [detail, setDetail] = useState<Member | null>(null);
+  const [detail, setDetail] = useState<MemberWire | null>(null);
   /**
    * The member whose roles are being edited.
    *
@@ -101,7 +106,7 @@ export function MembersPage() {
    * knows the live hierarchy. It is a separate dialog rather than a section of
    * the detail view so the two can be closed independently.
    */
-  const [editing, setEditing] = useState<Member | null>(null);
+  const [editing, setEditing] = useState<MemberWire | null>(null);
 
   // A new search, filter or ordering means page 1 of the new result set.
   useEffect(() => setPage(1), [query, filter, pageSize, roleId]);
@@ -109,7 +114,7 @@ export function MembersPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    api<MembersPage>(
+    api<MembersPageWire>(
       `/members?${membersQueryString({
         page,
         pageSize,
@@ -458,7 +463,7 @@ function SyncBanner({
   referenceAt,
 }: {
   sync: RosterSync | null;
-  counts: MembersPage["counts"] | undefined;
+  counts: MembersPageWire["counts"] | undefined;
   demo: boolean;
   note: string;
   referenceAt: string;
@@ -583,12 +588,12 @@ function MemberDetail({
   onEditRoles,
   onRoleSelect,
 }: {
-  member: Member | null;
+  member: MemberWire | null;
   roles: Map<string, GuildRole>;
   timezone: string;
   onClose: () => void;
   /** Open the role editor for this member. */
-  onEditRoles?: (member: Member) => void;
+  onEditRoles?: (member: MemberWire) => void;
   /**
    * Jump to everyone else holding this role.
    *

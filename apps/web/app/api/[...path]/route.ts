@@ -19,8 +19,9 @@ import { simulateCommunityAction } from "@orbit/db/src/community-demo";
 import { eq, and, sql } from "drizzle-orm";
 import { authorize, HttpError } from "@/lib/auth";
 import { loadDashboard, withAuditAvatarUrl } from "@/lib/dashboard";
+import { toMembersPageWire } from "@/lib/member-wire";
 import { assertOrigin, body, rateLimit } from "@/lib/security";
-import type { ResourceKind } from "@orbit/core";
+import type { MembersPageWire, ResourceKind } from "@orbit/core";
 import { encrypt, resourceSchemas, snowflake } from "@orbit/core";
 import { inviteUrl, isDemo, required } from "@orbit/core/environment";
 import { BotActionUnavailableError } from "@orbit/core/bot-actions";
@@ -273,13 +274,20 @@ async function handle(req: Request, context: Context) {
     }
     if (path[2] === "members") {
       // The roster the bot synchronized, never a guess assembled from accounts.
-      if (path.length === 3 && req.method === "GET")
-        return NextResponse.json(
+      if (path.length === 3 && req.method === "GET") {
+        // The roster carries avatar *hashes*; the URL is derived here, on the
+        // server, so the directory shows the same picture as the leaderboard.
+        // `MembersPageWire` requires `avatarUrl`, so forgetting this is a
+        // compile error rather than a page full of initials.
+        const page: MembersPageWire = toMembersPageWire(
           await listMembers(
             guildId,
             parseMembersQuery(new URL(req.url).searchParams)
-          )
+          ),
+          guildId
         );
+        return NextResponse.json(page);
+      }
       // Editing one member's roles. `path[3]` is the target's user id.
       if (path.length === 5 && path[4] === "roles" && req.method === "POST") {
         const targetId = z

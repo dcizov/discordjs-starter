@@ -31,6 +31,13 @@ export default defineConfig({
         find: /^@orbit\/db\/src\/(.+)$/,
         replacement: path("./packages/db/src/") + "$1.ts",
       },
+      {
+        // `server-only` is a Next build-time guard and is not an installed
+        // dependency, so Vitest cannot resolve it at all. See the note in
+        // tests/stubs/server-only.ts.
+        find: /^server-only$/,
+        replacement: path("./tests/stubs/server-only.ts"),
+      },
     ],
   },
 });

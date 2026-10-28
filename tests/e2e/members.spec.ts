@@ -53,6 +53,55 @@ test("the member directory is reachable from the navigation and states its sync"
   await expect(table.locator("tbody")).not.toContainText("no avatar");
 });
 
+/*
+ * Real pictures, not initials.
+ *
+ * The gap this closes: the assertion above only checked the *absence* of the
+ * string "no avatar", so a directory where every single row fell back to
+ * initials passed it. That is exactly what shipped — on a real 61-member
+ * server every row, the bot included, drew initials while the XP leaderboard
+ * beside it drew faces, because the members route returned the raw avatar
+ * hashes and never derived a URL from them.
+ *
+ * So this asserts presence, and it waits for the bytes rather than for the
+ * element: an <img> that 404s is still an <img> until it loads.
+ */
+test("the member directory renders real avatars, not initials for everyone", async ({
+  page,
+}) => {
+  await page.goto(`${root}/members`);
+  await hydrated(page);
+
+  const table = page.getByRole("region", { name: "Member directory" });
+  const rows = table.locator("tbody tr");
+  await expect(rows.first()).toBeVisible();
+
+  // Members the seed gives a recorded picture to. Four of seventeen have one;
+  // the rest are honestly null and must still show initials.
+  const avatars = table.locator("tbody tr img");
+  await expect(avatars.first()).toBeVisible();
+  const count = await avatars.count();
+  expect(count, "no row rendered an avatar image").toBeGreaterThan(0);
+
+  // Every rendered avatar actually loaded. `naturalWidth` is 0 until the
+  // bytes arrive, so this fails on a 404 or a blocked image rather than
+  // passing on the element existing.
+  await expect
+    .poll(async () => {
+      const widths = await avatars.evaluateAll((nodes) =>
+        (nodes as HTMLImageElement[]).map((n) => n.complete && n.naturalWidth)
+      );
+      return widths.every((w) => w);
+    })
+    .toBe(true);
+
+  // And at least one named person has their picture rather than a fallback.
+  for (const name of ["Jamie", "Alex", "Milo"]) {
+    const row = rows.filter({ hasText: name }).first();
+    await expect(row.locator("img")).toHaveCount(1);
+  }
+});
+
 test("members are searched and filtered through the server", async ({
   page,
 }) => {

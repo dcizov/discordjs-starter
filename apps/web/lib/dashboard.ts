@@ -93,6 +93,14 @@ export function withAuditAvatarUrl<
  * the account's global avatar. `null` means Discord has neither, and the cell
  * says so with initials instead of a broken image.
  */
+/**
+ * Attach the derived avatar URL to one roster member.
+ *
+ * Delegates to `toMemberWire`, which is the only place the URL is derived, so
+ * the dashboard projection and the member directory cannot drift apart. They
+ * did: this one derived it, the members route did not, and the directory
+ * showed initials for everyone while the leaderboard beside it showed faces.
+ */
 export function withMemberAvatarUrl<
   T extends {
     userId: string;

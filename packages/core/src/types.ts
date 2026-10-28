@@ -178,6 +178,33 @@ export type Member = {
   departedAt?: string | null;
   syncedAt: string;
 };
+/**
+ * A member exactly as it goes over the wire to the browser.
+ *
+ * `avatarUrl` is **required** here and optional on `Member`, and that
+ * difference is the point of the type.
+ *
+ * A database row stores avatar *hashes*; turning a hash into a URL is a
+ * server-side derivation, so `Member` quite properly has no `avatarUrl`. But
+ * the optionality is what let the member directory ship without ever deriving
+ * one: the API returned `listMembers()` unchanged, the missing field
+ * type-checked, and `IdentityCell` fell back to initials for every row — all
+ * 61 of them, including the bot — while the XP leaderboard on the same server
+ * showed a real avatar, because that path did derive it.
+ *
+ * Making it required on the wire type turns that omission into a compile error
+ * at the one place that can fix it.
+ */
+export type MemberWire = Omit<Member, "avatarUrl"> & {
+  /** Server-derived: guild avatar, else global avatar, else null. */
+  avatarUrl: string | null;
+};
+
+/** A page of {@link MemberWire} — the wire form of {@link MembersPage}. */
+export type MembersPageWire = Omit<MembersPage, "rows"> & {
+  rows: MemberWire[];
+};
+
 export type RosterSyncStatus =
   "never" | "running" | "complete" | "partial" | "failed";
 /**
