@@ -159,6 +159,24 @@ export type DataTableProps<T extends { id: string }> = {
   toolbar?: React.ReactNode;
   /** Quiet clause appended to the footer range, e.g. a dataset caveat. */
   footerNote?: React.ReactNode;
+  /**
+   * Open this row. Makes the whole row a control — click, Enter and Space —
+   * for surfaces where a row leads somewhere: a detail view, a drawer, a
+   * dialog.
+   *
+   * A row that *looks* clickable and is not is the worse of the two failures,
+   * so this is the only way a table grows a row affordance: the pointer, the
+   * focus ring, the keyboard and the accessible name all arrive together, and
+   * a table without `onRowActivate` stays a plain, non-focusable table.
+   *
+   * Interactive controls inside the row keep their own clicks — a switch or a
+   * row menu must not also open the detail behind it.
+   */
+  onRowActivate?: (row: T) => void;
+  /** Names the row for a screen reader, e.g. "Open Starter server". */
+  rowActivateLabel?: (row: T) => string;
+  /** The row to draw as the current one, when activating selects a record. */
+  activeRowId?: string | null;
 };
 
 export function DataTable<T extends { id: string }>({
@@ -179,6 +197,9 @@ export function DataTable<T extends { id: string }>({
   rowActions,
   toolbar,
   footerNote,
+  onRowActivate,
+  rowActivateLabel,
+  activeRowId = null,
 }: DataTableProps<T>) {
   const [hidden, setHidden] = useState<string[]>(() =>
     columns.filter((c) => c.defaultHidden).map((c) => c.key)
@@ -576,7 +597,48 @@ export function DataTable<T extends { id: string }>({
               </TableHeader>
               <TableBody>
                 {table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id}>
+                  <TableRow
+                    key={row.id}
+                    data-active={
+                      activeRowId === row.original.id ? "true" : undefined
+                    }
+                    onClick={
+                      onRowActivate
+                        ? (event) => {
+                            /* A control in the row owns its own activation. */
+                            if (
+                              (event.target as Element).closest(
+                                "button,a,input,select,textarea,[role='switch'],[role='checkbox'],[role='menu']"
+                              )
+                            )
+                              return;
+                            onRowActivate(row.original);
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      onRowActivate
+                        ? (event) => {
+                            if (event.key !== "Enter" && event.key !== " ")
+                              return;
+                            /* Space would scroll the page instead. */
+                            event.preventDefault();
+                            onRowActivate(row.original);
+                          }
+                        : undefined
+                    }
+                    tabIndex={onRowActivate ? 0 : undefined}
+                    aria-label={
+                      onRowActivate
+                        ? (rowActivateLabel?.(row.original) ?? undefined)
+                        : undefined
+                    }
+                    className={cn(
+                      onRowActivate &&
+                        "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                      activeRowId === row.original.id && "bg-muted/60"
+                    )}
+                  >
                     {row.getVisibleCells().map((cell) => {
                       const column = columns.find(
                         (c) => c.key === cell.column.id

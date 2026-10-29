@@ -1,6 +1,7 @@
 "use client";
 
 import { Bot } from "lucide-react";
+import * as React from "react";
 import {
   describeRoles,
   roleSwatch,
@@ -9,7 +10,7 @@ import {
   type PresentableRole,
 } from "@orbit/core/roles";
 import { cn } from "@/lib/utils";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
 /**
  * The one way a role is drawn.
@@ -91,9 +92,17 @@ export function RoleBadge({
 /**
  * Roles in hierarchy order, collapsing the tail into a "+N" control.
  *
- * The collapsed roles are never dropped: the "+N" carries their names in both
- * its tooltip and its accessible label, so the full list is reachable by mouse
- * and by screen reader without the row growing without bound.
+ * The collapsed roles are never dropped: "+N" opens a popover that lists them
+ * as real badges, and carries their names in its accessible label, so the full
+ * list is reachable by mouse, by keyboard and by screen reader without the row
+ * growing without bound. It used to be a tooltip, which showed the names but
+ * did nothing when clicked -- a control that looks like a button and behaves
+ * like a label.
+ *
+ * Inside the popover a badge acts only where the surface acts: with
+ * `onRoleSelect` it filters the directory to that role and closes, otherwise it
+ * stays a plain span, because a badge that navigates from a read-only cell
+ * would be a promise the surface cannot keep.
  */
 export function RoleList({
   roles,
@@ -109,6 +118,8 @@ export function RoleList({
   className?: string;
   onRoleSelect?: (role: PresentableRole) => void;
 }) {
+  const [overflowOpen, setOverflowOpen] = React.useState(false);
+
   if (!roles.length)
     return (
       <span className="text-[11px] text-muted-foreground">{emptyLabel}</span>
@@ -116,6 +127,9 @@ export function RoleList({
 
   const ordered = sortRolesByHierarchy(roles);
   const { visible, overflow } = splitRolesForDisplay(ordered, max);
+  const overflowLabel = `${overflow.length} more ${
+    overflow.length === 1 ? "role" : "roles"
+  }`;
 
   return (
     <span className={cn("flex flex-wrap items-center gap-1", className)}>
@@ -123,20 +137,43 @@ export function RoleList({
         <RoleBadge key={role.id} role={role} onSelect={onRoleSelect} />
       ))}
       {overflow.length > 0 && (
-        <Tooltip>
-          <TooltipTrigger asChild>
+        <Popover open={overflowOpen} onOpenChange={setOverflowOpen}>
+          <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={`${overflow.length} more roles: ${describeRoles(overflow)}`}
-              className="inline-flex items-center whitespace-nowrap rounded-md bg-muted px-2 py-1 text-[11px] font-medium leading-none text-slate-700 dark:text-muted-foreground"
+              /* The names travel with the control, so a screen reader gets the
+                 whole list without opening anything. */
+              aria-label={`${overflowLabel}: ${describeRoles(overflow)}`}
+              aria-expanded={overflowOpen}
+              className="inline-flex items-center whitespace-nowrap rounded-md bg-muted px-2 py-1 text-[11px] font-medium leading-none text-slate-700 transition hover:bg-muted-foreground/20 dark:text-muted-foreground"
             >
               +{overflow.length}
             </button>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs">
-            {describeRoles(overflow)}
-          </TooltipContent>
-        </Tooltip>
+          </PopoverTrigger>
+          {/* Escape and an outside click both dismiss it: Radix does that, and
+              it is what makes the control safe to open inside a table. */}
+          <PopoverContent
+            className="w-auto max-w-xs p-2"
+            aria-label={overflowLabel}
+          >
+            <ul className="flex flex-wrap gap-1">
+              {overflow.map((role) => (
+                <li key={role.id}>
+                  <RoleBadge
+                    role={role}
+                    onSelect={
+                      onRoleSelect &&
+                      ((selected) => {
+                        onRoleSelect(selected);
+                        setOverflowOpen(false);
+                      })
+                    }
+                  />
+                </li>
+              ))}
+            </ul>
+          </PopoverContent>
+        </Popover>
       )}
     </span>
   );

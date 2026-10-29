@@ -166,7 +166,18 @@ test("a member's detail dialog opens from its row menu and closes on Escape", as
  * The demo seed carries "Over Load" with six roles so this branch is always
  * exercised, not incidentally covered.
  */
-test("a member with more roles than fit shows a +N button and its tooltip", async ({
+/*
+ * The "+N" role count opens what it is hiding.
+ *
+ * It used to be a tooltip: it carried the hidden roles' names, so a screen
+ * reader could reach them, but clicking it did nothing. A control drawn as a
+ * button that behaves like a label is worse than one that says nothing — it
+ * advertises an interaction it does not have.
+ *
+ * The demo seed carries "Over Load" with six roles so this branch is always
+ * exercised, not incidentally covered.
+ */
+test("the +N role count opens the roles it is hiding, and Escape closes it", async ({
   page,
 }) => {
   await page.goto(`${root}/members`);
@@ -187,26 +198,35 @@ test("a member with more roles than fit shows a +N button and its tooltip", asyn
   const button = row.getByRole("button", { name: /more roles/ });
   await expect(button).toBeVisible();
   await expect(button).toHaveText("+4");
-
-  // Hovering opens the tooltip and names every hidden role. This is the
-  // assertion that would have caught the crash: with no provider mounted,
-  // the page threw before this control could be reached at all.
-  await button.hover();
-  const tooltip = page.getByRole("tooltip");
-  await expect(tooltip).toBeVisible();
-  // Six held, two drawn as badges, four named here. Sorted by hierarchy, the
-  // two highest are the visible ones.
-  const text = (await tooltip.textContent()) ?? "";
-  for (const name of ["Orbit", "Console gaming", "PC gaming", "Community"])
-    expect(text).toContain(name);
-  // The two already drawn must not be repeated inside the tooltip.
-  expect(text).not.toContain("Admin");
-  expect(text).not.toContain("Moderator");
-  // The button carries the same list for a screen reader, so the tooltip is
-  // not the only way to reach it.
+  // The names travel with the control, so a screen reader reaches them
+  // without opening anything.
   const label = await button.getAttribute("aria-label");
   expect(label).toContain("4 more roles");
   expect(label).toContain("Orbit");
+
+  // Nothing is open before the click.
+  const panel = page.getByRole("dialog", { name: "4 more roles" });
+  await expect(panel).toHaveCount(0);
+
+  await button.click();
+  await expect(panel).toBeVisible();
+
+  // Six held, two drawn as badges, four listed here. Sorted by hierarchy, the
+  // two highest are the ones already drawn.
+  const text = (await panel.textContent()) ?? "";
+  for (const name of ["Orbit", "Console gaming", "PC gaming", "Community"])
+    expect(text).toContain(name);
+  // The two already drawn must not be repeated inside the panel.
+  expect(text).not.toContain("Admin");
+  expect(text).not.toContain("Moderator");
+
+  // Each one is a real badge, not a line of text: the name is always visible
+  // and the colour dot carries the same swatch as the drawn badges.
+  await expect(panel.getByText("Orbit", { exact: true })).toBeVisible();
+
+  // Escape dismisses it, which is what makes the control safe inside a table.
+  await page.keyboard.press("Escape");
+  await expect(panel).toBeHidden();
 });
 
 test("every column menu entry has a name", async ({ page }) => {
