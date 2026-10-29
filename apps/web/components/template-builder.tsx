@@ -36,6 +36,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
+import type { StoredTemplate } from "@orbit/db";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkspace } from "./workspace";
 import { Button } from "./ui/button";
@@ -73,17 +74,16 @@ function DialogFooter({ children }: { children: React.ReactNode }) {
  * Exported so the templates page and this builder agree on one shape; the
  * `data` field is the parsed document, which is what makes editing possible.
  */
-export type StoredTemplate = {
-  id: string;
-  sourceGuildId: string;
-  name: string;
-  description: string;
-  kind: string;
-  version: number;
-  data: ServerTemplateDocument;
-  createdBy: string;
-  createdAt: string;
-};
+/**
+ * The stored row, re-exported rather than re-declared.
+ *
+ * This file used to carry its own copy of the shape. It had already drifted:
+ * the database type gained `updatedAt` and this one never did, so the two
+ * disagreed about what a template is and the compiler could not say so, because
+ * nothing ever assigned one to the other. A type-only import costs nothing at
+ * runtime and cannot drift, so that is what it is now.
+ */
+export type { StoredTemplate };
 
 const CHANNEL_TYPE_LABELS: Record<TemplateChannel["type"], string> = {
   text: "Text",

@@ -17,6 +17,8 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useLiveRefresh, isInFlight, isTerminal } from "@/lib/use-live-refresh";
 import { TemplateBuilderDialog } from "./template-builder";
+import { TemplateDetailDialog } from "./template-detail-dialog";
+import { ConfirmDialog } from "./ui/confirm-dialog";
 import type { StoredTemplate } from "./template-builder";
 import { PageHeader } from "./page-header";
 import { useWorkspace } from "./workspace";
@@ -107,6 +109,18 @@ export function TemplatesPage() {
   const [capturing, setCapturing] = useState(false);
   const [captureError, setCaptureError] = useState("");
   const [duplicating, setDuplicating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  /**
+   * The detail dialog, separate from `selected`.
+   *
+   * Opening it does not select and closing it does not deselect: which row is
+   * highlighted and whether the reader is looking inside one are different
+   * questions, and conflating them meant dismissing the dialog also threw away
+   * the right-hand card's target.
+   */
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState("");
 
@@ -373,6 +387,37 @@ export function TemplatesPage() {
   }
 
   /**
+   * Remove a template.
+   *
+   * Only the server that captured a template may delete it, so a template
+   * borrowed from another server offers no delete at all rather than one the
+   * API would refuse. The run being followed and the plan are dropped with it:
+   * both describe a document that no longer exists.
+   */
+  async function remove() {
+    if (!template) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await api(`/templates/${template.id}`, "DELETE");
+      setConfirmDelete(false);
+      setDetailOpen(false);
+      setPlan(null);
+      setPlanError("");
+      setRun(null);
+      setRunId(null);
+      setApplyError("");
+      await load();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "The template could not be deleted."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  /**
    * One sentence describing what the backend is doing right now, for the live
    * region and for the visible progress line. Progress is only claimed when a
    * run actually reports step counts; otherwise it says what it knows.
@@ -515,6 +560,7 @@ export function TemplatesPage() {
                         setRun(null);
                         setMapping({});
                         setApplyError("");
+                        setDetailOpen(true);
                       }}
                     >
                       {source && (
@@ -761,6 +807,44 @@ export function TemplatesPage() {
         </ul>
       </Card>
 
+      <TemplateDetailDialog
+        template={template}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        sourceName={
+          sources.get(template?.sourceGuildId ?? "")?.name ??
+          "a server you manage"
+        }
+        duplicating={duplicating}
+        planning={planning}
+        canDelete={!!template && template.sourceGuildId === data.guild.id}
+        onEdit={(item) => {
+          setDetailOpen(false);
+          setBuilderTemplate(item);
+          setBuilderOpen(true);
+        }}
+        onDuplicate={(item) => void duplicate(item)}
+        onDelete={() => setConfirmDelete(true)}
+        onPreview={() => {
+          setDetailOpen(false);
+          void preview();
+        }}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title={`Delete ${template?.name ?? "this template"}?`}
+        description={
+          <>
+            The template is removed. Nothing in any server changes: applying a
+            template only ever creates and reuses, so nothing that was applied
+            from this one is deleted or reverted. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete template"
+        busy={deleting}
+        onConfirm={() => void remove()}
+      />
       <TemplateBuilderDialog
         open={builderOpen}
         onOpenChange={setBuilderOpen}

@@ -55,6 +55,19 @@ test("a template is captured, previewed and recorded as a demo apply", async ({
   await expect(item).toBeVisible();
   await item.click();
 
+  /*
+   * A row click opens the template's detail, so the apply panel behind it is
+   * covered until the detail is dismissed. Escape closes it and leaves the row
+   * selected, which is the whole point of keeping selection separate from the
+   * dialog: dismissing what you are reading must not throw away what the
+   * right-hand card is aimed at.
+   */
+  const detail = page.getByRole("dialog");
+  await expect(detail).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(detail).toBeHidden();
+  await expect(item).toHaveAttribute("aria-current", "true");
+
   await page.getByRole("button", { name: "Preview changes" }).click();
   await expect(page.getByText(/\d+ to create/)).toBeVisible();
   await expect(page.getByText(/Plan fingerprint/)).toBeVisible();
@@ -142,4 +155,64 @@ test("the template flow refuses to apply without a preview", async ({
       /Choose a template to preview what it would do here|Nothing is created until you confirm/
     )
   ).toBeVisible({ timeout: 10_000 });
+});
+
+/*
+ * What a template actually contains.
+ *
+ * The list could only ever show three counts and a description, so the
+ * question an operator asks before applying anything — *what is in this?* — had
+ * no answer short of previewing against a target, which describes a difference
+ * rather than the document and only works once a target is chosen. The row now
+ * opens the document itself.
+ *
+ * Deleting is asserted to be present here rather than exercised: a delete in
+ * demo mode would empty the list for every spec that runs after it, and these
+ * specs share one server.
+ */
+test("a template row opens what the template contains, and Escape closes it", async ({
+  page,
+}) => {
+  await page.goto(`${root}/templates`);
+  await hydrated(page);
+
+  // The demo starts empty, so capture one to look inside.
+  const name = `E2E detail ${Date.now()}`;
+  await page.getByRole("button", { name: "Capture this server" }).click();
+  const capture = page.getByRole("dialog", { name: "Capture a template" });
+  await expect(capture).toBeVisible();
+  await capture.getByLabel("Template name", { exact: true }).fill(name);
+  await capture.getByRole("button", { name: "Capture template" }).click();
+  await expect(capture).not.toBeVisible();
+
+  const row = page.getByRole("button", { name: new RegExp(name) });
+  await expect(row).toBeVisible();
+
+  // Nothing is open until the row is clicked.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await row.click();
+  const detail = page.getByRole("dialog", { name: name });
+  await expect(detail).toBeVisible();
+
+  // The document, not the diff: the three sections that say what it carries.
+  /* The counts ride along inside each heading, so match on the prefix. */
+  for (const heading of [/^Roles\b/, /^Channels\b/, /^Orbit settings$/])
+    await expect(detail.getByRole("heading", { name: heading })).toBeVisible();
+  // It says where it came from, because a captured document is not a server.
+  await expect(detail.getByText(/Captured from/)).toBeVisible();
+
+  // All four actions, including the one that never existed before.
+  for (const label of ["Edit", "Duplicate", "Preview", "Delete"])
+    await expect(
+      detail.getByRole("button", { name: new RegExp(`^${label}`) })
+    ).toBeVisible();
+
+  // Escape dismisses it...
+  await page.keyboard.press("Escape");
+  await expect(detail).toBeHidden();
+
+  // ...and the row it was opened from is still the selected one, so the apply
+  // panel behind the dialog was never disturbed.
+  await expect(row).toHaveAttribute("aria-current", "true");
 });
