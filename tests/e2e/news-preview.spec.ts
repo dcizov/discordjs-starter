@@ -161,3 +161,87 @@ test("a provider outage is reported as a retryable failure, not a bad request", 
   await expect(page.getByText(/Integration returned HTTP 503/)).toBeVisible();
   await expect(page.getByRole("dialog").locator("article")).toHaveCount(0);
 });
+
+/*
+ * Feed artwork actually loads.
+ *
+ * `img-src` was `'self' data:` plus the Discord CDN, which is right for
+ * avatars and wrong for a dashboard that previews third-party feeds: `CoverArt`
+ * points a plain `<img>` straight at the provider's URL, so every Steam, ITAD
+ * and RSS image was refused by the browser and each card fell back to "This
+ * image did not load".
+ *
+ * It survived three releases because nothing rendered one: the recorded Steam
+ * fixture below has `image: null` on every item, and no unit test can see a
+ * CSP — the browser is the only thing that enforces it.
+ *
+ * The artwork is served by intercepting the provider host, so the suite needs
+ * no Steam access, and the request is *counted*. That count is the real
+ * assertion: CSP is enforced by the renderer before the network layer, so a
+ * blocked image issues no request at all and never reaches the route. A test
+ * that only checked `naturalWidth` would pass on a page that never fetched.
+ */
+const ARTWORK_HOST = "https://clan.fastly.steamstatic.com";
+const ARTWORK_URL = `${ARTWORK_HOST}/images/4192955715210614400/csp-preview.jpg`;
+/** A real 16x16 PNG, so "it loaded" means the bytes decoded. */
+const ARTWORK_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAJElEQVR42mPQiDoBRx8+fIUjXOIMg1ADMYqQxQejhtF4GBQaAJvZD5+ZnKo2AAAAAElFTkSuQmCC";
+
+test("provider artwork is not blocked by the Content-Security-Policy", async ({
+  page,
+  request,
+}) => {
+  const withArtwork = JSON.parse(payload);
+  withArtwork.items[0].image = ARTWORK_URL;
+  withArtwork.items[0].imageKind = "provider";
+
+  let imageRequests = 0;
+  await page.route(`${ARTWORK_HOST}/**`, (route) => {
+    imageRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: Buffer.from(ARTWORK_PNG, "base64"),
+    });
+  });
+  await page.route("**/api/guilds/**/resources/source/*/test", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(withArtwork),
+    })
+  );
+
+  await page.goto(`${root}/news`);
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
+
+  const name = await steamSourceName(request);
+  await sourceCard(page, name)
+    .getByRole("button", { name: "Test source", exact: true })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  const image = dialog.locator("article").first().locator("img").first();
+  await expect(image).toBeVisible();
+  await image.scrollIntoViewIfNeeded();
+
+  // The request left the browser at all.
+  await expect.poll(() => imageRequests).toBeGreaterThan(0);
+  // And it decoded, which is what "loaded" means.
+  await expect
+    .poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth))
+    .toBe(16);
+
+  /*
+   * Never the failure placeholder, which is what shipped. `CoverArt` swaps the
+   * `<img>` for that placeholder on `onError`, so an image the CSP refuses
+   * leaves no `<img>` behind at all — an assertion on `naturalWidth` alone
+   * would be satisfied by a page that never rendered one.
+   */
+  await expect(image).toHaveAttribute("src", ARTWORK_URL);
+  await expect(
+    dialog.locator('[title="This image did not load."]')
+  ).toHaveCount(0);
+});

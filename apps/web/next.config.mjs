@@ -29,6 +29,14 @@ dotenv.config({
  *   one header that mitigates injected-script execution.
  * - **`ws:` for `connect-src` in development**, for the HMR websocket.
  *   Production is HTTPS only.
+ *
+ * The directives that follow `default-src 'self'` were audited for the same
+ * mistake as `img-src` — a browser-side fetch the policy quietly forbids —
+ * and none of them has one. There is no `<audio>`, `<video>` or `<iframe>`
+ * anywhere in the app, so `media-src` and `frame-src` are never exercised;
+ * fonts are bundled, so `font-src 'self' data:` is enough; and nothing in the
+ * client fetches a third-party origin, so `connect-src` covers only this app
+ * and Discord.
  */
 function contentSecurityPolicy() {
   const production = process.env.NODE_ENV === "production";
@@ -36,7 +44,43 @@ function contentSecurityPolicy() {
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${production ? "" : " 'unsafe-eval'"}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://cdn.discordapp.com https://*.discordapp.com",
+    /*
+     * Feed artwork is whatever the feed says it is.
+     *
+     * It was `'self' data:` plus the Discord CDN, which is the right policy for
+     * avatars and the wrong one for a dashboard that previews third-party
+     * feeds: `CoverArt` renders a plain `<img src>` straight at the provider's
+     * URL, so every Steam, ITAD and RSS image was refused and each card fell
+     * back to "This image did not load". The allowlist approach cannot work
+     * here — an RSS feed can put its image on any host there is, so no list
+     * written in advance can ever be complete.
+     *
+     * `https:` is deliberate, and the alternative was considered rather than
+     * assumed. Routing artwork through `next/image` or a same-origin proxy
+     * would keep this directive tight, but both make *the server* fetch a URL
+     * chosen by the feed, which is the more dangerous place to do it: a
+     * server-side fetch can reach internal hosts and return their contents,
+     * and the image optimizer is a well-known SSRF and amplification surface.
+     * In the browser the same URL is fetched with no credentials, and the
+     * response cannot be read back — the operator's browser is a safer place
+     * to absorb an untrusted image than this server is.
+     *
+     * What this does cost, written down so it is a decision and not an
+     * oversight: a hostile or compromised feed can name an image host of its
+     * choosing and every operator who opens the preview fetches from it, so
+     * the preview is a feed-driven request trigger into the operator's
+     * browser. `safeImageUrl()` still refuses non-HTTPS, non-443, bare-IP and
+     * blocked hosts, and requires an image extension, and the element is
+     * `referrerPolicy="no-referrer"` — but it cannot refuse a public HTTPS
+     * host, because that is the entire point. That is a tracking and blind
+     * network-probe exposure, bounded by never letting the page read the
+     * response: `connect-src` stays at `'self'` and Discord, so nothing here
+     * can turn a fetch into an exfiltration of page content unless an
+     * injection sink also opens up. The one `dangerouslySetInnerHTML` in the
+     * app renders in-repo Markdown, so that sink is trusted today; it would
+     * not be if docs ever rendered remote content.
+     */
+    "img-src 'self' data: https:",
     "font-src 'self' data:",
     `connect-src 'self' ${production ? "wss:" : "ws: wss:"} https://discord.com`,
     "frame-ancestors 'none'",

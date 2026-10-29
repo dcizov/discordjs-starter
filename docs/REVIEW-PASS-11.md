@@ -250,6 +250,77 @@ it in Firefox, which Section 5 addresses.
 
 ---
 
+## Decision: `img-src` allows any HTTPS host
+
+**Status:** decided 2026-10-29. **Severity:** high — every news and deal image
+on every page was broken.
+
+**The defect.** `img-src` was `'self' data: https://cdn.discordapp.com
+https://*.discordapp.com`. `apps/web/components/artwork.tsx` renders provider
+artwork as a plain `<img src={url}>`, so Steam CDN, ITAD and RSS images were all
+refused by the browser and every card fell back to "This image did not load".
+
+It survived three releases because nothing ever rendered one: the recorded Steam
+fixture (`tests/fixtures/steam/preview-payload.json`) has `image: null` on every
+item, and a unit test cannot see a CSP — the browser is the only thing that
+enforces it.
+
+**The decision.** `img-src 'self' data: https:`.
+
+An allowlist cannot work here. An RSS feed can put its image on any host, so no
+list written in advance is ever complete. That leaves two options: allow any
+HTTPS host in the browser, or proxy artwork through this server.
+
+**The alternative, and why it was rejected.** Routing artwork through
+`next/image` or a same-origin proxy keeps `img-src` tight, but both make _the
+server_ fetch a URL chosen by the feed. That is the more dangerous place to do
+it: a server-side fetch can reach internal hosts and return their contents, and
+the image optimizer is a well-known SSRF and amplification surface. In the
+browser the same URL is fetched with no credentials and the response cannot be
+read back. The operator's browser is a safer place to absorb an untrusted image
+than this server is.
+
+**What it costs — the concrete trade-off.** A hostile or compromised feed can
+name an image host of its choosing, and every operator who opens the preview
+fetches from it. The preview becomes a feed-driven request trigger into the
+operator's browser, usable for tracking and for blind probing of their network.
+`safeImageUrl()` still refuses non-HTTPS, non-443, bare-IP and blocklisted hosts
+and requires an image extension, and the element carries
+`referrerPolicy="no-referrer"` — but it cannot refuse a public HTTPS host,
+because that is the entire point.
+
+That exposure is bounded by never letting the page read the response.
+`connect-src` stays `'self'` and Discord, so a fetch cannot become an
+exfiltration of page content unless an injection sink also opens up. The one
+`dangerouslySetInnerHTML` in the app (`apps/web/app/docs/[slug]/page.tsx`)
+renders in-repo Markdown, so that sink is trusted today; it would not be if docs
+ever rendered remote content. That is the condition under which this decision
+should be revisited.
+
+**Audit of the rest of the policy** (same mistake, checked: a browser-side fetch
+the policy quietly forbids):
+
+| Directive     | Finding                                                                                                                                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connect-src` | Correct. The only third-party origin the browser contacts is `https://discord.com`, and only from server-side code in `lib/auth.ts`. The client's `request()` helper only ever calls relative `/api` paths. |
+| `media-src`   | Not needed. There is no `<audio>` or `<video>` anywhere in the app; music playback happens in Discord, not the browser.                                                                                     |
+| `frame-src`   | Not needed. No `<iframe>` exists. `frame-ancestors 'none'` still covers clickjacking.                                                                                                                       |
+| `font-src`    | Correct. Fonts are bundled; nothing loads a typeface from a third party.                                                                                                                                    |
+
+All four are now asserted in `tests/csp.test.ts`, so the answer is not left to
+memory.
+
+**Tests added.** A CSP unit case asserting `https:` is present, that Discord
+host entries are _absent_ (they would be dead weight suggesting the allowlist
+does the work), and that `media-src`/`frame-src`/`worker-src` are unset. An e2e
+in `tests/e2e/news-preview.spec.ts` that intercepts a provider host, counts the
+requests, and asserts `naturalWidth === 16`. The request count is the real
+assertion: CSP is enforced before the network layer, so a blocked image issues
+no request and never reaches the route — a test checking only `naturalWidth`
+would pass on a page that never fetched.
+
+---
+
 ## Process notes
 
 - CI was **red on every commit since `84c9c7f`** and was not checked for

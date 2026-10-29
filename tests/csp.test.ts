@@ -107,11 +107,70 @@ describe("Content-Security-Policy", () => {
     }
   });
 
-  it("lets Discord avatars through in both environments", async () => {
+  /*
+   * Feed artwork, in both environments.
+   *
+   * `img-src` was `'self' data:` plus the Discord CDN. That is right for
+   * avatars and wrong for a dashboard that previews third-party feeds:
+   * `CoverArt` points a plain `<img>` straight at the provider's URL, so every
+   * Steam, ITAD and RSS image was refused and every card fell back to "This
+   * image did not load". It shipped because the recorded Steam fixture has no
+   * images at all, so no test ever rendered one.
+   *
+   * The assertion is not "Discord is listed" — it is "an arbitrary HTTPS host
+   * is allowed", because that is the actual requirement: an RSS feed can put
+   * its image anywhere, so a list written in advance can never be complete.
+   * `tests/e2e/news-preview.spec.ts` proves a real external URL then loads.
+   */
+  it("lets feed artwork load from any HTTPS host, because a feed chooses it", async () => {
     for (const env of ["development", "production"]) {
       const images = sources(await policyFor(env), "img-src");
-      expect(images).toContain("https://cdn.discordapp.com");
+      // The scheme source is what covers an arbitrary provider host.
+      expect(images).toContain("https:");
+      // Inline data URIs and this origin stay allowed regardless.
       expect(images).toContain("data:");
+      expect(images).toContain("'self'");
+      // Host entries would be dead weight: `https:` already subsumes them, and
+      // leaving them in would suggest the allowlist is what does the work.
+      for (const host of [
+        "https://cdn.discordapp.com",
+        "https://*.discordapp.com",
+      ])
+        expect(images).not.toContain(host);
+    }
+  });
+
+  /*
+   * The same mistake, checked for in the directives that follow default-src.
+   *
+   * `img-src` was broken for months because nothing asked what the browser
+   * actually fetches. These are the other places a policy can silently refuse
+   * something the app renders, so the answer is recorded as a test rather than
+   * left to memory.
+   */
+  it("covers every directive the app can exercise, and none that it cannot", async () => {
+    for (const env of ["development", "production"]) {
+      const policy = await policyFor(env);
+      // Bundled fonts only: nothing loads a typeface from a third party, so a
+      // font-src without a CDN is correct rather than incomplete.
+      expect(sources(policy, "font-src")).toEqual(["'self'", "data:"]);
+      // No <audio>, <video> or <iframe> exists in the app, so media-src and
+      // frame-src are deliberately absent and fall back to default-src.
+      for (const unused of ["media-src", "frame-src", "worker-src"]) {
+        expect(
+          policy
+            .split(";")
+            .map((part) => part.trim())
+            .some((part) => part.startsWith(`${unused} `)),
+          `${unused} should not be set; the app renders no such resource`
+        ).toBe(false);
+      }
+      // Nothing in the client fetches a third-party origin, so connect-src
+      // stays narrow — which is what keeps img-src's breadth from becoming an
+      // exfiltration channel.
+      const connect = sources(policy, "connect-src");
+      expect(connect).toContain("'self'");
+      expect(connect).not.toContain("https:");
     }
   });
 });
