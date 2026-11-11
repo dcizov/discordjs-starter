@@ -148,24 +148,31 @@ export async function expectNoHorizontalOverflow(
   page: Page,
   label: string
 ): Promise<void> {
-  const vw = await page.evaluate(() => window.innerWidth);
-  // Serialised into the page, so the scan must close over nothing.
-  const bad = await page.evaluate(scanOverflowOffenders, vw);
-  // Sub-pixel layout is not overflow. The tolerance is spelled out rather
-  // than imported: this function is serialised into the page, where a
-  // module binding would not exist.
+  // The test is whether the document scrolls. The scan below is the diagnosis,
+  // run only when it does: an element whose right edge is past the viewport is
+  // not a defect if something is there to clip or scroll it, and reporting
+  // those as offenders made this fail on every page containing a table.
+  //
+  // Sub-pixel layout is not overflow. The tolerance is spelled out rather than
+  // imported, because this function is serialised into the page and a module
+  // binding would not exist there.
   const scrolls = await page.evaluate(
     () =>
       document.documentElement.scrollWidth >
       document.documentElement.clientWidth + 1
   );
-  if (bad.length === 0 && !scrolls) return;
+  if (!scrolls) return;
+
+  const vw = await page.evaluate(() => window.innerWidth);
+  // Serialised into the page, so the scan must close over nothing.
+  const bad = await page.evaluate(scanOverflowOffenders, vw);
   const detail =
     bad.length > 0
       ? `\n${describeOffenders(bad, vw)}`
-      : "\n  (no element's right edge is over the line, but the document still scrolls)";
-  expect(
-    bad.length + (scrolls ? 1 : 0),
-    `${label}: the ${vw}px viewport scrolls sideways.${detail}`
-  ).toBe(0);
+      : "\n  (nothing is over the line outside a scroll container, so the cause is\n" +
+        "   layout the scan does not attribute to a single element — a fixed or\n" +
+        "   absolutely positioned box, or a table outside a clipping ancestor)";
+  expect(1, `${label}: the ${vw}px viewport scrolls sideways.${detail}`).toBe(
+    0
+  );
 }

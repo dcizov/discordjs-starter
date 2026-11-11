@@ -180,6 +180,59 @@ describe("scanOverflowOffenders", () => {
     );
   });
 
+  it("ignores content inside a horizontal scroll container", () => {
+    // The narrow-screen table rule: the container scrolls, so its cells are
+    // *supposed* to reach past the edge of the screen. Reporting them would
+    // make the scan fail on every page that has a table.
+    render(`
+      <div class="wrap" style="overflow-x: auto">
+        <table><tr>
+          <td data-right="1200" data-bottom="20" class="cell">far right</td>
+        </tr></table>
+      </div>
+    `);
+    expect(scanOverflowOffenders(VIEWPORT)).toEqual([]);
+  });
+
+  it("ignores content an ancestor clips with overflow-x: hidden", () => {
+    // `hidden` clips without scrolling, so the content cannot widen the page
+    // either. It is still the ancestor's job to contain it, not the element's
+    // fault, and the reader should be sent to the container.
+    render(`
+      <div class="wrap" style="overflow-x: hidden">
+        <div data-right="1200" data-bottom="20" class="clipped">cut off</div>
+      </div>
+    `);
+    expect(scanOverflowOffenders(VIEWPORT)).toEqual([]);
+  });
+
+  it("still reports a wide element that no ancestor contains", () => {
+    // The same cell, one level up: nothing scrolls it, so it is a defect.
+    render(`
+      <div class="wrap" style="overflow-x: visible">
+        <table><tr>
+          <td data-right="1200" data-bottom="20" class="cell">far right</td>
+        </tr></table>
+      </div>
+    `);
+    expect(scanOverflowOffenders(VIEWPORT).map((o) => o.className)).toContain(
+      "cell"
+    );
+  });
+
+  it("reports the container itself when the container is what overflows", () => {
+    // A scroll container that is itself wider than the screen is the bug: it
+    // scrolls nothing, because there is nothing to scroll to.
+    render(`
+      <div data-right="900" data-bottom="20" class="wrap" style="overflow-x: auto">
+        <table><tr><td data-right="400" data-bottom="20" class="cell">x</td></tr></table>
+      </div>
+    `);
+    expect(scanOverflowOffenders(VIEWPORT).map((o) => o.className)).toEqual([
+      "wrap",
+    ]);
+  });
+
   it("caps how many offenders it reports", () => {
     render(
       Array.from(

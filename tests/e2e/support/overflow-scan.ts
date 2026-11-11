@@ -34,6 +34,12 @@ const MAX_CLASSES_PER_SEGMENT = 3;
 /** Offenders reported, widest first. */
 const MAX_REPORTED = 8;
 
+/**
+ * `overflow-x` values that mean "this element is meant to be wider than it
+ * looks", i.e. the content is scrolled or clipped on purpose.
+ */
+const SCROLLABLE_X = new Set(["auto", "scroll", "hidden", "clip"]);
+
 /** Characters of text kept per offender. */
 const MAX_TEXT = 60;
 
@@ -57,6 +63,33 @@ function describePath(el: Element): string {
 }
 
 /**
+ * Whether an ancestor clips or scrolls horizontally.
+ *
+ * This is what separates a defect from a design. A table cell inside a
+ * container with `overflow-x: auto` is *supposed* to extend past the edge of
+ * the screen — that is the whole point of the scroll container, and it is how
+ * the narrow-screen table rule works. Reporting those cells as offenders would
+ * mean the scan fails on every page that has a table, which is to say every
+ * page worth checking.
+ *
+ * The page-level defect this looks for is content that is wide with nothing
+ * to contain it.
+ */
+function insideHorizontalScroller(el: Element): boolean {
+  let node = el.parentElement;
+  while (node) {
+    const overflowX = getComputedStyle(node).overflowX;
+    if (SCROLLABLE_X.has(overflowX)) return true;
+    // A clipped ancestor further up cannot rescue an element that is already
+    // inside a scroller, and an element that is not inside one is not made
+    // innocent by an ancestor that happens to clip vertically. So keep going:
+    // the nearest scroller is the one that matters.
+    node = node.parentElement;
+  }
+  return false;
+}
+
+/**
  * Elements whose right edge sits past `viewportWidth`, widest first.
  *
  * Runs against the ambient `document`, so it is passed straight to
@@ -71,6 +104,7 @@ export function scanOverflowOffenders(
     // Skip the unrendered: display:none, empty wrappers, detached nodes.
     if (r.width === 0 && r.height === 0) continue;
     if (r.right - viewportWidth <= OVERFLOW_TOLERANCE_PX) continue;
+    if (insideHorizontalScroller(el)) continue;
     out.push({
       tag: el.tagName.toLowerCase(),
       id: el.id ?? "",
