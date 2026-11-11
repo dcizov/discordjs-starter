@@ -205,12 +205,6 @@ export function MemberRolesEditor({
             {reason}
           </p>
         ) : (
-          /*
-           * `DialogContent` supplies padding but no spacing between children,
-           * and `DialogHeader` only adds its own `mb-6`, so everything below
-           * the heading used to stack flush -- the role list touching the
-           * search field above it. One wrapper spaces the whole body.
-           */
           <div className="space-y-3">
             <div className="relative">
               <Search
@@ -349,9 +343,7 @@ export function MemberRolesEditor({
         )}
 
         {(reason || error) && (
-          // Sibling of the branch above, not inside its spacing wrapper, so
-          // it carries its own gap rather than touching the message.
-          <div className="mt-3 flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={onClose}>
               <X size={13} aria-hidden />
               Close

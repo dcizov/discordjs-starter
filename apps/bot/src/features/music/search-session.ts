@@ -4,7 +4,7 @@ import {
   StringSelectMenuOptionBuilder,
 } from "discord.js";
 import { randomUUID } from "node:crypto";
-import type { ResolvedTrack } from "./service";
+import type { ResolvedTrack } from "./types";
 
 /**
  * Bounded, single-use search results.

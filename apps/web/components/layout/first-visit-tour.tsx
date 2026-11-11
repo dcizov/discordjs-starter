@@ -134,7 +134,7 @@ export function FirstVisitTour({ replay = 0 }: { replay?: number }) {
           {step.body}
         </p>
         {data.demo && (
-          <p className="mt-4 rounded-lg border border-violet-200/60 bg-violet-50/70 px-3 py-2 text-[11px] leading-relaxed text-violet-600 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300">
+          <p className="rounded-lg border border-violet-200/60 bg-violet-50/70 px-3 py-2 text-[11px] leading-relaxed text-violet-600 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300">
             Demo preview: this is simulated data. Nothing here reaches Discord.
           </p>
         )}

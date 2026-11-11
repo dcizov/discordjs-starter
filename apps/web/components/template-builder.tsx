@@ -1,5 +1,14 @@
 "use client";
 
+/*
+ * The template editor a person drives.
+ *
+ * Shares its name with `packages/core/src/template-builder.ts`, which is the
+ * capture side: that module decides what may be read from a real guild, while
+ * this one composes a template by hand. Nothing is captured here, so capture
+ * rules belong in core where both paths use them.
+ */
+
 import {
   ASSIGNABLE_PERMISSIONS,
   STARTER_BLUEPRINTS,

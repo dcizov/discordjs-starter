@@ -37,6 +37,7 @@ import { MusicNodeMetadata } from "./node";
 import { joinMusicVoice, MusicDiscordConnector } from "./voice";
 import { MusicPluginRest, sponsorBlockCategories } from "./plugins";
 import { MusicSearchSessions } from "./search-session";
+import type { ResolvedTrack } from "./types";
 import {
   musicNodeDescription,
   musicSourceFailureReport,
@@ -60,16 +61,7 @@ type Authority = {
 };
 
 /** One already-resolved track, before it is admitted to a queue. */
-export type ResolvedTrack = {
-  encoded: string;
-  title: string;
-  author: string;
-  duration: number;
-  uri: string;
-  source: string;
-  /** Validated public artwork URL from the provider, when it supplied one. */
-  artwork?: string | null;
-};
+export type { ResolvedTrack } from "./types";
 
 export class MusicService {
   readonly backend: MusicBackend | null;

@@ -18,7 +18,15 @@ export function DialogContent({
       <Primitive.Overlay className="fixed inset-0 z-50 bg-slate-950/35 backdrop-blur-[3px] animate-in" />
       <Primitive.Content
         className={cn(
-          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-32px)] max-w-[540px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-2xl max-h-[88vh] overflow-y-auto focus:outline-none",
+          /*
+           * `space-y-4` is the single rule for vertical rhythm inside a
+           * dialog. It used to be absent, so every dialog decided its own:
+           * some wrapped their body in a `space-y-*` container, some gave
+           * individual children `mt-*`, and some did nothing at all, which is
+           * how the member role editor ended up with its role list sitting
+           * flush against the search field.
+           */
+          "fixed left-1/2 top-1/2 z-50 w-[calc(100%-32px)] max-w-[540px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-card p-6 shadow-2xl max-h-[88vh] overflow-y-auto focus:outline-none space-y-4",
           className
         )}
         {...props}
@@ -44,7 +52,11 @@ export function DialogHeader({
   return (
     <div
       className={cn(
-        "mb-6 pr-6 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mt-1.5 [&_p]:text-xs [&_p]:leading-relaxed [&_p]:text-muted-foreground",
+        /*
+         * No `mb-6` here: `DialogContent` now spaces its own children, and
+         * keeping both would put a 40px gap under every heading.
+         */
+        "pr-6 [&_h2]:text-lg [&_h2]:font-semibold [&_p]:mt-1.5 [&_p]:text-xs [&_p]:leading-relaxed [&_p]:text-muted-foreground",
         className
       )}
     >

@@ -1,3 +1,13 @@
+/*
+ * Building a server template from live guild state.
+ *
+ * Shares its name with the web component at
+ * `apps/web/components/template-builder.tsx`, which is the editor a person
+ * drives. This module has no UI: it is the capture side, deciding what may be
+ * read from a guild and what is deliberately left out, and it is shared so
+ * both the editor and the bot go through the same rules.
+ */
+
 import { PERMISSION_BITS } from "./permission-bits";
 import {
   TEMPLATE_LIMITS,
