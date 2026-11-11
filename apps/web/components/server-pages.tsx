@@ -6,6 +6,7 @@ import { sortRolesByHierarchy } from "@orbit/core/roles";
 import { PermissionSetup } from "./permission-setup";
 import { RoleBadge } from "./role-badge";
 import type { AuditEntry, GuildConfig } from "@orbit/core";
+import { isLocale, LOCALES, LOCALE_LABELS } from "@orbit/core/locales";
 import {
   Check,
   Copy,
@@ -729,13 +730,16 @@ export function SettingsPage() {
             >
               <FormSelect
                 value={v.locale}
-                onValueChange={(next) => setV({ ...v, locale: next })}
-                options={[
-                  { value: "en", label: "English" },
-                  { value: "de", label: "Deutsch" },
-                  { value: "fr", label: "Français" },
-                  { value: "es", label: "Español" },
-                ]}
+                // Guarded because a select hands back a plain string; the
+                // options come from LOCALES, so this always passes in
+                // practice, and the guard is what lets the compiler know it.
+                onValueChange={(next) =>
+                  isLocale(next) && setV({ ...v, locale: next })
+                }
+                options={LOCALES.map((value) => ({
+                  value,
+                  label: LOCALE_LABELS[value],
+                }))}
               />
             </Field>
             <Field

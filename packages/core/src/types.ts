@@ -1,4 +1,6 @@
 import type { ActivitySnapshot } from "./activity";
+import type { Locale } from "./locales";
+import type { WowForeverRegion } from "./wow-forever";
 import type { GameDeal } from "./deal-types";
 export type ModuleKey =
   | "roles"
@@ -45,7 +47,7 @@ export type GuildChannel = {
   supportsCommunityPosts?: boolean;
 };
 export type GuildConfig = {
-  locale: string;
+  locale: Locale;
   timezone: string;
   auditChannelId: string;
   notificationRoleId: string;
@@ -71,11 +73,11 @@ export type GuildConfig = {
     escalationThreshold: number;
     escalationMinutes: number;
   };
-  /** WoW: Forever ruleset watching. Kept in step with `configSchema` by hand. */
+  /** WoW: Forever ruleset watching. Mirrors the `wowForever` config schema. */
   wowForever: {
     /** Empty when nobody is watching. */
     channelId: string;
-    region: string;
+    region: WowForeverRegion;
   };
   /**
    * Leveling. Kept in step with the `xp` section of the config schema by hand,

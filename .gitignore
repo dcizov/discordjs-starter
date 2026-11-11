@@ -39,3 +39,6 @@ __pycache__/
 
 # Local browser/tool downloads (not application dependencies).
 .cache/
+
+# desloppify local state
+.desloppify/

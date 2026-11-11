@@ -1,4 +1,5 @@
 import { errorDiagnostic } from "@orbit/core/diagnostics";
+import { isLocale } from "@orbit/core/locales";
 import { logger } from "@orbit/core/logger";
 import {
   CONFIG_STEP_KEY,
@@ -584,7 +585,14 @@ export async function applyTemplateRun(
     const stored = await getGuild(guild.id);
     if (stored) {
       const next = structuredClone(stored.config);
-      if (config.locale) next.locale = config.locale;
+      /*
+       * Only apply a locale this build actually supports. A captured template
+       * stores its locale as a free string, so one taken from a server running
+       * a wider catalogue could otherwise write a value `configSchema` rejects
+       * on the next save. Narrowing the capture schema instead would make
+       * already-stored templates unparseable, so the check belongs here.
+       */
+      if (isLocale(config.locale)) next.locale = config.locale;
       if (config.timezone) next.timezone = config.timezone;
       Object.assign(next.modules, config.modules ?? {});
       Object.assign(next.economy, config.economy ?? {});

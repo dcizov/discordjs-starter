@@ -2,13 +2,15 @@ import { z } from "zod";
 import { DEAL_QUALITY_DEFAULTS } from "./deal-policy";
 import { defaultTicketConfig, ticketConfigSchema } from "./tickets";
 import type { GuildConfig } from "./types";
+import { LOCALES } from "./locales";
+import { WOW_FOREVER_REGIONS } from "./wow-forever";
 export const snowflake = z
   .string()
   .regex(/^\d{17,20}$/, "Enter a valid Discord ID");
 const optionalId = z.union([snowflake, z.literal("")]).default("");
 export const configSchema = z
   .object({
-    locale: z.enum(["en", "de", "fr", "es"]).default("en"),
+    locale: z.enum(LOCALES).default("en"),
     timezone: z
       .string()
       .max(64)
@@ -181,7 +183,7 @@ export const configSchema = z
     wowForever: z
       .object({
         channelId: optionalId,
-        region: z.enum(["us", "eu", "kr", "tw"]).default("eu"),
+        region: z.enum(WOW_FOREVER_REGIONS).default("eu"),
       })
       .default({ channelId: "", region: "eu" }),
     dashboard: z
@@ -388,3 +390,27 @@ export const resourceSchemas = {
   route: routeSchema,
   case: caseSchema,
 };
+
+/*
+ * The config type and the config schema must describe the same shape.
+ *
+ * `GuildConfig` is written out by hand in types.ts while `configSchema` is the
+ * thing that actually parses stored jsonb, so the two can drift without any
+ * signal: adding a field to one and forgetting the other compiles cleanly, and
+ * the miss only surfaces at a call site that happens to touch the new field.
+ * Adding `wowForever` required editing both by hand, which is how the gap was
+ * noticed.
+ *
+ * This assertion makes drift a compile error instead. It lives here because
+ * this module already reaches both sides — deriving `GuildConfig` in types.ts
+ * would mean importing `configSchema` back from config.ts, which imports
+ * types.ts, and that cycle is worse than the duplication it removes.
+ */
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+    ? true
+    : false;
+type Expect<T extends true> = T;
+export type GuildConfigMatchesSchema = Expect<
+  Equal<GuildConfig, z.infer<typeof configSchema>>
+>;
