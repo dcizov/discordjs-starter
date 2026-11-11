@@ -5,6 +5,7 @@ import {
 } from "discord.js";
 import { randomUUID } from "node:crypto";
 import type { ResolvedTrack } from "./types";
+import { evictOldest } from "@orbit/core/collections";
 
 /**
  * Bounded, single-use search results.
@@ -60,8 +61,7 @@ export class MusicSearchSessions {
       tracks: input.tracks.slice(0, 5),
     };
     this.sessions.set(session.id, session);
-    while (this.sessions.size > this.maxSessions)
-      this.sessions.delete(this.sessions.keys().next().value!);
+    while (this.sessions.size > this.maxSessions) evictOldest(this.sessions);
     return session;
   }
 

@@ -64,6 +64,21 @@ type Authority = {
 export type { ResolvedTrack } from "./types";
 
 export class MusicService {
+  /**
+   * Null until Lavalink connects; every music operation needs the real thing.
+   *
+   * Nine sites read it as `this.backend!`, which asserted the connection
+   * without checking it. It held because each of those paths calls
+   * `controllable()` first, and that throws. Reading it through here means a
+   * new path that forgets to check gets that same message rather than a
+   * TypeError on `.players` of null.
+   */
+  private requireBackend(): MusicBackend {
+    if (!this.backend)
+      throw new Error("Lavalink is not configured. See docs/MUSIC.md.");
+    return this.backend;
+  }
+
   readonly backend: MusicBackend | null;
   private sessions = new Map<string, MusicState>();
   /** Explicit `/search` selections, scoped to this bot process. */
@@ -437,8 +452,14 @@ export class MusicService {
    */
   private async leaveWhenIdle(guildId: string, reason: IdleReason) {
     if (!this.backend) return;
+    /*
+     * Pinned, not re-read: the closure runs later, and a reconnect between
+     * now and then would otherwise leave the voice channel on a backend that
+     * is no longer the one this guild was playing on.
+     */
+    const backend = this.backend;
     await this.locked(guildId, async () => {
-      const player = this.backend!.players.get(guildId);
+      const player = backend.players.get(guildId);
       if (!player) return;
       // The reason decides what "still idle" means. An `alone` departure is the
       // empty-channel policy: it has to happen even while audio is still playing,
@@ -471,7 +492,7 @@ export class MusicService {
           );
         }
       }
-      await this.backend!.leaveVoiceChannel(guildId);
+      await backend.leaveVoiceChannel(guildId);
       this.sessions.set(guildId, emptyMusic());
       await this.persist(guildId);
       logger.info({ guildId, reason }, "Left voice after the queue went idle");
@@ -623,9 +644,9 @@ export class MusicService {
         const tracks = chosen.map((t: LavalinkTrack) => this.describe(t));
         return this.enqueue(member, authority, tracks);
       }
-      const player = this.backend!.players.get(guild.id);
+      const player = this.requireBackend().players.get(guild.id);
       if (input.action === "stop" && !player) {
-        await this.backend!.leaveVoiceChannel(guild.id);
+        await this.requireBackend().leaveVoiceChannel(guild.id);
         if (authority.me.voice.channelId)
           await this.voiceConnector.clearStaleVoice(guild.id, guild.shardId);
         this.sessions.set(guild.id, emptyMusic());
@@ -658,18 +679,23 @@ export class MusicService {
         case "stop":
           // Explicit stop is the one path that leaves immediately.
           this.sessions.set(guild.id, emptyMusic());
-          await this.backend!.leaveVoiceChannel(guild.id);
+          await this.requireBackend().leaveVoiceChannel(guild.id);
           break;
-        case "volume":
+        case "volume": {
+          const volume = input.volume;
+          // `Number.isInteger` is not a type predicate, so the range check and
+          // the type check are written out separately.
           if (
-            !Number.isInteger(input.volume) ||
-            input.volume! < 0 ||
-            input.volume! > 100
+            typeof volume !== "number" ||
+            !Number.isInteger(volume) ||
+            volume < 0 ||
+            volume > 100
           )
             throw new Error("Volume must be from 0 to 100.");
-          await player.setGlobalVolume(input.volume!);
-          state.volume = input.volume!;
+          await player.setGlobalVolume(volume);
+          state.volume = volume;
           break;
+        }
         case "seek":
           if (!state.current)
             throw new Error(
@@ -836,7 +862,7 @@ export class MusicService {
     // does not cancel an empty-channel timer unless a human is back: otherwise a
     // queue trickling into an abandoned channel would keep the bot there forever.
     this.cancelQueueIdle(guild.id);
-    let player = this.backend!.players.get(guild.id);
+    let player = this.requireBackend().players.get(guild.id);
     assertMusicQueueAdmission(
       state,
       member.id,
@@ -847,7 +873,7 @@ export class MusicService {
     if (!player) {
       const categories = sponsorBlockCategories();
       player = await joinMusicVoice(
-        this.backend!,
+        this.requireBackend(),
         this.voiceConnector,
         {
           guildId: guild.id,
@@ -944,9 +970,11 @@ export class MusicService {
     this.sessions.delete(guildId);
     this.searches.forgetGuild(guildId);
     if (!this.backend) return;
+    // Pinned for the same reason as in leaveWhenIdle.
+    const backend = this.backend;
     await this.locked(guildId, async () => {
-      if (!this.backend!.players.has(guildId)) return;
-      await this.backend!.leaveVoiceChannel(guildId);
+      if (!backend.players.has(guildId)) return;
+      await backend.leaveVoiceChannel(guildId);
       logger.info(
         { guildId },
         "Left voice after the bot was removed from a guild"

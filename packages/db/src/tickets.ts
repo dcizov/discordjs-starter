@@ -537,7 +537,9 @@ export async function deleteTicket(guildId: string, id: string): Promise<void> {
   if (isDemo()) {
     await demoTransaction((state) => {
       const row = state.tickets?.[id];
-      if (row && row.guildId === guildId) delete state.tickets![id];
+      // `row` came out of `state.tickets`, so finding one proves the map is there.
+      if (row && row.guildId === guildId && state.tickets)
+        delete state.tickets[id];
     });
     return;
   }

@@ -215,9 +215,11 @@ export function dealEmbed(
 
 /** The title is the comparison link; never add that same page as another button. */
 export function dealLinkRow(result: GameDeal, seenLinks = new Set<string>()) {
-  const offer = providerUrl(result.offer?.url),
+  const deal = result.offer;
+  const offer = providerUrl(deal?.url),
     comparison = providerUrl(result.game.url);
   if (
+    !deal ||
     !offer ||
     offer.length > 512 ||
     offer === comparison ||
@@ -231,7 +233,7 @@ export function dealLinkRow(result: GameDeal, seenLinks = new Set<string>()) {
       {
         type: 2 as const,
         style: 5 as const,
-        label: safeText(`Shop at ${result.offer!.shop.name}`, 80),
+        label: safeText(`Shop at ${deal.shop.name}`, 80),
         url: offer,
       },
     ],

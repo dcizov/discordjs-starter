@@ -60,14 +60,18 @@ export function ModuleSetupBanner({ module }: { module: ModuleKey }) {
         >
           Channels & permissions
         </Button>
-        {MODULE_GUIDE[module] && (
-          <Link
-            href={MODULE_GUIDE[module]!.href}
-            className="text-[11px] text-primary underline-offset-2 hover:underline"
-          >
-            {MODULE_GUIDE[module]!.label}
-          </Link>
-        )}
+        {(() => {
+          const guide = MODULE_GUIDE[module];
+          if (!guide) return null;
+          return (
+            <Link
+              href={guide.href}
+              className="text-[11px] text-primary underline-offset-2 hover:underline"
+            >
+              {guide.label}
+            </Link>
+          );
+        })()}
       </div>
     </Card>
   );

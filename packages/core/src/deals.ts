@@ -93,14 +93,14 @@ export async function collectDeals(
       (await api.prices([game.id], data.region, data.stores)).get(game.id) ??
       [];
     const results = offers
-      .map((offer): GameDeal => ({
+      .map((offer): GameDeal & { offer: NonNullable<GameDeal["offer"]> } => ({
         game,
         offer,
         country: data.region,
         checkedAt: new Date().toISOString(),
       }))
       .filter((result) => eligibleDeal(result, data));
-    results.sort((a, b) => a.offer!.price.amountInt - b.offer!.price.amountInt);
+    results.sort((a, b) => a.offer.price.amountInt - b.offer.price.amountInt);
     return results.length ? [dealItem(results[0])] : [];
   }
   const popular = await api.popular();

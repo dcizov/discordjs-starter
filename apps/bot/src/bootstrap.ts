@@ -56,11 +56,23 @@ export async function startBot() {
   let stopping: Promise<void> | undefined;
 
   async function initialize() {
+    /*
+     * `initialize` only runs from the ClientReady handler, so the user is
+     * populated — but nothing said so, and three sites read `client.user!`.
+     * Checking once here means the rest of the function uses a real value and
+     * a client that somehow arrives without one fails with a reason instead of
+     * a TypeError on `.id` of null.
+     */
+    const user = client.user;
+    if (!user)
+      throw new Error(
+        "Discord reported ready without a bot user; cannot initialize services"
+      );
     logger.info(
-      { userId: client.user!.id, guilds: client.guilds.cache.size },
+      { userId: user.id, guilds: client.guilds.cache.size },
       "Discord gateway connected; initializing bot services"
     );
-    if (client.user!.id !== required("DISCORD_CLIENT_ID"))
+    if (user.id !== required("DISCORD_CLIENT_ID"))
       throw new Error(
         "DISCORD_CLIENT_ID does not match the logged-in bot. Use the application ID belonging to DISCORD_TOKEN, then register commands in that application."
       );
@@ -70,7 +82,7 @@ export async function startBot() {
       // `setPresence` returns the presence object, not a promise, and a gateway
       // that closes mid-set throws synchronously.
       try {
-        client.user!.setPresence(presence);
+        user.setPresence(presence);
         logger.info({ presence: note }, "Bot presence applied");
       } catch (error) {
         logger.warn(
@@ -101,7 +113,7 @@ export async function startBot() {
     });
     logger.info(
       {
-        userId: client.user!.id,
+        userId: user.id,
         guilds: client.guilds.cache.size,
         actionQueue: "discord-actions",
       },

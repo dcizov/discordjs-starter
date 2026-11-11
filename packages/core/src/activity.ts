@@ -43,8 +43,12 @@ export function calendarKey(value: string | number | Date, timeZone: string) {
     month: "2-digit",
     day: "2-digit",
   }).formatToParts(date);
-  const part = (type: string) =>
-    parts.find((entry) => entry.type === type)!.value;
+  const part = (type: string) => {
+    const found = parts.find((entry) => entry.type === type);
+    if (!found)
+      throw new Error(`Invalid activity timestamp: no ${type} in ${timeZone}`);
+    return found.value;
+  };
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 /** Add calendar dates, NOT 24-hour intervals to zoned instants (DST days vary in length). */

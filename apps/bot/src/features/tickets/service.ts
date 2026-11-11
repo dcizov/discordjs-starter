@@ -116,6 +116,18 @@ export async function createTicketChannel(
       // overwrites only need to keep everyone else out.
       [];
 
+  /*
+   * The overwrite below is what lets the bot see the channel it just made, so
+   * an unknown own-id is a hard stop rather than something to assert past.
+   * `guild.members.me` is the guild's view of the bot and `client.user` the
+   * gateway's; either can be the one that is populated.
+   */
+  const botId = guild.members.me?.id ?? guild.client.user?.id;
+  if (!botId)
+    throw new Error(
+      "Orbit's own member id is unavailable; cannot set ticket channel permissions"
+    );
+
   try {
     const channel = await guild.channels.create({
       name: ticketChannelName(input.number, input.subject),
@@ -143,7 +155,7 @@ export async function createTicketChannel(
         // The bot must be able to see its own channel: staff overwrites are
         // not guaranteed to include it.
         {
-          id: guild.members.me?.id ?? guild.client.user!.id,
+          id: botId,
           type: OverwriteType.Member,
           allow: permissionFlags([
             "ViewChannel",

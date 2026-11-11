@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { evictOldest } from "./collections";
 
 const guildSchema = z.object({
   id: z.string().regex(/^\d{17,20}$/),
@@ -114,7 +115,7 @@ export class DiscordPermissionClient {
     this.state.entries.delete(key);
     this.state.entries.set(key, entry);
     while (this.state.entries.size > this.maxEntries)
-      this.state.entries.delete(this.state.entries.keys().next().value!);
+      evictOldest(this.state.entries);
   }
   /**
    * `maxAgeMs` is how old a verified snapshot may be before Discord is asked

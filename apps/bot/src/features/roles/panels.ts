@@ -159,7 +159,9 @@ export async function publishPanel(
   let message = panel.data.messageId
     ? await channel.messages.fetch(panel.data.messageId).catch(() => null)
     : null;
-  if (message?.author.id !== client.user!.id) message = null;
+  // `me` is this bot's own guild member, already fetched above; `client.user`
+  // is the same identity read off the gateway cache and asserted past.
+  if (message?.author.id !== me.id) message = null;
   if (message)
     await message.edit({
       embeds: [embed],

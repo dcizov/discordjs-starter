@@ -18,10 +18,11 @@ export async function handleMusicSearchPick(
   i: StringSelectMenuInteraction,
   music: MusicService
 ) {
-  if (!i.guildId) return;
+  if (!i.guild) return;
+  const guild = i.guild;
   const session = music.searches.claim(
     i.customId.slice(SEARCH_SELECT_PREFIX.length),
-    { guildId: i.guildId, userId: i.user.id }
+    { guildId: guild.id, userId: i.user.id }
   );
   if (!session) {
     await i
@@ -58,7 +59,7 @@ export async function handleMusicSearchPick(
     return;
   }
   try {
-    const member = await i.guild!.members.fetch({
+    const member = await guild.members.fetch({
       user: i.user.id,
       force: true,
     });

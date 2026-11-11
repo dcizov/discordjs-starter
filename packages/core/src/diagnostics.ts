@@ -9,13 +9,11 @@ export function diagnosticText(
   let text = value;
   // Replace known credentials before truncation, including values containing whitespace.
   const secrets = Object.entries(environment)
-    .filter(
-      ([key, secret]) =>
-        /TOKEN|SECRET|PASSWORD|(?:^|_)KEY$|DATABASE_URL|REDIS_URL/i.test(key) &&
-        secret &&
-        secret.length > 0
+    .filter(([key]) =>
+      /TOKEN|SECRET|PASSWORD|(?:^|_)KEY$|DATABASE_URL|REDIS_URL/i.test(key)
     )
-    .map(([, secret]) => secret!)
+    .map(([, secret]) => secret)
+    .filter((secret): secret is string => !!secret && secret.length > 0)
     .sort((a, b) => b.length - a.length);
   for (const secret of secrets) {
     for (const representation of new Set([
@@ -126,8 +124,9 @@ export function parseClientFailureGroups(
       if (groups.length >= maxGroups) continue;
       indexByReason.set(key, groups.length);
       groups.push({ clients: [client], reason });
-    } else if (!groups[existing]!.clients.includes(client)) {
-      groups[existing]!.clients.push(client);
+    } else {
+      const group = groups[existing];
+      if (group && !group.clients.includes(client)) group.clients.push(client);
     }
   }
   return groups;

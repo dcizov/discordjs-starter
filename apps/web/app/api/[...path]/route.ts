@@ -853,7 +853,7 @@ async function handle(req: Request, context: Context) {
         if (isDemo()) {
           const r = await reserveDelivery({
             guildId,
-            sourceId: id!,
+            sourceId: resource.id,
             feedIdentity: feedIdentity(resource),
             externalId: `test-${randomUUID()}`,
             title: `Test message from ${resource.name}`,
@@ -937,9 +937,15 @@ async function handle(req: Request, context: Context) {
         path[5] === "webhook" &&
         kind === "source"
       ) {
+        /*
+         * `resource` is only fetched when the path carried an id, so its id is
+         * the same value without the assertion. Two sites below read `id!`,
+         * which is true only because of the `resource &&` guard above.
+         */
+        const sourceId = resource.id;
         if (isDemo())
           return NextResponse.json({
-            url: `/api/webhooks/${id}`,
+            url: `/api/webhooks/${sourceId}`,
             secret: "demo-only-not-a-live-webhook",
             demo: true,
           });
@@ -947,7 +953,7 @@ async function handle(req: Request, context: Context) {
         await database()
           .db.insert(schema.webhookSecrets)
           .values({
-            sourceId: id!,
+            sourceId,
             guildId,
             secret: encrypt(secret, required("APP_SECRET")),
           })
@@ -962,7 +968,7 @@ async function handle(req: Request, context: Context) {
           })
           .where(
             and(
-              eq(schema.resources.id, id!),
+              eq(schema.resources.id, sourceId),
               eq(schema.resources.guildId, guildId)
             )
           );
@@ -1000,23 +1006,40 @@ async function handle(req: Request, context: Context) {
         if (!r.ok)
           throw new HttpError(400, "Recipient must be a member of this server");
       }
-      const result = await economyTransaction({
+      /*
+       * Built per transaction type rather than as one object with three
+       * optional fields: a transfer without a recipient, or a purchase without
+       * an item, is not a request that should reach the ledger at all, and the
+       * union now says so at compile time instead of being asserted past.
+       */
+      const base = {
         guildId,
         userId: actor.id,
         userName: actor.name,
-        type,
         key: `dashboard-${actor.id}-${key}`,
-        toUserId,
-        amount:
-          type === "transfer"
-            ? z.number().int().positive().max(100000000).parse(input.amount)
-            : undefined,
-        itemId:
-          type === "purchase"
-            ? z.string().uuid().parse(input.itemId)
-            : undefined,
         note: z.string().max(200).optional().parse(input.note),
-      });
+      };
+      const result = await economyTransaction(
+        type === "transfer"
+          ? {
+              ...base,
+              type: "transfer",
+              toUserId: snowflake.parse(input.toUserId),
+              amount: z
+                .number()
+                .int()
+                .positive()
+                .max(100000000)
+                .parse(input.amount),
+            }
+          : type === "purchase"
+            ? {
+                ...base,
+                type: "purchase",
+                itemId: z.string().uuid().parse(input.itemId),
+              }
+            : { ...base, type }
+      );
       if (result.roleId && !isDemo())
         await enqueueAction(
           guildId,

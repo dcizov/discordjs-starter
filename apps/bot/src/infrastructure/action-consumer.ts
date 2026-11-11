@@ -123,7 +123,18 @@ export async function executeDashboardAction(
             .setTimestamp(),
         ],
         allowedMentions: { parse: [] },
-        nonce: fingerprint(guildId, source.id, job.id!).slice(0, 24),
+        /*
+         * `enforceNonce` exists so that retrying this same job does not post
+         * the message twice, which means the nonce has to be the same on
+         * every attempt. The job id is what makes it so; without one, the
+         * job's own name and target are, which is why the fallback is built
+         * from those rather than from something random.
+         */
+        nonce: fingerprint(
+          guildId,
+          source.id,
+          job.id ?? `${job.name}:${job.data.sourceId}`
+        ).slice(0, 24),
         enforceNonce: true,
       });
       return { messageId: message.id };

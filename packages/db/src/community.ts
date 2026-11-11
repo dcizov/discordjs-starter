@@ -32,7 +32,16 @@ type Tx = Parameters<
 >[0];
 const serialize = <T>(value: unknown): T => JSON.parse(JSON.stringify(value));
 const table = s.communityPosts;
-function assertGuild(guild: Guild | undefined, kind?: CommunityKind) {
+/*
+ * An assertion function, not a plain check: after it returns, the caller's
+ * `guild` is a `Guild`, so `mutate(post, guild!)` becomes `mutate(post, guild)`.
+ * The three non-null assertions it replaces were standing on exactly this
+ * guarantee, but nothing in the signature said so.
+ */
+function assertGuild(
+  guild: Guild | undefined,
+  kind?: CommunityKind
+): asserts guild is Guild {
   if (!guild?.installed) throw new Error("Install Orbit in this server first.");
   if (kind && guild.config.modules[communityModule(kind)] !== true)
     throw new Error(
@@ -49,7 +58,7 @@ async function lockGuild(tx: Tx, guildId: string, kind?: CommunityKind) {
     ? serialize<Guild>({ ...row, config: configSchema.parse(row.config) })
     : undefined;
   assertGuild(guild, kind);
-  return guild!;
+  return guild;
 }
 const predicate = (guildId: string, id: string) =>
   and(eq(table.guildId, guildId), eq(table.id, id));
@@ -118,7 +127,7 @@ async function change(
         throw new Error(
           "Publication limit reached: at most 10 posts per server per hour. Try later."
         );
-      mutate(post, guild!);
+      mutate(post, guild);
       post.version++;
       post.updatedAt = now;
       state.audit.unshift({
@@ -160,7 +169,7 @@ async function change(
           "Publication limit reached: at most 10 posts per server per hour. Try later."
         );
     }
-    mutate(post, guild!);
+    mutate(post, guild);
     post.version++;
     post.updatedAt = now;
     await tx
@@ -293,7 +302,7 @@ export async function createCommunityPost(
       const guild = state.guilds.find((g) => g.id === guildId);
       assertGuild(guild, data.kind);
       if (
-        !guild!.channels.some(
+        !guild.channels.some(
           (c) => c.id === data.channelId && isCommunityChannel(c, true)
         )
       )
@@ -541,7 +550,10 @@ export async function deleteCommunityPost(
         throw new CommunityConflict(
           "Cancel the schedule or wait for publication to settle before deleting the record."
         );
-      state.communityPosts = state.communityPosts!.filter((row) => row !== p);
+      // `p` came out of this array, so finding it proves the array is there.
+      state.communityPosts = (state.communityPosts ?? []).filter(
+        (row) => row !== p
+      );
       state.audit.unshift({
         id: randomUUID(),
         guildId,

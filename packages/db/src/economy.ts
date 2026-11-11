@@ -5,6 +5,16 @@ import { randomUUID } from "node:crypto";
 import { database } from "./client";
 import { demoTransaction } from "./demo";
 import * as s from "./schema";
+/*
+ * A discriminated union, not one flat optional-everything shape.
+ *
+ * The fields a transaction needs depend on which transaction it is: a purchase
+ * has an item and a transfer has a recipient, and there is no such thing as a
+ * transfer without one. Modelling that as five optional fields meant every
+ * read had to assert — `i.toUserId!`, `i.itemId!`, `i.amount!`, six times —
+ * and the assertion was checked by nothing. Narrowing on `type` now produces
+ * the fields that type actually has.
+ */
 export type EconomyInput = {
   guildId: string;
   userId: string;
@@ -15,14 +25,18 @@ export type EconomyInput = {
    */
   userAvatar?: string | null;
   key: string;
-  type: "daily" | "activity" | "transfer" | "purchase";
-  toUserId?: string;
-  toUserName?: string;
-  toUserAvatar?: string | null;
-  amount?: number;
-  itemId?: string;
   note?: string;
-};
+} & (
+  | { type: "daily" | "activity" }
+  | {
+      type: "transfer";
+      toUserId: string;
+      toUserName?: string;
+      toUserAvatar?: string | null;
+      amount: number;
+    }
+  | { type: "purchase"; itemId: string; amount?: number }
+);
 export type EconomyResult = {
   balance: number;
   amount: number;
@@ -31,6 +45,27 @@ export type EconomyResult = {
   roleId?: string;
   replayed?: boolean;
 };
+/*
+ * What the transaction moves. Grants come from configuration; a transfer moves
+ * the amount it was given; a purchase costs what the item costs.
+ *
+ * Written as a switch over the union so that adding a transaction type is a
+ * compile error here rather than a silent fall-through to 0. The two call
+ * sites that used to spell this out as a nested ternary had already drifted
+ * into being two copies.
+ */
+function amountFor(i: EconomyInput, c: GuildConfig) {
+  switch (i.type) {
+    case "daily":
+      return c.economy.dailyAmount;
+    case "activity":
+      return c.economy.activityAmount;
+    case "transfer":
+      return -i.amount;
+    case "purchase":
+      return -(i.amount ?? 0);
+  }
+}
 const DAY = 86400000;
 function checkInput(i: EconomyInput) {
   if (!i.key || i.key.length > 160)
@@ -49,9 +84,9 @@ function payload(i: EconomyInput) {
   return JSON.stringify([
     i.type,
     i.userId,
-    i.toUserId ?? "",
-    i.amount ?? 0,
-    i.itemId ?? "",
+    i.type === "transfer" ? i.toUserId : "",
+    i.type === "transfer" ? i.amount : 0,
+    i.type === "purchase" ? i.itemId : "",
   ]);
 }
 function allowed(
@@ -133,12 +168,7 @@ export async function economyTransaction(
             l.type === "activity"
         )?.createdAt ?? null;
       allowed(g.config, i, a, now, lastActivity);
-      let amount =
-        i.type === "daily"
-          ? g.config.economy.dailyAmount
-          : i.type === "activity"
-            ? g.config.economy.activityAmount
-            : -(i.amount ?? 0);
+      let amount = amountFor(i, g.config);
       let item;
       if (i.type === "purchase") {
         item = d.resources.find(
@@ -168,8 +198,8 @@ export async function economyTransaction(
         if (!b) {
           b = {
             guildId: i.guildId,
-            userId: i.toUserId!,
-            name: i.toUserName ?? i.toUserId!,
+            userId: i.toUserId,
+            name: i.toUserName ?? i.toUserId,
             avatar: i.toUserAvatar ?? null,
             balance: 0,
             lastDaily: null,
@@ -191,7 +221,13 @@ export async function economyTransaction(
         d.inventory[invkey] = (d.inventory[invkey] ?? 0) + 1;
       }
       d.ledger.unshift(
-        makeEntry(i, i.userId, amount, i.toUserId ?? null, date)
+        makeEntry(
+          i,
+          i.userId,
+          amount,
+          i.type === "transfer" ? i.toUserId : null,
+          date
+        )
       );
       const result = {
         balance: a.balance,
@@ -261,12 +297,7 @@ export async function economyTransaction(
       now,
       a.lastActivity?.toISOString() ?? null
     );
-    let amount =
-      i.type === "daily"
-        ? g.config.economy.dailyAmount
-        : i.type === "activity"
-          ? g.config.economy.activityAmount
-          : -(i.amount ?? 0);
+    let amount = amountFor(i, g.config);
     let item;
     if (i.type === "purchase") {
       [item] = await tx
@@ -274,7 +305,7 @@ export async function economyTransaction(
         .from(s.resources)
         .where(
           and(
-            eq(s.resources.id, i.itemId!),
+            eq(s.resources.id, i.itemId),
             eq(s.resources.guildId, i.guildId),
             eq(s.resources.kind, "shop"),
             eq(s.resources.enabled, true)
@@ -331,7 +362,7 @@ export async function economyTransaction(
         .where(
           and(
             eq(s.accounts.guildId, i.guildId),
-            eq(s.accounts.userId, i.toUserId!)
+            eq(s.accounts.userId, i.toUserId)
           )
         )
         .for("update");
@@ -343,11 +374,11 @@ export async function economyTransaction(
         .where(
           and(
             eq(s.accounts.guildId, i.guildId),
-            eq(s.accounts.userId, i.toUserId!)
+            eq(s.accounts.userId, i.toUserId)
           )
         );
       await tx.insert(s.ledger).values({
-        ...makeEntry(i, i.toUserId!, -amount, i.userId, date),
+        ...makeEntry(i, i.toUserId, -amount, i.userId, date),
         createdAt: date,
       });
     }
@@ -384,7 +415,13 @@ export async function economyTransaction(
           set: { quantity: sql`${s.inventory.quantity}+1` },
         });
     }
-    const entry = makeEntry(i, i.userId, amount, i.toUserId ?? null, date);
+    const entry = makeEntry(
+      i,
+      i.userId,
+      amount,
+      i.type === "transfer" ? i.toUserId : null,
+      date
+    );
     await tx.insert(s.ledger).values({ ...entry, createdAt: date });
     const result: EconomyResult = {
       balance: a.balance + amount,

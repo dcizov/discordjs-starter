@@ -1,5 +1,6 @@
 import type { GameDeal } from "@orbit/core/deal-types";
 import { safeText } from "@orbit/core";
+import { evictOldest } from "@orbit/core/collections";
 
 const gameId = /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i;
 const normalize = (value: string) =>
@@ -43,9 +44,7 @@ export class DealGameSelection {
       .map(({ game }) => ({
         id: game.id.toLowerCase(),
         title: game.title.trim().replace(/\s+/g, " ").slice(0, 512),
-        year: /^\d{4}-\d{2}-\d{2}$/.test(game.releaseDate ?? "")
-          ? game.releaseDate!.slice(0, 4)
-          : "",
+        year: /^(\d{4})-\d{2}-\d{2}$/.exec(game.releaseDate ?? "")?.[1] ?? "",
       }))
       .filter((game) => safeText(game.title, 512).trim().length > 0);
     if (!fresh.length) return;
@@ -62,7 +61,7 @@ export class DealGameSelection {
     this.searches.delete(key);
     this.searches.set(key, { expires: this.now() + this.ttlMs, games });
     while (this.searches.size > Math.max(1, this.capacity))
-      this.searches.delete(this.searches.keys().next().value!);
+      evictOldest(this.searches);
   }
   choices(guildId: string, userId: string, query: string) {
     const q = normalize(query);

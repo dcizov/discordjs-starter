@@ -204,7 +204,12 @@ export function DataTable<T extends { id: string }>({
   const [hidden, setHidden] = useState<string[]>(() =>
     columns.filter((c) => c.defaultHidden).map((c) => c.key)
   );
-  const server = !!pagination;
+  /*
+   * `pagination !== undefined`, not `!!pagination`: the comparison is what
+   * lets TypeScript narrow `pagination` wherever `server` is checked, so the
+   * call sites below do not need a non-null assertion to reach it.
+   */
+  const server = pagination !== undefined;
   const [clientPage, setClientPage] = useState(0);
   // A client list pages when the caller asked for a size; otherwise it is a
   // complete reference list (channels, roles) and every row renders. A paged
@@ -347,7 +352,7 @@ export function DataTable<T extends { id: string }>({
   }, [columnSignature, hasRowActions, server, columnAt]);
 
   const totalItems = pagination?.total ?? rows.length;
-  const pageIndex = server ? Math.max(0, pagination!.page - 1) : clientPage;
+  const pageIndex = server ? Math.max(0, pagination.page - 1) : clientPage;
   const paginationState = useMemo<PaginationState>(
     () => ({ pageIndex, pageSize: size }),
     [pageIndex, size]
@@ -392,7 +397,7 @@ export function DataTable<T extends { id: string }>({
     onPaginationChange: (updater: Updater<PaginationState>) => {
       const next =
         typeof updater === "function" ? updater(paginationState) : updater;
-      if (server) pagination!.onPage(next.pageIndex + 1);
+      if (server) pagination.onPage(next.pageIndex + 1);
       else setClientPage(next.pageIndex);
     },
     onColumnVisibilityChange: (updater: Updater<ColumnVisibilityState>) => {
@@ -410,7 +415,7 @@ export function DataTable<T extends { id: string }>({
   const pageCount = Math.max(1, Math.ceil(totalItems / size));
   // A filter or a mutation can strand the reader past the last page.
   useEffect(() => {
-    if (server && pagination!.page > pageCount) pagination!.onPage(pageCount);
+    if (server && pagination.page > pageCount) pagination.onPage(pageCount);
     if (!server && clientPage > pageCount - 1) setClientPage(pageCount - 1);
   }, [server, pagination, pageCount, clientPage]);
 
@@ -530,17 +535,25 @@ export function DataTable<T extends { id: string }>({
                   >
                     {headerGroup.headers.map((header) => {
                       const column = columns.find((c) => c.key === header.id);
-                      const serverSortable = !!sort && !!column?.sortKey;
+                      /*
+                       * `serverSort` carries the sort and the key together so
+                       * that using one is proof the other is there; asserting
+                       * `sort!` / `column!.sortKey!` separately only claims it.
+                       */
+                      const serverSort =
+                        sort && column?.sortKey
+                          ? { sort, sortKey: column.sortKey }
+                          : null;
                       const clientSortable = !server && !!column?.sortValue;
-                      const sortable = serverSortable || clientSortable;
+                      const sortable = !!serverSort || clientSortable;
                       const clientEntry = clientSort.find(
                         (entry) => entry.id === header.id
                       );
-                      const active = serverSortable
-                        ? sort!.field === column!.sortKey
+                      const active = serverSort
+                        ? serverSort.sort.field === serverSort.sortKey
                         : !!clientEntry;
-                      const dir = serverSortable
-                        ? sort!.dir
+                      const dir = serverSort
+                        ? serverSort.sort.dir
                         : clientEntry
                           ? clientEntry.desc
                             ? "desc"
@@ -562,15 +575,15 @@ export function DataTable<T extends { id: string }>({
                             column?.className
                           )}
                         >
-                          {sortable ? (
+                          {sortable && column ? (
                             <SortButton
-                              label={column!.label}
+                              label={column.label}
                               active={!!active}
                               dir={active ? dir : undefined}
                               align={column?.align}
                               onClick={() =>
-                                serverSortable
-                                  ? sort!.onChange(column!.sortKey!)
+                                serverSort
+                                  ? serverSort.sort.onChange(serverSort.sortKey)
                                   : table.setSorting((current) => {
                                       const existing = current.find(
                                         (entry) => entry.id === header.id
@@ -685,7 +698,7 @@ export function DataTable<T extends { id: string }>({
             }
             onPage={(next) => {
               const target = Math.min(Math.max(1, next), pageCount);
-              if (server) pagination!.onPage(target);
+              if (server) pagination.onPage(target);
               else setClientPage(target - 1);
             }}
             note={footerNote}

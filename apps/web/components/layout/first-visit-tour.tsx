@@ -160,7 +160,7 @@ export function FirstVisitTour({ replay = 0 }: { replay?: number }) {
               <Button
                 variant="outline"
                 onClick={() => {
-                  navigate(step.page!);
+                  if (step.page) navigate(step.page);
                   close("finished");
                 }}
               >

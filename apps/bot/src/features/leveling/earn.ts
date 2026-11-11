@@ -257,8 +257,14 @@ async function tickGuild(guild: Guild): Promise<number> {
 
     const state = guild.voiceStates.cache.get(session.userId);
     const live = state?.channelId;
-    // Gone, or moved: the session no longer describes reality.
-    if (!live || live !== session.channelId) {
+    /*
+     * Gone, or moved: the session no longer describes reality.
+     *
+     * `state` is checked alongside `live` because a channel id cannot exist
+     * without a voice state; naming both is what lets the eligibility check
+     * below use `state` without asserting it.
+     */
+    if (!state || !live || live !== session.channelId) {
       if (!live) await closeVoiceSession(guild.id, session.userId);
       else await openVoiceSession(guild.id, session.userId, live);
       continue;
@@ -278,7 +284,7 @@ async function tickGuild(guild: Guild): Promise<number> {
       .filter((s) => s.channelId === live)
       .map(presenceOf);
     const eligibility = voiceMemberEligible(
-      presenceOf(state!),
+      presenceOf(state),
       everyone,
       defaultVoiceEligibility
     );

@@ -4,6 +4,7 @@ import { officialJson, UpstreamError } from "./integration-http";
 import { isPublicAddress, safeText } from "./safety";
 import { isIP } from "node:net";
 import type { DealGame, GameDeal, GameOffer } from "./deal-types";
+import { evictOldest } from "./collections";
 
 const text = z.string().max(4000);
 const gameSchema = z.object({
@@ -183,8 +184,7 @@ export class ITADClient {
           },
           ...(body ? { method: "POST", body } : {}),
         });
-        if (this.cache.size >= 1000)
-          this.cache.delete(this.cache.keys().next().value!);
+        if (this.cache.size >= 1000) evictOldest(this.cache);
         this.cache.set(cacheKey, { expires: this.now() + ttlMs, value });
         return value;
       } catch (error) {

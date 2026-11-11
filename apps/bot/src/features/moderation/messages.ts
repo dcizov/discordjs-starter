@@ -9,6 +9,7 @@ import { economyTransaction, getGuild, listResources } from "@orbit/db";
 import type { Message } from "discord.js";
 import { PermissionFlagsBits } from "discord.js";
 import { logCase, moderate } from "./actions";
+import { evictOldest } from "@orbit/core/collections";
 const history = new Map<string, RecentMessage[]>();
 const lastTriggered = new Map<string, number>();
 const locks = new Map<string, Promise<unknown>>();
@@ -109,12 +110,11 @@ async function processMessage(message: Message) {
   if (history.size > 10000)
     for (const [k, v] of history)
       if (!v.length || now - v[v.length - 1].at > 300000) history.delete(k);
-  while (history.size > 10000) history.delete(history.keys().next().value!);
+  while (history.size > 10000) evictOldest(history);
   if (lastTriggered.size > 10000)
     for (const [k, v] of lastTriggered)
       if (now - v > 300000) lastTriggered.delete(k);
-  while (lastTriggered.size > 10000)
-    lastTriggered.delete(lastTriggered.keys().next().value!);
+  while (lastTriggered.size > 10000) evictOldest(lastTriggered);
   if (
     !hit &&
     stored.config.modules.economy &&

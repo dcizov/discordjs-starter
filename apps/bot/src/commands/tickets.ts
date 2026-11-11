@@ -136,10 +136,6 @@ export async function ticketsCommand(context: CommandContext) {
   }
 
   const ticket = await resolveTarget(context);
-  if (!ticket && sub !== "info")
-    throw new Error(
-      "Run this inside a ticket channel, or open one with `/ticket open`."
-    );
 
   const roles = [...member.roles.cache.keys()];
   const staff = isSupport(settings, {
@@ -175,7 +171,17 @@ export async function ticketsCommand(context: CommandContext) {
     return;
   }
 
-  const allowed = mayAct(ticket!, {
+  /*
+   * `/ticket info` is the only subcommand that can run without a ticket, and
+   * it returned above. Everything below acts on one, so narrow here rather
+   * than asserting `ticket!` at each of the ten uses.
+   */
+  if (!ticket)
+    throw new Error(
+      "Run this inside a ticket channel, or open one with `/ticket open`."
+    );
+
+  const allowed = mayAct(ticket, {
     actorId: i.user.id,
     canManageGuild: member.permissions.has(PermissionFlagsBits.ManageGuild),
     isSupportMember: staff,
@@ -185,15 +191,15 @@ export async function ticketsCommand(context: CommandContext) {
     if (!allowed.claim)
       throw new Error(
         allowed.reason ??
-          (ticket!.claimerId
+          (ticket.claimerId
             ? "Someone has already claimed this ticket."
             : "Only support staff can claim a ticket.")
       );
-    const claimed = await claimTicket(guildObj.id, ticket!.id, i.user.id);
+    const claimed = await claimTicket(guildObj.id, ticket.id, i.user.id);
     if (!claimed) throw new Error("This ticket was claimed a moment ago.");
-    if (ticket!.channelId) {
+    if (ticket.channelId) {
       const channel = await guildObj.channels
-        .fetch(ticket!.channelId)
+        .fetch(ticket.channelId)
         .catch(() => null);
       if (channel?.isTextBased() && "send" in channel)
         await (channel as TextChannel)
@@ -216,7 +222,7 @@ export async function ticketsCommand(context: CommandContext) {
     await close(
       i.client,
       guildObj.id,
-      ticket!,
+      ticket,
       i.user.id,
       i.options.getString("reason"),
       settings,
@@ -227,7 +233,7 @@ export async function ticketsCommand(context: CommandContext) {
       }
     );
     await context.reply({
-      description: `Ticket #${ticket!.number} is closed.`,
+      description: `Ticket #${ticket.number} is closed.`,
       tone: "success",
     });
     return;
@@ -238,14 +244,14 @@ export async function ticketsCommand(context: CommandContext) {
       throw new Error(
         allowed.reason ?? "Only support staff can reopen a ticket."
       );
-    const reopened = await reopenTicket(guildObj.id, ticket!.id);
+    const reopened = await reopenTicket(guildObj.id, ticket.id);
     if (!reopened) throw new Error("This ticket is already open.");
     await audit(
       guildObj.id,
       { id: i.user.id, name: i.user.username, avatar: i.user.avatar },
       "ticket.reopen",
-      ticket!.id,
-      `Reopened ticket #${ticket!.number}`
+      ticket.id,
+      `Reopened ticket #${ticket.number}`
     );
     await context.reply({ description: "Reopened.", tone: "success" });
     return;
@@ -269,7 +275,8 @@ async function close(
     // Read first, delete second: once the channel is gone there is nothing
     // left to read, and Discord's retention of a deleted channel is not
     // something to depend on for a support record.
-    const lines = await readTranscriptLines(client, ticket.channelId!);
+    const channelId = ticket.channelId;
+    const lines = await readTranscriptLines(client, channelId);
     if (lines) {
       const rendered = renderTranscript(
         {
@@ -301,7 +308,7 @@ async function close(
   );
 
   if (ticket.channelId && !settings.keepChannelOnClose) {
-    const channel = await deleteChannelById(client, ticket.channelId!);
+    const channel = await deleteChannelById(client, ticket.channelId);
     void channel;
   }
 }

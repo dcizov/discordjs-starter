@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { errorCode, errorMessage } from "@orbit/core/errors";
+import { evictOldest } from "@orbit/core/collections";
 
 /*
  * These helpers replaced 29 `catch (e: any)` clauses. The point of the tests
@@ -63,5 +64,49 @@ describe("errorCode", () => {
     });
     expect(errorCode(missing) === "ENOENT").toBe(true);
     expect(errorCode(new Error("disk on fire")) === "ENOENT").toBe(false);
+  });
+});
+
+describe("evictOldest", () => {
+  it("removes the first-inserted entry", () => {
+    const map = new Map([
+      ["a", 1],
+      ["b", 2],
+      ["c", 3],
+    ]);
+    expect(evictOldest(map)).toBe(true);
+    expect([...map.keys()]).toEqual(["b", "c"]);
+  });
+
+  it("reports false on an empty map and never asks delete for undefined", () => {
+    /*
+     * Observing the key is the point. `map.delete(undefined)` also returns
+     * false, so a version that skipped the emptiness check would pass a
+     * size-only assertion while still calling delete with nothing.
+     */
+    const map = new Map<string, number>();
+    const asked: (string | undefined)[] = [];
+    const realDelete = map.delete.bind(map);
+    map.delete = (key: string) => {
+      asked.push(key);
+      return realDelete(key);
+    };
+    expect(evictOldest(map)).toBe(false);
+    map.set("a", 1);
+    expect(evictOldest(map)).toBe(true);
+    expect(asked).toEqual(["a"]);
+    expect(map.size).toBe(0);
+  });
+
+  it("lets a loop that only checks size terminate", () => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < 5; i++) map.set(`k${i}`, i);
+    let guard = 0;
+    while (map.size > 2 && guard < 100) {
+      evictOldest(map);
+      guard++;
+    }
+    expect(map.size).toBe(2);
+    expect(guard).toBe(3);
   });
 });

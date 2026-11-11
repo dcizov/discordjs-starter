@@ -747,8 +747,10 @@ export function previewTemplate(input: {
         );
     }
     if (c.bindings?.auditChannelKey) {
-      const item = items.find((i) => i.key === c.bindings!.auditChannelKey);
-      const channelId = channelIds.get(c.bindings.auditChannelKey);
+      // Hoisted: a callback cannot use the narrowing from the `if` above.
+      const auditChannelKey = c.bindings.auditChannelKey;
+      const item = items.find((i) => i.key === auditChannelKey);
+      const channelId = channelIds.get(auditChannelKey);
       if (item && item.action !== "skip")
         bindings.push({
           field: "auditChannelId",

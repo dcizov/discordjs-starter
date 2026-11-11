@@ -404,8 +404,14 @@ export function moveItem<T extends { position: number }>(
   const next = items.map((item) => ({ ...item }));
   if (from < 0 || from >= next.length) return next;
   const target = Math.max(0, Math.min(next.length - 1, to));
+  /*
+   * `from` was bounds-checked above, so the splice removed something. Destructure
+   * through a check anyway: this is a reorder, and inserting `undefined` into the
+   * middle of a list is worse than the assertion ever was.
+   */
   const [moved] = next.splice(from, 1);
-  next.splice(target, 0, moved!);
+  if (moved === undefined) return next;
+  next.splice(target, 0, moved);
   return renumber(next);
 }
 
