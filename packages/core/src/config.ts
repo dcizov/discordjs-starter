@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DEAL_QUALITY_DEFAULTS } from "./deal-policy";
 import { defaultTicketConfig, ticketConfigSchema } from "./tickets";
-import type { GuildConfig } from "./types";
+import type { GuildConfig, ResourceKind } from "./types";
 import { LOCALES } from "./locales";
 import { WOW_FOREVER_REGIONS } from "./wow-forever";
 export const snowflake = z
@@ -414,3 +414,43 @@ type Expect<T extends true> = T;
 export type GuildConfigMatchesSchema = Expect<
   Equal<GuildConfig, z.infer<typeof configSchema>>
 >;
+
+/*
+ * Resources: one lookup table, no casts at the call site.
+ *
+ * `resourceSchemas[kind].parse(input)` is an indexed access over a union of
+ * schemas, so TypeScript widens the result to the union of all seven outputs
+ * and loses the connection between `kind` and the shape. Every caller that
+ * needs the one shape it just asked for then has to punch through with
+ * `as any` — which is how saveResource ended up with two of them, and how a
+ * typo in a field name would have been invisible.
+ *
+ * `DataOf` is derived from `resourceSchemas` rather than written out, so it
+ * cannot disagree with the table. `parseResource` returns a union tagged with
+ * the `kind` it was asked for, so `if (parsed.kind === "route")` narrows the
+ * data to the route shape on its own and no caller needs a cast.
+ *
+ * The one cast below is the only place the connection between the table and
+ * the tag is asserted. It holds because the tag is literally the key that
+ * selected the schema.
+ */
+export type DataOf<K extends ResourceKind> = {
+  [P in K]: z.infer<(typeof resourceSchemas)[P]>;
+}[K]["data"];
+
+export type ResourceParse = {
+  [K in ResourceKind]: {
+    kind: K;
+    name: string;
+    enabled: boolean;
+    data: DataOf<K>;
+  };
+}[ResourceKind];
+
+export function parseResource<K extends ResourceKind>(
+  kind: K,
+  input: unknown
+): Extract<ResourceParse, { kind: K }> {
+  const parsed = resourceSchemas[kind].parse(input);
+  return { kind, ...parsed } as Extract<ResourceParse, { kind: K }>;
+}

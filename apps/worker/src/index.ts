@@ -21,6 +21,7 @@ import {
   redisConnection,
   closeRedisConnection,
 } from "@orbit/core/queue";
+import { UpstreamError } from "@orbit/core/integration-http";
 import {
   closeDb,
   database,
@@ -389,7 +390,15 @@ async function main() {
         backoffStrategy: (attempts, type, error) =>
           type === "provider"
             ? Math.max(
-                Number((error as any).retryAfterMs) || 0,
+                /*
+                 * Retry-After is only meaningful for an upstream refusal; for
+                 * anything else the cast silently produced 0 and the
+                 * exponential won. Narrowing to the error that actually carries
+                 * the field keeps that distinction in the type.
+                 */
+                (error instanceof UpstreamError
+                  ? error.retryAfterMs
+                  : undefined) || 0,
                 Math.min(3600000, 10000 * 2 ** (attempts - 1))
               )
             : 3000,

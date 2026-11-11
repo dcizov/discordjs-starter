@@ -38,10 +38,10 @@ export async function fetchFeedText(
   // Pin the validated DNS address for the actual socket; checking DNS alone allows rebinding.
   const agent = new Agent({
     connect: {
-      lookup: ((_host: any, _opts: any, cb: any) => {
-        if (_opts?.all) cb(null, [pinned]);
+      lookup: (_host, opts, cb) => {
+        if (opts.all) cb(null, [pinned]);
         else cb(null, pinned.address, pinned.family);
-      }) as any,
+      },
     },
   });
   try {

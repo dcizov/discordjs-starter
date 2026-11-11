@@ -14,7 +14,7 @@ import {
   assertAssignableRole,
   assertFeedUrl,
   configSchema,
-  resourceSchemas,
+  parseResource,
   safeText,
 } from "@orbit/core";
 import { feedIdentity } from "@orbit/core/feed-identity";
@@ -227,22 +227,22 @@ export async function saveResource(
     throw new Error(
       "Moderation cases are append-only and are created by the bot."
     );
-  const parsed = resourceSchemas[kind].parse(input);
+  const parsed = parseResource(kind, input);
   const guild = await getGuild(guildId);
   if (!guild || !guild.installed)
     throw new Error("The bot is not installed in this server.");
   validateReferences(guild, kind, parsed.data);
-  if (kind === "route") {
+  if (parsed.kind === "route") {
     const sources = await listResources(guildId, "source");
     if (
-      (parsed.data as any).sourceIds.some(
+      parsed.data.sourceIds.some(
         (sid: string) => !sources.some((r) => r.id === sid)
       )
     )
       throw new Error("Routing sources must belong to this server.");
   }
-  if (kind === "source") {
-    const data = parsed.data as any;
+  if (parsed.kind === "source") {
+    const data = parsed.data;
     const prior = id ? await getResource(guildId, id) : null;
     const unchanged =
       prior?.data.adapter === data.adapter &&
@@ -311,7 +311,6 @@ export async function saveResource(
       const resource: Resource = {
         id: id ?? randomUUID(),
         guildId,
-        kind,
         ...parsed,
         data: parsed.data,
         createdAt: existing?.createdAt ?? now.toISOString(),
@@ -339,7 +338,7 @@ export async function saveResource(
     else
       rows = await tx
         .insert(s.resources)
-        .values({ guildId, kind, ...parsed })
+        .values({ guildId, ...parsed })
         .returning();
     if (!rows.length) throw new Error("Resource not found");
     await tx.insert(s.auditLogs).values({ ...entry, createdAt: now });
@@ -581,14 +580,13 @@ export async function recordCase(
   input: unknown,
   actor: Actor
 ) {
-  const p = resourceSchemas.case.parse(input);
+  const p = parseResource("case", input);
   const now = new Date();
   if (isDemo())
     return demoTransaction((d) => {
       const r: Resource = {
         id: randomUUID(),
         guildId,
-        kind: "case",
         ...p,
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
@@ -602,7 +600,7 @@ export async function recordCase(
   return database().db.transaction(async (tx) => {
     const [r] = await tx
       .insert(s.resources)
-      .values({ guildId, kind: "case", ...p })
+      .values({ guildId, ...p })
       .returning();
     await tx.insert(s.auditLogs).values({
       ...newAudit(guildId, actor, "moderated", p.name, p.data.reason),
