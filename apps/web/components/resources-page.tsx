@@ -38,6 +38,7 @@ import { ResourceEditor, kindNames } from "./resource-editor";
 import { NewsPreviewFeed } from "./news-preview-feed";
 import type { NewsCard } from "@orbit/core/news-presentation";
 import { sourceFreshness } from "@orbit/core/source-health";
+import { primingNote, sourcePriming } from "@orbit/core/feed-priming";
 import { Button } from "./ui/button";
 import { ConfirmDialog } from "./ui/confirm-dialog";
 import { TabBar } from "./ui/tabs";
@@ -188,7 +189,15 @@ export function ResourcesPage({
         "POST",
         {}
       );
-      if (type === "test") setTest({ name: r.name, ...result });
+      if (type === "test")
+        // The note is derived here rather than returned by the route so the
+        // recorded Steam fixture, which the browser replay depends on, does
+        // not have to carry a field that only this panel reads.
+        setTest({
+          name: r.name,
+          ...result,
+          primingNote: primingNote(r, result?.count ?? 0),
+        });
       else if (type === "webhook") setWebhook({ name: r.name, ...result });
       else
         toast.success(
@@ -697,6 +706,10 @@ export function ResourcesPage({
                   r,
                   new Date(data.presentation.referenceAt).getTime()
                 );
+                // Priming decides whether the next check posts anything at
+                // all, and it is otherwise invisible: a primed source and an
+                // unprimed one both render as simply "Healthy".
+                const priming = sourcePriming(r);
                 return (
                   <Card key={r.id} className="p-5">
                     <div className="flex items-center justify-between">
@@ -744,9 +757,17 @@ export function ResourcesPage({
                       {r.enabled && freshness.state !== "fresh" && (
                         <Badge tone="amber">{freshness.label}</Badge>
                       )}
+                      {priming.state === "primed" ? (
+                        <Badge>{priming.label}</Badge>
+                      ) : priming.state === "pending" ? (
+                        <Badge tone="amber">{priming.label}</Badge>
+                      ) : null}
                     </div>
                     <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                       {freshness.detail}
+                    </p>
+                    <p className="mt-1 text-[10px] leading-relaxed text-muted-foreground">
+                      {priming.detail}
                     </p>
                     <p className="mt-3 line-clamp-2 min-h-[31px] text-[11px] leading-relaxed text-muted-foreground">
                       {healthy
@@ -1140,6 +1161,17 @@ export function ResourcesPage({
                 : `Source reached successfully. Found ${test?.count ?? 0} recent item${test?.count === 1 ? "" : "s"}. Nothing has been sent to Discord.`}
             </DialogDescription>
           </DialogHeader>
+          {/*
+           * Shown in the open, not behind "Preview details": the finding this
+           * answers is that priming is invisible, so putting the one sentence
+           * that explains it into a collapsed disclosure would only half-fix
+           * that. Stated next to the item count it can be checked against.
+           */}
+          {test?.primingNote ? (
+            <p className="rounded-lg border bg-muted/40 p-3 text-[11px] leading-relaxed text-muted-foreground">
+              {test.primingNote}
+            </p>
+          ) : null}
           {test?.items?.length ? (
             <NewsPreviewFeed items={test.items} sourceName={test.name} />
           ) : (

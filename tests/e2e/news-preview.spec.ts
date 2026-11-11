@@ -70,6 +70,20 @@ test("the Steam preview renders real announcement content without raw markup", a
     dialog.getByText(/Found 4 recent items|The source is reachable/)
   ).toBeVisible();
 
+  /*
+   * Priming used to be invisible: a source that had recorded its back
+   * catalogue and one that had not both rendered as simply "Healthy", so an
+   * operator who added a source and saw no posts could not tell "working,
+   * nothing new" from "still holding the catalogue". The test-flight response
+   * carries 4 items, and this source has never primed, so the panel must say
+   * what the next check will do with them.
+   */
+  await expect(
+    dialog.getByText(
+      /4 items recorded as already seen; new items will post from now on\. Post on first check is 0\./
+    )
+  ).toBeVisible();
+
   const card = dialog.locator("article").first();
   await expect(card).toBeVisible();
 
@@ -244,4 +258,31 @@ test("provider artwork is not blocked by the Content-Security-Policy", async ({
   await expect(
     dialog.locator('[title="This image did not load."]')
   ).toHaveCount(0);
+});
+
+/*
+ * The source row says which side of the priming line it is on.
+ *
+ * This needs no interception: the demo Steam source has never primed, so the
+ * card has to show that its next check will record what is already there and
+ * post none of it. Before this the row showed a single "Healthy" badge for
+ * both states, which is why the test flight was the only place an operator
+ * could even guess.
+ */
+test("an unprimed source row says its next check will prime", async ({
+  page,
+  request,
+}) => {
+  await page.goto(`${root}/news`);
+  await expect(page.locator('[data-hydrated="true"]')).toBeVisible();
+
+  const name = await steamSourceName(request);
+  const card = sourceCard(page, name);
+
+  await expect(card.getByText("Priming on next check")).toBeVisible();
+  await expect(
+    card.getByText(/records what is already there and posts none of it/)
+  ).toBeVisible();
+  // Not the primed wording, which would be the opposite claim.
+  await expect(card.getByText("Primed", { exact: true })).toHaveCount(0);
 });
