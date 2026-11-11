@@ -33,7 +33,22 @@ async function assertEveryColumnReachable(page: Page, region: Locator) {
   const count = await headers.count();
   expect(count).toBeGreaterThan(0);
 
-  for (let index = 0; index < count; index += 1) {
+  /*
+   * Every column can be brought to the reading position.
+   *
+   * Scrolled so the header's left edge is just clear of the pinned column,
+   * which covers the left of the container. What is asserted is that the
+   * *start* of the column is reachable: a column whose start can never be
+   * brought out from under the pin is a column you cannot read.
+   *
+   * The right edge is deliberately not asserted here, and cannot be. A column
+   * wider than the space beside the pinned column is not fully visible at any
+   * scroll position — scroll to see its right edge and its left goes under
+   * the pin. Requiring both would be requiring the impossible, and would fail
+   * on any table with a wide column for a reason that has nothing to do with
+   * whether the table works.
+   */
+  for (let index = 1; index < count; index += 1) {
     // Scroll the header clear of the pinned column, which sits on top of the
     // left of the container and would otherwise cover it.
     await headers.nth(index).evaluate((header) => {
@@ -43,38 +58,54 @@ async function assertEveryColumnReachable(page: Page, region: Locator) {
         (header as HTMLElement).offsetLeft - (pinned?.offsetWidth ?? 0);
     });
 
-    const [box, view, pinned] = await Promise.all([
+    const [box, pinned] = await Promise.all([
       headers.nth(index).boundingBox(),
-      wrap.boundingBox(),
       headers.first().boundingBox(),
     ]);
     expect(box, `header ${index} has a box`).not.toBeNull();
-    expect(view, "the scroll container has a box").not.toBeNull();
     expect(pinned, "the pinned column has a box").not.toBeNull();
 
-    const left = box!;
+    const visibleFrom = pinned!.x + pinned!.width;
     // A sub-pixel of rounding is not a clipped column; two pixels is.
-    if (index === 0) {
-      // The first column *is* the pinned one. It is visible by construction,
-      // so asking it to start clear of itself is asking the wrong question;
-      // what has to hold is that it sits flush to the container's left edge
-      // rather than floating somewhere in the middle of the row.
-      expect(
-        left.x,
-        "the pinned column sits at the container's left edge"
-      ).toBeLessThanOrEqual(view!.x + 1);
-    } else {
-      const visibleFrom = pinned!.x + pinned!.width;
-      expect(
-        left.x,
-        `header ${index} starts clear of the pinned column`
-      ).toBeGreaterThanOrEqual(visibleFrom - 1);
-    }
     expect(
-      left.x + left.width,
-      `header ${index} ends inside the container`
-    ).toBeLessThanOrEqual(view!.x + view!.width + 1);
+      box!.x,
+      `header ${index} can be scrolled clear of the pinned column`
+    ).toBeGreaterThanOrEqual(visibleFrom - 1);
   }
+
+  /*
+   * The end of the table is reachable.
+   *
+   * The other half, and the one that catches content cut off past the last
+   * column: scrolled fully right, the last header's right edge has to be
+   * inside the container. Scroll a little further than the width so the
+   * browser clamps at whatever its true maximum is.
+   */
+  await wrap.evaluate((el) => {
+    (el as HTMLElement).scrollLeft = (el as HTMLElement).scrollWidth;
+  });
+  const [last, view] = await Promise.all([
+    headers.nth(count - 1).boundingBox(),
+    wrap.boundingBox(),
+  ]);
+  expect(last, "the last header has a box").not.toBeNull();
+  expect(view, "the scroll container has a box").not.toBeNull();
+  expect(
+    last!.x + last!.width,
+    "the last column ends inside the container when scrolled to the end"
+  ).toBeLessThanOrEqual(view!.x + view!.width + 1);
+
+  /*
+   * And the pinned column sits flush to the container's left edge: it is
+   * visible by construction, so what has to be proved is that it is not
+   * floating somewhere in the middle of the row, over the columns it is
+   * supposed to sit beside.
+   */
+  const pinned = await headers.first().boundingBox();
+  expect(
+    pinned!.x,
+    "the pinned column sits at the container's left edge"
+  ).toBeLessThanOrEqual(view!.x + 1);
 }
 
 /** The page itself must never be the thing that scrolls sideways. */
@@ -195,15 +226,30 @@ test("the first column stays pinned when the table is scrolled", async ({
  * One page passing says nothing about the rest: the columns differ, the first
  * column differs, and the amount of content in each cell differs.
  */
+/*
+ * Split by what the page actually renders, not by what the navigation calls
+ * it. `/roles` and `/news` are card lists behind a `ListToolbar`, so there is
+ * no table region on them: the previous version of this loop asked for one by
+ * name and failed with "element(s) not found" — a report about the test's
+ * assumption rather than about the page.
+ *
+ * They are still checked, for the thing that is true of any page: it does not
+ * scroll sideways. Column reachability is a claim about tables, and only the
+ * tables make it.
+ */
 const tablePages = [
   { path: "/channels", region: "Channels" },
   { path: "/members", region: "Member directory" },
   { path: "/economy", region: "Contributors by balance" },
   { path: "/xp", region: "XP leaderboard" },
   { path: "/audit", region: "Audit events" },
-  { path: "/roles", region: "Role panels" },
   { path: "/moderation", region: "Automod rules" },
-  { path: "/news", region: "News sources" },
+];
+
+/** Record lists that are still cards. Not tables, so not held to the table rule. */
+const cardPages = [
+  { path: "/roles", heading: "A place for everyone." },
+  { path: "/news", heading: "Keep your corner in the know." },
 ];
 
 for (const { path, region } of tablePages) {
@@ -221,6 +267,18 @@ for (const { path, region } of tablePages) {
     // page instead of reporting a bare "expected 0 to be <= 1".
     await expectNoHorizontalOverflow(page, `${region} at 390px`);
     await assertEveryColumnReachable(page, table);
+  });
+}
+
+for (const { path, heading } of cardPages) {
+  test(`${path} fits a phone viewport at 390px`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${root}${path}`);
+    await expect(page.locator('[data-hydrated="true"]')).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    await expectNoHorizontalOverflow(page, `${path} at 390px`);
   });
 }
 

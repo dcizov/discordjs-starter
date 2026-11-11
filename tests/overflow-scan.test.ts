@@ -245,6 +245,49 @@ describe("scanOverflowOffenders", () => {
   });
 });
 
+/*
+ * The serialisation property.
+ *
+ * `page.evaluate` copies the *source* of the function into the page and runs
+ * it there, where nothing from this module exists. Importing the module and
+ * calling the function cannot detect a breach of that: the bindings resolve
+ * normally, so every test above passes while the page copy throws
+ * `OVERFLOW_TOLERANCE_PX is not defined` — which is what CI reported.
+ *
+ * `new Function` is the same constraint with no browser. A function rebuilt
+ * from its own source in a scope containing only what the page has (the
+ * globals) either runs or names something that is not there.
+ */
+describe("scanOverflowOffenders survives being serialised into a page", () => {
+  it("runs when rebuilt from its own source, with no module scope", () => {
+    const rebuilt = new Function(
+      "return (" + scanOverflowOffenders.toString() + ")"
+    )() as typeof scanOverflowOffenders;
+    render(
+      `<div data-right="480" data-bottom="20" class="wide-card">too wide</div>`
+    );
+    // Throws a ReferenceError if the body names anything from module scope.
+    expect(rebuilt(VIEWPORT)).toEqual(scanOverflowOffenders(VIEWPORT));
+  });
+
+  it("finds the same offenders before and after being rebuilt", () => {
+    const rebuilt = new Function(
+      "return (" + scanOverflowOffenders.toString() + ")"
+    )() as typeof scanOverflowOffenders;
+    render(`
+      <div data-right="900" data-bottom="10" class="way">b</div>
+      <div data-right="400" data-bottom="10" class="slightly">a</div>
+      <div class="wrap" style="overflow-x: auto">
+        <div data-right="1200" data-bottom="10" class="in-scroller">c</div>
+      </div>
+    `);
+    expect(rebuilt(VIEWPORT).map((o) => o.className)).toEqual([
+      "way",
+      "slightly",
+    ]);
+  });
+});
+
 describe("describeOffenders", () => {
   it("names the element, its distance past the line, and its text", () => {
     const offender: OverflowOffender = {
