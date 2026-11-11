@@ -18,6 +18,13 @@ x-app: &app
     # Keep optional music disabled unless credentials are configured.
     LAVALINK_URL: ${LAVALINK_PASSWORD:+lavalink:2333}
     LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:-}
+    # Keep optional WoW: Forever watching off unless credentials are set. These
+    # are declared here, not only in .env, so they also reach the container when
+    # exported in the shell with no .env file. Empty means the watcher stays
+    # silent rather than reporting an error every five minutes.
+    WOW_FOREVER_REGION: ${WOW_FOREVER_REGION:-eu}
+    BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
+    BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
     DEMO_DATA_PATH: /app/.data/demo.json
   init: true
   restart: unless-stopped
