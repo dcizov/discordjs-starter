@@ -37,11 +37,15 @@ jobs:
       - run: npm test
       - run: npm audit --omit=dev --audit-level=moderate
       - run: npm run build
-      - run: npx playwright install --with-deps chromium
+      # Both engines the suite declares. Installing only chromium left the
+      # firefox project launching an executable that was never downloaded, so
+      # every test in it failed at browser start -- 73 failures in which not
+      # one said anything about the dashboard.
+      - run: npx playwright install --with-deps chromium firefox
       # Screenshots are review material, not assertions: this spec always runs
       # when VISUAL_EVIDENCE=1 and the artifact is kept on success too, so a
       # reviewer can inspect the dashboard without a local browser.
-      - run: npx playwright test tests/e2e/screenshots.spec.ts
+      - run: npx playwright test --project=chromium tests/e2e/screenshots.spec.ts
         env:
           VISUAL_EVIDENCE: "1"
       - run: npm run test:e2e

@@ -53,12 +53,23 @@ async function assertEveryColumnReachable(page: Page, region: Locator) {
     expect(pinned, "the pinned column has a box").not.toBeNull();
 
     const left = box!;
-    const visibleFrom = pinned!.x + pinned!.width;
     // A sub-pixel of rounding is not a clipped column; two pixels is.
-    expect(
-      left.x,
-      `header ${index} starts clear of the pinned column`
-    ).toBeGreaterThanOrEqual(visibleFrom - 1);
+    if (index === 0) {
+      // The first column *is* the pinned one. It is visible by construction,
+      // so asking it to start clear of itself is asking the wrong question;
+      // what has to hold is that it sits flush to the container's left edge
+      // rather than floating somewhere in the middle of the row.
+      expect(
+        left.x,
+        "the pinned column sits at the container's left edge"
+      ).toBeLessThanOrEqual(view!.x + 1);
+    } else {
+      const visibleFrom = pinned!.x + pinned!.width;
+      expect(
+        left.x,
+        `header ${index} starts clear of the pinned column`
+      ).toBeGreaterThanOrEqual(visibleFrom - 1);
+    }
     expect(
       left.x + left.width,
       `header ${index} ends inside the container`
@@ -118,7 +129,15 @@ test("the table toolbar is a single row at phone width", async ({ page }) => {
   });
 
   const table = page.getByRole("region", { name: "Channels" });
-  const controls = table.locator('input[type="search"], button');
+  /*
+   * Scoped to the toolbar, not to the table. "Every button in the table"
+   * also matches the sort buttons in each header and the pager in the footer,
+   * which are on the lines they belong to; with those included the assertion
+   * could never hold, and would have been a test that only fails.
+   */
+  const controls = table
+    .locator("[data-table-toolbar]")
+    .locator('input[type="search"], button');
   const count = await controls.count();
   expect(count).toBeGreaterThan(1);
 

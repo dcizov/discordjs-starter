@@ -41,42 +41,57 @@ export async function chooseOption(
 }
 
 /**
- * Choose a value in a table's faceted filter (`table-facet.tsx`).
+ * Set a faceted filter.
  *
- * The popup is a cmdk command list; it is addressed through cmdk's own
- * structural attributes (the same ones `chooseComboboxOption` uses) so the
- * helper does not depend on how the item markup evolves.
- */
-/**
- * Choose a value from a toolbar facet.
+ * Two shapes exist, and the helper works with either rather than making the
+ * caller know which page it is on:
  *
- * Every facet now sits behind the one Filters trigger rather than being its
- * own button, so this opens that trigger and then finds the facet by the name
- * the group is labelled with.
+ * - `DataTable` collapses every facet into one "Filters" trigger, with a group
+ *   per facet. This is the shape that keeps the toolbar to a single row.
+ * - The card lists (news sources, role panels) keep one standalone trigger per
+ *   facet, named for the facet itself.
  *
- * The menu deliberately stays open after a pick — setting two filters in one
- * visit is the common case — so this closes it and asserts on the count the
- * trigger reports, which is the only summary available once the panel is shut.
+ * Both are found by the facet's own name, so a page can move between the two
+ * without the test changing.
  */
 export async function chooseFacet(
   page: Page | Locator,
   name: string,
   option: string
 ) {
-  const trigger = page.getByRole("button", { name: /^Filters/ });
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-  const group = root(page).getByRole("group", { name });
-  await expect(group).toBeVisible();
+  const view = root(page);
   // The option text carries the value and, when the caller knows one, a count:
   // "Needs setup 2". Matching the prefix avoids depending on that suffix.
-  const item = group
-    .locator("[cmdk-item]")
-    .filter({ hasText: new RegExp(`^${option}`) });
-  await expect(item).toHaveCount(1);
-  await item.click();
-  await root(page).keyboard.press("Escape");
-  await expect(trigger).toHaveAccessibleName(/^Filters: 1 of/);
+  const item = (scope: Locator) =>
+    scope.locator("[cmdk-item]").filter({ hasText: new RegExp(`^${option}`) });
+
+  const combined = view.getByRole("button", { name: /^Filters/ });
+  if ((await combined.count()) > 0) {
+    await expect(combined).toBeVisible();
+    await combined.click();
+    const group = view.getByRole("group", { name });
+    await expect(group).toBeVisible();
+    const option_ = item(group);
+    await expect(option_).toHaveCount(1);
+    await option_.click();
+    // The menu deliberately stays open after a pick — setting two filters in
+    // one visit is the common case — so close it and assert on the count the
+    // trigger reports, which is the only summary left once the panel is shut.
+    await view.keyboard.press("Escape");
+    await expect(combined).toHaveAccessibleName(/^Filters: [1-9]/);
+    return;
+  }
+
+  const trigger = view.getByRole("button", { name: new RegExp(`^${name}`) });
+  await expect(trigger).toBeVisible();
+  await trigger.click();
+  const list = view.locator("[cmdk-list]");
+  await expect(list).toBeVisible();
+  const optionItem = item(list);
+  await expect(optionItem).toHaveCount(1);
+  await optionItem.click();
+  await expect(list).toBeHidden();
+  await expect(trigger).toContainText(option);
 }
 
 /** Same, for a searchable combobox: type to narrow, then pick. */

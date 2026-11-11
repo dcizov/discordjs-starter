@@ -460,7 +460,17 @@ export function DataTable<T extends { id: string }>({
        * already short. Search takes the space there is; every facet lives
        * behind the single Filters trigger.
        */}
-      <div className="flex items-center gap-2 border-b px-3 py-2">
+      {/*
+       * `data-table-toolbar` is a test hook, not a style hook. The toolbar is
+       * the part whose height has to stay at one row, and nothing else in the
+       * table may be counted as part of it: the sort buttons live in the
+       * header and the pager in the footer, so a selector wide enough to catch
+       * the toolbar by position also catches those.
+       */}
+      <div
+        data-table-toolbar=""
+        className="flex items-center gap-2 border-b px-3 py-2"
+      >
         {search && (
           <div className="relative min-w-0 flex-1 sm:max-w-[260px]">
             <Search

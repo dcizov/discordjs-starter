@@ -201,20 +201,23 @@ test("the audit log filters by action and pages on the server", async ({
   await expect(table.locator("tbody img")).not.toHaveCount(0);
   await expect(table.locator("tbody")).toContainText("no avatar recorded");
 
-  // Keyboard operation of the faceted filter: open with Enter, type to narrow,
-  // commit with Enter. The trigger then states the active value.
-  const facet = page.getByRole("button", { name: "Filter audit action" });
+  // Keyboard operation of the faceted filter: open the one Filters trigger
+  // with Enter, type to narrow, commit with Enter. The trigger then states how
+  // many of its facets are set.
+  const facet = page.getByRole("button", { name: /^Filters/ });
   await facet.focus();
   await page.keyboard.press("Enter");
+  const group = page.getByRole("group", { name: "Filter audit action" });
+  await expect(group).toBeVisible();
   const list = page.locator("[cmdk-list]");
   await expect(list).toBeVisible();
   await page.locator("[cmdk-input]").focus();
   await page.keyboard.type("Moderated");
   await page.keyboard.press("Enter");
+  await expect(group.getByText("Moderated")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(list).toBeHidden();
-  await expect(
-    page.getByRole("button", { name: "Filter audit action: Moderated" })
-  ).toBeVisible();
+  await expect(facet).toHaveAccessibleName(/^Filters: 1 of/);
   // The filtered answer arrives after the click; wait for the re-rendered rows
   // rather than reading the cells still on screen.
   await expect
@@ -240,11 +243,13 @@ test("the audit log filters by action and pages on the server", async ({
     )
   ).toBe(true);
 
-  // Clearing brings the unfiltered history back in one click.
-  await page.getByRole("button", { name: "Reset" }).click();
-  await expect(
-    page.getByRole("button", { name: "Filter audit action" })
-  ).toBeVisible();
+  // Clearing brings the unfiltered history back in one click. The trigger
+  // drops its count, which is the only summary of "nothing is filtered" left
+  // now that each facet is no longer its own button.
+  await facet.click();
+  await page.getByRole("button", { name: "Reset filters" }).click();
+  await page.keyboard.press("Escape");
+  await expect(facet).toHaveAccessibleName("Filters");
   await expect(footer(table)).toContainText("of 10");
 
   // A search with no matches is not an empty audit log; the controls stay.
@@ -277,17 +282,16 @@ test("the channel list filters by type and keeps its page position", async ({
   await expect(rows.first()).toContainText("The listening room");
   await expect(footer(table)).toContainText("Showing 1–1 of 1");
 
-  // The facet's accessible name reports the applied value, so the state is not
-  // carried by colour alone.
-  await expect(
-    page.getByRole("button", { name: "Filter channel type: Voice" })
-  ).toBeVisible();
+  // The trigger reports how many facets are set, so the state is not carried
+  // by colour alone.
+  const filters = page.getByRole("button", { name: /^Filters/ });
+  await expect(filters).toHaveAccessibleName(/^Filters: 1 of/);
   // The toolbar reset clears the active filter and restores the full list.
-  await page.getByRole("button", { name: "Reset" }).click();
+  await filters.click();
+  await page.getByRole("button", { name: "Reset filters" }).click();
+  await page.keyboard.press("Escape");
+  await expect(filters).toHaveAccessibleName("Filters");
   await expect(rows).toHaveCount(all);
-  await expect(
-    page.getByRole("button", { name: "Filter channel type" })
-  ).toBeVisible();
 });
 
 test("the transaction history exposes type facets and server paging", async ({

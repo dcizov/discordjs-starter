@@ -69,6 +69,30 @@ describe("the toolbar is one row of controls", () => {
     expect(screen.queryByRole("button", { name: /^Filters/ })).toBeNull();
   });
 
+  /*
+   * The toolbar carries a hook so a test can address it without guessing by
+   * position. Pinned because it is load-bearing in two directions: the
+   * one-row assertion in `tables-mobile.spec.ts` selects the toolbar's own
+   * controls through it, and without it that assertion has to widen to "every
+   * button in the table", which picks up the sort buttons in the header and
+   * the pager in the footer and can therefore never pass.
+   */
+  it("marks its toolbar so a test can scope to it", () => {
+    const { container } = render(
+      <DataTable rows={rows} columns={columns} filters={[facet("a", "Alpha")]} />
+    );
+    const toolbar = container.querySelectorAll("[data-table-toolbar]");
+    expect(toolbar).toHaveLength(1);
+    const withinToolbar = within(toolbar[0] as HTMLElement);
+    // The controls the row is made of are inside it.
+    expect(withinToolbar.getAllByRole("button").length).toBeGreaterThan(0);
+    // The pager is not: it is a different row, and the hook exists precisely
+    // so that "the toolbar" does not come to mean "the whole table".
+    expect(
+      withinToolbar.queryByRole("button", { name: /Next page/ })
+    ).toBeNull();
+  });
+
   it("names how many facets are set, so the trigger is not silent", () => {
     render(
       <DataTable
