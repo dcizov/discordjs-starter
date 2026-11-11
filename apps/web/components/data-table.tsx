@@ -25,7 +25,6 @@ import {
   MoreHorizontal,
   Search,
   Settings2,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -40,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { EmptyState, ErrorState, FormSelect, Input } from "./ui/primitives";
-import { FacetFilterButton, type FacetFilter } from "./table-facet";
+import { FiltersMenu, type FacetFilter } from "./table-facet";
 import {
   Table,
   TableBody,
@@ -177,6 +176,14 @@ export type DataTableProps<T extends { id: string }> = {
   rowActivateLabel?: (row: T) => string;
   /** The row to draw as the current one, when activating selects a record. */
   activeRowId?: string | null;
+  /**
+   * Keep the first column pinned while the rest scroll sideways.
+   *
+   * On by default because a row that loses its name is a row you can no longer
+   * identify. Turn it off for a table whose first column is not the identity —
+   * a chevron, a checkbox, a bare index.
+   */
+  pinFirstColumn?: boolean;
 };
 
 export function DataTable<T extends { id: string }>({
@@ -200,6 +207,7 @@ export function DataTable<T extends { id: string }>({
   onRowActivate,
   rowActivateLabel,
   activeRowId = null,
+  pinFirstColumn = true,
 }: DataTableProps<T>) {
   const [hidden, setHidden] = useState<string[]>(() =>
     columns.filter((c) => c.defaultHidden).map((c) => c.key)
@@ -428,6 +436,11 @@ export function DataTable<T extends { id: string }>({
   const activeFilters = filters.filter(
     (facet) => facet.value !== facet.allValue
   );
+  // Three places clear the filters; they must clear the same things.
+  const resetFilters = () => {
+    activeFilters.forEach((facet) => facet.onChange(facet.allValue));
+    if (search) search.onChange("");
+  };
   // A failed fetch is not an empty result: never show "nothing here" for it.
   if (error) return <ErrorState detail={error} onRetry={onRetry} />;
 
@@ -439,49 +452,39 @@ export function DataTable<T extends { id: string }>({
     // the range sentence belongs to the thing it counts.
     <div className="min-w-0" role="region" aria-label={label ?? "Records"}>
       {toolbar}
-      <div className="flex flex-col gap-2 border-b px-3 py-2 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-          {search && (
-            <div className="relative w-full min-w-0 sm:max-w-[260px]">
-              <Search
-                size={13}
-                aria-hidden
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                type="search"
-                value={draft}
-                aria-label={search.label}
-                placeholder={search.placeholder}
-                onChange={(event) => {
-                  setDraft(event.target.value);
-                  setPendingQuery(event.target.value);
-                }}
-                className="h-8 rounded-lg pl-8 text-[11.5px]"
-              />
-            </div>
-          )}
-          {filters.map((facet) => (
-            <FacetFilterButton key={facet.key} facet={facet} />
-          ))}
-          {activeFilters.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 px-2 text-[11.5px] text-muted-foreground"
-              onClick={() => {
-                activeFilters.forEach((facet) =>
-                  facet.onChange(facet.allValue)
-                );
-                if (search) search.onChange("");
+      {/*
+       * One row at every width.
+       *
+       * Each facet used to be its own button, so the toolbar grew by a line per
+       * filter at phone width and pushed the table down a screen that is
+       * already short. Search takes the space there is; every facet lives
+       * behind the single Filters trigger.
+       */}
+      <div className="flex items-center gap-2 border-b px-3 py-2">
+        {search && (
+          <div className="relative min-w-0 flex-1 sm:max-w-[260px]">
+            <Search
+              size={13}
+              aria-hidden
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <Input
+              type="search"
+              value={draft}
+              aria-label={search.label}
+              placeholder={search.placeholder}
+              onChange={(event) => {
+                setDraft(event.target.value);
+                setPendingQuery(event.target.value);
               }}
-            >
-              Reset
-              <X size={12} aria-hidden />
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center gap-2 sm:ml-auto">
+              className="h-8 rounded-lg pl-8 text-[11.5px]"
+            />
+          </div>
+        )}
+        {filters.length > 0 && (
+          <FiltersMenu filters={filters} onResetAll={resetFilters} />
+        )}
+        <div className="ml-auto flex items-center gap-2">
           {actions}
           {hideable.length > 1 && (
             <ColumnMenu
@@ -505,16 +508,7 @@ export function DataTable<T extends { id: string }>({
           description={emptyDescription}
           action={
             activeFilters.length ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  activeFilters.forEach((facet) =>
-                    facet.onChange(facet.allValue)
-                  );
-                  if (search) search.onChange("");
-                }}
-              >
+              <Button variant="outline" size="sm" onClick={resetFilters}>
                 Clear filters
               </Button>
             ) : undefined
@@ -533,7 +527,12 @@ export function DataTable<T extends { id: string }>({
                     key={headerGroup.id}
                     className="hover:bg-transparent"
                   >
-                    {headerGroup.headers.map((header) => {
+                    {headerGroup.headers.map((header, position) => {
+                      // The first visible column stays pinned; see the rule in
+                      // ui/table.tsx. Its index is its position among the
+                      // *visible* headers, so hiding a column moves the pin
+                      // rather than pinning a gap.
+                      const pinnedFirst = position === 0 && pinFirstColumn;
                       const column = columns.find((c) => c.key === header.id);
                       /*
                        * `serverSort` carries the sort and the key together so
@@ -562,6 +561,7 @@ export function DataTable<T extends { id: string }>({
                       return (
                         <TableHead
                           key={header.id}
+                          sticky={pinnedFirst}
                           aria-sort={
                             active
                               ? dir === "asc"
@@ -649,16 +649,17 @@ export function DataTable<T extends { id: string }>({
                     className={cn(
                       onRowActivate &&
                         "cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                      activeRowId === row.original.id && "bg-muted/60"
+                      activeRowId === row.original.id && "bg-muted"
                     )}
                   >
-                    {row.getVisibleCells().map((cell) => {
+                    {row.getVisibleCells().map((cell, position) => {
                       const column = columns.find(
                         (c) => c.key === cell.column.id
                       );
                       return (
                         <TableCell
                           key={cell.id}
+                          sticky={position === 0 && pinFirstColumn}
                           className={cn(
                             cell.column.id === "__actions" && "text-right",
                             column?.align === "right" &&

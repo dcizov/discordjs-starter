@@ -42,33 +42,40 @@ export async function chooseOption(
 /**
  * Choose a value in a table's faceted filter (`table-facet.tsx`).
  *
- * The trigger is a button whose accessible name is the descriptive label, plus
- * the chosen value once a filter is applied. The popup is a cmdk command list;
- * it is addressed through cmdk's own structural attributes (the same ones
- * `chooseComboboxOption` uses) so the helper does not depend on how the item
- * markup evolves. The trigger is still found by its accessible name, which is
- * what a screen-reader user hears.
+ * The popup is a cmdk command list; it is addressed through cmdk's own
+ * structural attributes (the same ones `chooseComboboxOption` uses) so the
+ * helper does not depend on how the item markup evolves.
+ */
+/**
+ * Choose a value from a toolbar facet.
+ *
+ * Every facet now sits behind the one Filters trigger rather than being its
+ * own button, so this opens that trigger and then finds the facet by the name
+ * the group is labelled with.
+ *
+ * The menu deliberately stays open after a pick — setting two filters in one
+ * visit is the common case — so this closes it and asserts on the count the
+ * trigger reports, which is the only summary available once the panel is shut.
  */
 export async function chooseFacet(
   page: Page | Locator,
   name: string,
   option: string
 ) {
-  const trigger = page.getByRole("button", { name: new RegExp(`^${name}`) });
+  const trigger = page.getByRole("button", { name: /^Filters/ });
   await expect(trigger).toBeVisible();
   await trigger.click();
-  const view = root(page);
-  const list = view.locator("[cmdk-list]");
-  await expect(list).toBeVisible();
+  const group = root(page).getByRole("group", { name });
+  await expect(group).toBeVisible();
   // The option text carries the value and, when the caller knows one, a count:
   // "Needs setup 2". Matching the prefix avoids depending on that suffix.
-  const item = list
+  const item = group
     .locator("[cmdk-item]")
     .filter({ hasText: new RegExp(`^${option}`) });
   await expect(item).toHaveCount(1);
   await item.click();
-  await expect(list).toBeHidden();
-  await expect(trigger).toContainText(option);
+  await root(page).keyboard.press("Escape");
+  await expect(trigger).toHaveAccessibleName(/^Filters: 1 of/);
 }
 
 /** Same, for a searchable combobox: type to narrow, then pick. */

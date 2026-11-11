@@ -1,5 +1,26 @@
 import { defineConfig, devices } from "@playwright/test";
 import { resolve } from "node:path";
+
+/**
+ * The specs that run in more than one engine.
+ *
+ * Firefox is a second engine, not a second chance: a layout bug that only
+ * shows up there is still a bug, so these run in both and a failure in either
+ * fails the job. The list is the smoke set — the surfaces most likely to break
+ * differently between engines (tables and their scrolling, popovers, hydration)
+ * rather than the whole suite, which would double the run for little gain.
+ */
+const SMOKE_SPECS = [
+  "tables",
+  "tables-mobile",
+  "members",
+  "dashboard",
+  "accessibility",
+  "hydration",
+  "leveling",
+  "templates",
+];
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -28,7 +49,6 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
-    ...devices["Desktop Chrome"],
     // The dashboard introduction is shown once per person. Browser tests start
     // from an established workspace so they exercise its features; the
     // first-visit experience has its own spec with an empty storage state.
@@ -46,21 +66,35 @@ export default defineConfig({
         },
       ],
     },
-    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
-      ? {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
-          args: [
-            "--no-sandbox",
-            "--disable-dev-shm-usage",
-            "--no-zygote",
-            // The restricted custom headless build can block natively for six
-            // seconds on software-GPU dialog/screencast updates. The app uses
-            // no WebGL; keep this fallback CPU-only, not a longer test timeout.
-            "--disable-gpu",
-          ],
-        }
-      : {},
   },
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+          ? {
+              executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+              args: [
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--no-zygote",
+                // The restricted custom headless build can block natively for
+                // six seconds on software-GPU dialog/screencast updates. The
+                // app uses no WebGL; keep this fallback CPU-only, not a longer
+                // test timeout.
+                "--disable-gpu",
+              ],
+            }
+          : {},
+      },
+    },
+    {
+      name: "firefox",
+      testMatch: SMOKE_SPECS.map((name) => `**/${name}.spec.ts`),
+      use: { ...devices["Desktop Firefox"] },
+    },
+  ],
   webServer: {
     command: "npm start",
     url: "http://localhost:3000",
