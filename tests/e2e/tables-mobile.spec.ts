@@ -248,7 +248,10 @@ const tablePages = [
 
 /** Record lists that are still cards. Not tables, so not held to the table rule. */
 const cardPages = [
-  { path: "/roles", heading: "A place for everyone." },
+  // The page titles, not the straplines under them — `settings.roles.title`
+  // is "Self roles"; "A place for everyone." is its description, and asking
+  // for it by heading name finds nothing.
+  { path: "/roles", heading: "Self roles" },
   { path: "/news", heading: "Keep your corner in the know." },
 ];
 

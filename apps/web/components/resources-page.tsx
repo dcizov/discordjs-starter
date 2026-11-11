@@ -711,13 +711,22 @@ export function ResourcesPage({
                 // all, and it is otherwise invisible: a primed source and an
                 // unprimed one both render as simply "Healthy".
                 const priming = sourcePriming(r);
+                /*
+                 * `min-w-0` on the card and on the group beside it: a grid
+                 * item defaults to `min-width: auto` and refuses to shrink
+                 * below the min-content width of what is inside it, and a
+                 * flex item does the same. One row of badges that could not
+                 * wrap therefore widened the grid track, and the track
+                 * widened the page: at 390px this card measured 379px in a
+                 * 350px column, and the whole dashboard scrolled sideways.
+                 */
                 return (
-                  <Card key={r.id} className="p-5">
+                  <Card key={r.id} className="min-w-0 p-5">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
                         <span
                           className={cn(
-                            "flex size-11 items-center justify-center rounded-xl",
+                            "flex size-11 shrink-0 items-center justify-center rounded-xl",
                             "bg-[#eef0f7] text-slate-700 dark:text-slate-300"
                           )}
                         >
@@ -738,7 +747,16 @@ export function ResourcesPage({
                       </div>
                       {actions(r)}
                     </div>
-                    <div className="mt-5 flex items-center gap-2">
+                    {/*
+                     * Status, freshness and priming are each a badge, and
+                     * they used to sit in one row that could not wrap. Three
+                     * long ones at once ("Healthy", "Priming on next check",
+                     * "Last checked 2 hours ago") made the row's min-content
+                     * wider than the card. Wrapping is what makes the row
+                     * fit; the `min-w-0` above is what stops any future row
+                     * from widening the page instead.
+                     */}
+                    <div className="mt-5 flex flex-wrap items-center gap-2">
                       <Badge tone={healthy ? "green" : "amber"}>
                         <span
                           className={cn(
