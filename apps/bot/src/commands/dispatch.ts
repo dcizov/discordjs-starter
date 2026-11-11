@@ -9,6 +9,7 @@ import { musicCommand } from "./music";
 import { newsCommand } from "./news";
 import { levelingCommand } from "./leveling";
 import { ticketsCommand } from "./tickets";
+import { wowForeverCommand } from "./wowforever";
 import { helpCommand } from "./help";
 import { handleDeals } from "../features/deals/commands";
 
@@ -26,6 +27,8 @@ export async function dispatchCommand(
       return levelingCommand(context);
     case "ticket":
       return ticketsCommand(context);
+    case "wowforever":
+      return wowForeverCommand(context);
     case "poll":
     case "announce":
       return communityCommand(context, client, communityRest);

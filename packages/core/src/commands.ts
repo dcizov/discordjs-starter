@@ -568,4 +568,27 @@ export const commandDefinitions = [
     .addSubcommand((s) =>
       s.setName("info").setDescription("Show the current ticket")
     ),
+  command(
+    "wowforever",
+    "Check WoW: Forever ruleset availability, and watch it for changes"
+  )
+    .addSubcommand((s) =>
+      s
+        .setName("status")
+        .setDescription(
+          "Show whether each WoW: Forever ruleset is up right now"
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("watch")
+        .setDescription(
+          "Announce ruleset outages and recoveries in this channel"
+        )
+    )
+    .addSubcommand((s) =>
+      s
+        .setName("unwatch")
+        .setDescription("Stop announcing ruleset changes in this channel")
+    ),
 ];

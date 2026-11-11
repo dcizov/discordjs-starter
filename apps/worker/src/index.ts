@@ -3,6 +3,11 @@ import type { Resource } from "@orbit/core";
 import { fingerprint, safeText } from "@orbit/core";
 import { feedIdentity } from "@orbit/core/feed-identity";
 import { planFirstFetch } from "@orbit/core/feed-priming";
+import { diffRulesets, type RulesetSnapshot } from "@orbit/core/wow-forever";
+import {
+  foreverCredentials,
+  pollForeverRulesets,
+} from "@orbit/core/wow-forever-client";
 import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { pollDeals, pollSource } from "@orbit/core/feeds";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
@@ -475,6 +480,90 @@ async function main() {
       reconciling = false;
     }
   }
+  /**
+   * Watch WoW: Forever rulesets and announce it when one changes.
+   *
+   * Two rules decide everything here, and both exist to stop this crying wolf:
+   *
+   * **A failed poll is never an event.** No network, a rate limit, a 5xx: the
+   * previous reading is kept and nothing is announced. An outage we cannot
+   * confirm is not an outage, and every monitor that got this wrong trained its
+   * readers to ignore it.
+   *
+   * **The first successful poll sets the baseline and stays quiet.** Without a
+   * prior reading there is nothing to compare against, so "these rulesets are
+   * down" would be a guess about how long they had been down — possibly for
+   * hours before anyone asked. The same reasoning as priming a news source: the
+   * state you discover on arrival is not news.
+   *
+   * State is kept in memory only. A restart re-baselines, which costs one quiet
+   * cycle and is a fair price for not persisting a third party's availability
+   * as if it were ours.
+   */
+  const rulesetBaseline = new Map<string, RulesetSnapshot[]>();
+  async function watchRulesets() {
+    const credentials = foreverCredentials(process.env);
+    // Unconfigured is a supported state, not a fault: skip without logging, so
+    // a deployment that does not use this stays quiet.
+    if (!credentials) return;
+    const watchers = (await listInstalledGuilds()).filter(
+      (guild) => guild.config.wowForever?.channelId
+    );
+    if (!watchers.length) return;
+
+    // One poll per region, shared by every guild watching it, rather than one
+    // poll per guild: the answer is identical and the API is rate limited.
+    const byRegion = new Map<string, { id: string; channelId: string }[]>();
+    for (const guild of watchers) {
+      const region = guild.config.wowForever.region || "eu";
+      const targets = byRegion.get(region) ?? [];
+      targets.push({
+        id: guild.id,
+        channelId: guild.config.wowForever.channelId,
+      });
+      byRegion.set(region, targets);
+    }
+
+    for (const [region, targets] of byRegion) {
+      const { snapshots, error } = await pollForeverRulesets({
+        ...credentials,
+        region: region as never,
+      });
+      if (error) {
+        logger.warn({ region, error }, "WoW Forever ruleset check failed");
+        continue;
+      }
+      const previous = rulesetBaseline.get(region);
+      rulesetBaseline.set(region, snapshots);
+      if (!previous) continue;
+      const flips = diffRulesets(previous, snapshots);
+      if (!flips.length) continue;
+      const lines = flips.map((flip) =>
+        flip.to === "up"
+          ? `**${flip.name}** is reporting up again.`
+          : `**${flip.name}** is not reporting up${flip.raw ? ` — reported ${flip.raw}` : ""}.`
+      );
+      for (const target of targets) {
+        await rest
+          .post(Routes.channelMessages(target.channelId), {
+            body: {
+              content: [
+                `WoW: Forever ruleset update (${region.toUpperCase()}):`,
+                ...lines,
+                "_The Battle.net API's view of the ruleset, not of the login servers. A faction lock or throttled creation looks the same in game and is invisible here._",
+              ].join("\n"),
+            },
+          })
+          .catch((e) =>
+            logger.warn(
+              { guildId: target.id, error: e.message },
+              "WoW Forever announcement failed"
+            )
+          );
+      }
+    }
+  }
+
   await reconcile();
   const timer = setInterval(
     () =>
@@ -483,12 +572,31 @@ async function main() {
       ),
     60000
   );
+  /**
+   * Five minutes. Ruleset outages have so far lasted minutes to hours, so a
+   * tighter loop would buy precision nobody needs and spend rate limit doing
+   * it; an hour would make a short outage invisible.
+   */
+  const rulesetTimer = setInterval(
+    () =>
+      void watchRulesets().catch((e) =>
+        logger.error({ error: e.message }, "WoW Forever ruleset watch failed")
+      ),
+    300000
+  );
+  void watchRulesets().catch((e) =>
+    logger.warn(
+      { error: e.message },
+      "WoW Forever ruleset watch failed on start"
+    )
+  );
   logger.info("Orbit workers are ready");
   let stopping = false;
   async function shutdown() {
     if (stopping) return;
     stopping = true;
     clearInterval(timer);
+    clearInterval(rulesetTimer);
     await worker.close();
     await queue.close();
     await actionQueue.close();

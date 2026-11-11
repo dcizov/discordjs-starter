@@ -71,6 +71,12 @@ export type GuildConfig = {
     escalationThreshold: number;
     escalationMinutes: number;
   };
+  /** WoW: Forever ruleset watching. Kept in step with `configSchema` by hand. */
+  wowForever: {
+    /** Empty when nobody is watching. */
+    channelId: string;
+    region: string;
+  };
   /**
    * Leveling. Kept in step with the `xp` section of the config schema by hand,
    * which is a duplication worth knowing about: adding a field means editing

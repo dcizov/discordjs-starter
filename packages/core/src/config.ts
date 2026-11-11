@@ -166,6 +166,24 @@ export const configSchema = z
         rewards: [],
         rewardStack: true,
       }),
+    /*
+     * WoW: Forever ruleset watching.
+     *
+     * Deliberately not a module: this has no dashboard surface, no permissions
+     * of its own and nothing to configure beyond where to announce. Making it a
+     * module would add a migration, a permissions entry and a nav item to
+     * carry two fields.
+     *
+     * `channelId` empty means nobody is watching. `region` is per guild because
+     * rulesets are per region — an EU guild watching US rulesets would be told
+     * about outages nobody they know can experience.
+     */
+    wowForever: z
+      .object({
+        channelId: optionalId,
+        region: z.enum(["us", "eu", "kr", "tw"]).default("eu"),
+      })
+      .default({ channelId: "", region: "eu" }),
     dashboard: z
       .object({
         showHero: z.boolean(),
