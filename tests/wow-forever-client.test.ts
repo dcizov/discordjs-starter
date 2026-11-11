@@ -167,3 +167,42 @@ describe("pollForeverRulesets", () => {
     ]);
   });
 });
+
+/*
+ * The library itself, as opposed to everything above, which is a fake.
+ *
+ * Every other test here injects a `ForeverApi`, so all of them pass even with
+ * the package entirely absent. That is precisely how a broken lockfile reached
+ * a deployed bot: `npm ci` silently installed nothing, every unit test stayed
+ * green, and `/wowforever status` answered
+ * "Cannot find package '@pinta365/blizzard_api'".
+ *
+ * It is a declared dependency, so it must always be installed -- the optional
+ * part of this feature is whether credentials exist, not whether the package
+ * does. If that ever changes and it becomes a true optionalDependency, this
+ * test is the thing that should change with it.
+ */
+describe("the library behind the wrapper", () => {
+  it("is installed, so an incomplete tree fails here rather than in production", async () => {
+    await expect(import("@pinta365/blizzard_api")).resolves.toBeTruthy();
+  });
+
+  /*
+   * The wrapper was written against the library's source, not against a
+   * running client, so the shape it assumes was never actually checked. These
+   * two names are the whole surface it uses.
+   */
+  it("exposes the client and the two ruleset calls the wrapper uses", async () => {
+    const { createClient } = await import("@pinta365/blizzard_api");
+    const client = createClient({
+      region: "eu",
+      clientId: "id",
+      clientSecret: "secret",
+    });
+    expect(typeof client.wowForever?.rulesets).toBe("function");
+    expect(typeof client.wowForever?.ruleset).toBe("function");
+    // The wrapper calls each with no context argument: the client binds it.
+    expect(client.wowForever.rulesets.length).toBe(0);
+    expect(client.wowForever.ruleset.length).toBe(1);
+  });
+});
