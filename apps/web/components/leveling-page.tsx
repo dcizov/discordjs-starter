@@ -30,6 +30,7 @@ import {
 } from "./ui/primitives";
 import { TabBar, TabPanel } from "./ui/tabs";
 import { useWorkspace } from "./workspace";
+import { errorMessage } from "@orbit/core/errors";
 
 type XpRow = XpLeaderRow & {
   username: string | null;
@@ -59,8 +60,8 @@ export function LevelingPage() {
       toast.success(
         on ? "Levels are on. Let people grow into it." : "Levels paused."
       );
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error(errorMessage(e));
     }
   }
 
@@ -447,8 +448,8 @@ function LevelingSettings({
               await saveConfig({ ...data.guild.config, xp: v });
               toast.success("Leveling settings saved");
               onClose();
-            } catch (err: any) {
-              toast.error(err.message);
+            } catch (err) {
+              toast.error(errorMessage(err));
             } finally {
               setBusy(false);
             }

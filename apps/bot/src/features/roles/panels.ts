@@ -5,6 +5,7 @@ import {
   planRoleAssignment,
   safeText,
 } from "@orbit/core";
+import { errorMessage } from "@orbit/core/errors";
 import { redisConnection } from "@orbit/core/queue";
 import { getGuild, getResource, listResources, saveResource } from "@orbit/db";
 import type {
@@ -291,11 +292,11 @@ export async function handleReaction(
           : [...new Set([...selected, id])]
         : selected.filter((r) => r !== id);
     });
-  } catch (e: any) {
+  } catch (e) {
     if (added) await reaction.users.remove(user.id).catch(() => {});
     await member
       .send({
-        content: safeText(`I couldn’t update your role: ${e.message}`),
+        content: safeText(`I couldn’t update your role: ${errorMessage(e)}`),
         allowedMentions: { parse: [] },
       })
       .catch(() => {});

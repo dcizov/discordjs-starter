@@ -3,6 +3,7 @@ import {
   messageContentHash,
   type RecentMessage,
 } from "@orbit/core/automod";
+import { errorMessage } from "@orbit/core/errors";
 import { logger } from "@orbit/core/logger";
 import { economyTransaction, getGuild, listResources } from "@orbit/db";
 import type { Message } from "discord.js";
@@ -91,9 +92,9 @@ async function processMessage(message: Message) {
               moderator: "Orbit automod",
               reason: `Automod: ${triggered.name}`,
             });
-        } catch (e: any) {
+        } catch (e) {
           logger.warn(
-            { guildId: guild.id, ruleId: triggered.id, error: e.message },
+            { guildId: guild.id, ruleId: triggered.id, error: errorMessage(e) },
             "Automoderation action unavailable"
           );
         }
@@ -129,10 +130,10 @@ async function processMessage(message: Message) {
         type: "activity",
         key: `activity-${message.id}`,
       });
-    } catch (e: any) {
-      if (!e.message.includes("cooldown"))
+    } catch (e) {
+      if (!errorMessage(e).includes("cooldown"))
         logger.warn(
-          { guildId: guild.id, error: e.message },
+          { guildId: guild.id, error: errorMessage(e) },
           "Activity reward unavailable"
         );
     }

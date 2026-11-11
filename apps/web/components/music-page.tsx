@@ -32,6 +32,7 @@ import { MUSIC_SEARCH_PROVIDERS } from "@orbit/core/music-sources";
 import { CoverArt } from "./artwork";
 import { IdentityCell } from "./identity/identity-cell";
 import { Button } from "./ui/button";
+import { errorMessage } from "@orbit/core/errors";
 import {
   Dialog,
   DialogContent,
@@ -128,9 +129,9 @@ export function MusicPage() {
         toast.success(
           "Request sent to the bot. Nothing is confirmed until the playing state updates."
         );
-    } catch (e: any) {
-      if (e instanceof BotActionPendingError) toast.warning(e.message);
-      else toast.error(e.message);
+    } catch (e) {
+      if (e instanceof BotActionPendingError) toast.warning(errorMessage(e));
+      else toast.error(errorMessage(e));
     } finally {
       inflight.current = false;
       setBusy(null);
@@ -427,7 +428,7 @@ export function MusicPage() {
                 } catch (error) {
                   toast.error(
                     error instanceof Error
-                      ? error.message
+                      ? errorMessage(error)
                       : "Volume change failed"
                   );
                   throw error;
@@ -645,8 +646,8 @@ export function MusicPage() {
                 await saveConfig({ ...data.guild.config, music: config });
                 toast.success("Music settings saved");
                 setSettings(false);
-              } catch (e: any) {
-                toast.error(e.message);
+              } catch (e) {
+                toast.error(errorMessage(e));
               } finally {
                 setBusy(null);
               }

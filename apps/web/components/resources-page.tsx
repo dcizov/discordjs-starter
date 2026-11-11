@@ -38,6 +38,7 @@ import { ResourceEditor, kindNames } from "./resource-editor";
 import { NewsPreviewFeed } from "./news-preview-feed";
 import type { NewsCard } from "@orbit/core/news-presentation";
 import { sourceFreshness } from "@orbit/core/source-health";
+import { errorMessage } from "@orbit/core/errors";
 import { primingNote, sourcePriming } from "@orbit/core/feed-priming";
 import { Button } from "./ui/button";
 import { ConfirmDialog } from "./ui/confirm-dialog";
@@ -177,8 +178,8 @@ export function ResourcesPage({
       });
       await refresh();
       toast.success(`${r.name} ${v ? "enabled" : "paused"}`);
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error(errorMessage(e));
     }
   }
   async function action(r: Resource, type: string) {
@@ -210,8 +211,8 @@ export function ResourcesPage({
               : "Test delivery queued"
         );
       await refresh();
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setTestBusy(null);
     }
@@ -309,8 +310,8 @@ export function ResourcesPage({
                   modules: { ...data.guild.config.modules, [section]: true },
                 });
                 toast.success("Module enabled");
-              } catch (e: any) {
-                toast.error(e.message);
+              } catch (e) {
+                toast.error(errorMessage(e));
               }
             }}
           >
@@ -1139,8 +1140,8 @@ export function ResourcesPage({
             await refresh();
             toast.success("Configuration deleted");
             setDeleting(null);
-          } catch (e: any) {
-            toast.error(e.message);
+          } catch (e) {
+            toast.error(errorMessage(e));
           } finally {
             setDeleteBusy(false);
           }

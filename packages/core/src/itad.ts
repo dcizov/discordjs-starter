@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isDemo, required } from "./environment";
-import { officialJson } from "./integration-http";
+import { officialJson, UpstreamError } from "./integration-http";
 import { isPublicAddress, safeText } from "./safety";
 import { isIP } from "node:net";
 import type { DealGame, GameDeal, GameOffer } from "./deal-types";
@@ -187,8 +187,8 @@ export class ITADClient {
           this.cache.delete(this.cache.keys().next().value!);
         this.cache.set(cacheKey, { expires: this.now() + ttlMs, value });
         return value;
-      } catch (error: any) {
-        if (error.status === 429)
+      } catch (error) {
+        if (error instanceof UpstreamError && error.status === 429)
           this.retryAt =
             this.now() +
             Math.max(1000, Math.min(error.retryAfterMs ?? 60000, 86400000));

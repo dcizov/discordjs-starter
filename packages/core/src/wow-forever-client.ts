@@ -100,7 +100,9 @@ export async function createForeverApi(
  * index said it exists, and a hole in the list is a different thing from a
  * ruleset that is not there.
  */
-export async function readRulesets(api: ForeverApi): Promise<RulesetSnapshot[]> {
+export async function readRulesets(
+  api: ForeverApi
+): Promise<RulesetSnapshot[]> {
   const index = await api.rulesets();
   const ids = (index?.rulesets ?? [])
     .map((entry) => entry?.id)
@@ -109,7 +111,8 @@ export async function readRulesets(api: ForeverApi): Promise<RulesetSnapshot[]> 
   const settled = await Promise.allSettled(ids.map((id) => api.ruleset(id)));
   return ids.map((id, position) => {
     const outcome = settled[position];
-    if (outcome.status === "rejected") return { id, name: `Ruleset ${id}`, raw: "", state: "unknown" };
+    if (outcome.status === "rejected")
+      return { id, name: `Ruleset ${id}`, raw: "", state: "unknown" };
     const body = outcome.value;
     return {
       id,
@@ -149,7 +152,9 @@ export async function pollForeverRulesets(
    * reaching the network — a unit test that calls Blizzard is a unit test that
    * fails for reasons that have nothing to do with the code under test.
    */
-  create: (credentials: ForeverCredentials) => Promise<ForeverApi> = createForeverApi
+  create: (
+    credentials: ForeverCredentials
+  ) => Promise<ForeverApi> = createForeverApi
 ): Promise<PollResult> {
   if (!credentials)
     return pollError(
@@ -159,6 +164,8 @@ export async function pollForeverRulesets(
     const api = await create(credentials);
     return { snapshots: await readRulesets(api), error: null };
   } catch (e) {
-    return pollError(e instanceof Error ? e.message : "The ruleset check failed.");
+    return pollError(
+      e instanceof Error ? e.message : "The ruleset check failed."
+    );
   }
 }

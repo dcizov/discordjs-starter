@@ -48,7 +48,9 @@ describe("parseResource narrowing", () => {
 
   it("carries the data for the kind it was asked for", () => {
     const route = parseResource("route", routeInput);
-    expect(route.data.sourceIds).toEqual(["00000000-0000-4000-8000-000000000000"]);
+    expect(route.data.sourceIds).toEqual([
+      "00000000-0000-4000-8000-000000000000",
+    ]);
 
     const source = parseResource("source", sourceInput);
     expect(source.data.adapter).toBe("rss");
@@ -59,14 +61,18 @@ describe("parseResource narrowing", () => {
     const parsed = parseResource("route", routeInput);
     // Assigned through the narrowed branch: this is the pattern the casts
     // replaced, and it is what fails if the tag ever stops narrowing.
-    const sourceIds: string[] = parsed.kind === "route" ? parsed.data.sourceIds : [];
+    const sourceIds: string[] =
+      parsed.kind === "route" ? parsed.data.sourceIds : [];
     expect(sourceIds).toHaveLength(1);
   });
 
   it("narrows a union kind the same way", () => {
     const kinds = ["route", "source"] as const;
     for (const kind of kinds) {
-      const parsed = parseResource(kind, kind === "route" ? routeInput : sourceInput);
+      const parsed = parseResource(
+        kind,
+        kind === "route" ? routeInput : sourceInput
+      );
       if (parsed.kind === "route") expect(parsed.data.sourceIds).toBeDefined();
       else expect(parsed.data.adapter).toBeDefined();
     }

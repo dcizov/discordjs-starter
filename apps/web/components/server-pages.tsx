@@ -35,6 +35,7 @@ import { CopyButton } from "./copy-button";
 import { IdentityCell } from "./identity/identity-cell";
 import { personFields } from "@/lib/person";
 import { ActorAvatar } from "./identity/actor-avatar";
+import { errorMessage } from "@orbit/core/errors";
 import {
   AUDIT_ACTIONS,
   auditActionLabel,
@@ -665,8 +666,8 @@ export function SettingsPage() {
     try {
       await saveConfig(v, false);
       toast.success("A few thoughtful changes. All saved.");
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

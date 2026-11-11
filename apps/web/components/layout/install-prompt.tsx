@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Badge } from "../ui/primitives";
 import { Button } from "../ui/button";
 import { useWorkspace } from "../workspace";
+import { errorMessage } from "@orbit/core/errors";
 export function InstallPrompt() {
   const { data, api } = useWorkspace();
   return (
@@ -32,8 +33,8 @@ export function InstallPrompt() {
             const r = await api("/invite");
             if (r.url) window.location.href = r.url;
             else toast.error("The Discord application ID is not configured.");
-          } catch (e: any) {
-            toast.error(e.message);
+          } catch (e) {
+            toast.error(errorMessage(e));
           }
         }}
       >

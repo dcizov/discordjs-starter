@@ -11,6 +11,7 @@ import {
 import { isDemo, required, validateEnvironment } from "@orbit/core/environment";
 import { pollDeals, pollSource } from "@orbit/core/feeds";
 import { errorDiagnostic } from "@orbit/core/diagnostics";
+import { errorMessage } from "@orbit/core/errors";
 import { logger } from "@orbit/core/logger";
 import { assertDeliverableDeal } from "@orbit/core/deal-policy";
 import { dealEmbed, dealLinkRow } from "@orbit/core/deal-presentation";
@@ -204,8 +205,8 @@ async function main() {
         },
         "Source checked"
       );
-    } catch (e: any) {
-      await updateSourceHealth(source, false, safeText(e.message, 300));
+    } catch (e) {
+      await updateSourceHealth(source, false, safeText(errorMessage(e), 300));
       throw e;
     }
   }
@@ -359,7 +360,7 @@ async function main() {
           detail: `Delivered ${safeText(row.title, 100)} to #${channel.name}`,
         });
         return {};
-      } catch (e: any) {
+      } catch (e) {
         await tx
           .update(schema.deliveries)
           .set({
@@ -367,10 +368,10 @@ async function main() {
               job.attemptsMade + 1 >= (job.opts.attempts ?? 5)
                 ? "failed"
                 : "pending",
-            error: safeText(e.message, 500),
+            error: safeText(errorMessage(e), 500),
           })
           .where(eq(schema.deliveries.id, row.id));
-        return { error: safeText(e.message, 500) };
+        return { error: safeText(errorMessage(e), 500) };
       }
     });
     if (result.error) throw new Error(result.error);

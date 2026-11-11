@@ -31,6 +31,7 @@ import { PageHeader } from "./page-header";
 import { ResourceEditor } from "./resource-editor";
 import { Button } from "./ui/button";
 import { ConfirmDialog } from "./ui/confirm-dialog";
+import { errorMessage } from "@orbit/core/errors";
 import {
   Dialog,
   DialogContent,
@@ -113,8 +114,8 @@ export function EconomyPage() {
       toast.success(
         `A little stardust for your day. +${number(r.amount)} ${ec.currency}!`
       );
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -444,8 +445,8 @@ export function EconomyPage() {
                                 toast.success(
                                   item.enabled ? "Item paused" : "Item enabled"
                                 );
-                              } catch (e: any) {
-                                toast.error(e.message);
+                              } catch (e) {
+                                toast.error(errorMessage(e));
                               }
                             }}
                           >
@@ -682,8 +683,8 @@ export function EconomyPage() {
                   await refresh();
                   toast.success(`A little more ${purchase.name} in your life.`);
                   setPurchase(null);
-                } catch (e: any) {
-                  toast.error(e.message);
+                } catch (e) {
+                  toast.error(errorMessage(e));
                 } finally {
                   setBusy(false);
                 }
@@ -712,8 +713,8 @@ export function EconomyPage() {
             await refresh();
             toast.success("Shop item deleted");
             setDeleting(null);
-          } catch (e: any) {
-            toast.error(e.message);
+          } catch (e) {
+            toast.error(errorMessage(e));
           } finally {
             setBusy(false);
           }
@@ -746,8 +747,8 @@ function TransferDialog({ onClose }: { onClose: () => void }) {
       await refresh();
       toast.success("A little appreciation, delivered.");
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -869,8 +870,8 @@ function EconomySettings({ onClose }: { onClose: () => void }) {
               await saveConfig({ ...data.guild.config, economy: v });
               toast.success("Economy settings saved");
               onClose();
-            } catch (e: any) {
-              toast.error(e.message);
+            } catch (e) {
+              toast.error(errorMessage(e));
             } finally {
               setBusy(false);
             }

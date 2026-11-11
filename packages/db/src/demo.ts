@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createDemo, DEMO_SEED_VERSION, type DemoState } from "./demo-seed";
+import { errorCode } from "@orbit/core/errors";
 // Demo is deliberately single-process. Live services always use PostgreSQL.
 const globalStore = globalThis as unknown as {
   orbitDemoLock?: Promise<unknown>;
@@ -19,8 +20,8 @@ async function load(): Promise<DemoState> {
   let parsed: DemoState;
   try {
     parsed = JSON.parse(await readFile(storePath(), "utf8"));
-  } catch (e: any) {
-    if (e.code !== "ENOENT") throw e;
+  } catch (e) {
+    if (errorCode(e) !== "ENOENT") throw e;
     return createDemo();
   }
   /*
@@ -55,8 +56,8 @@ export async function demoRead(): Promise<DemoState> {
   await (globalStore.orbitDemoLock ?? Promise.resolve());
   try {
     return JSON.parse(await readFile(storePath(), "utf8"));
-  } catch (e: any) {
-    if (e.code !== "ENOENT") throw e;
+  } catch (e) {
+    if (errorCode(e) !== "ENOENT") throw e;
     return demoTransaction((d) => structuredClone(d));
   }
 }

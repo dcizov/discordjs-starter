@@ -7,6 +7,7 @@ import type { DashboardData } from "@orbit/core";
 import { request } from "@/lib/utils";
 import { useWorkspace } from "../workspace";
 import { IdentityImage } from "./image";
+import { errorMessage } from "@orbit/core/errors";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,7 +40,7 @@ export function AccountMenu({ onModeInfo }: { onModeInfo: () => void }) {
       );
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "Profile refresh failed"
+        error instanceof Error ? errorMessage(error) : "Profile refresh failed"
       );
     } finally {
       setProfileBusy(false);
@@ -93,8 +94,8 @@ export function AccountMenu({ onModeInfo }: { onModeInfo: () => void }) {
             try {
               await request("/api/auth/logout", "POST", {});
               router.push("/login");
-            } catch (e: any) {
-              toast.error(e.message);
+            } catch (e) {
+              toast.error(errorMessage(e));
             }
           }}
         >

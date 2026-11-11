@@ -1,4 +1,5 @@
 import { assertModeratable, safeText } from "@orbit/core";
+import { errorMessage } from "@orbit/core/errors";
 import { logger } from "@orbit/core/logger";
 import { getGuild, listResources, recordCase } from "@orbit/db";
 import type { Guild, GuildMember } from "discord.js";
@@ -170,9 +171,9 @@ export async function logCase(
       ],
       allowedMentions: { parse: [] },
     });
-  } catch (e: any) {
+  } catch (e) {
     logger.warn(
-      { guildId: guild.id, error: e.message },
+      { guildId: guild.id, error: errorMessage(e) },
       "Moderation audit channel unavailable"
     );
   }

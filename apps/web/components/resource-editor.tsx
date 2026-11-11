@@ -36,6 +36,7 @@ import { Combobox } from "./ui/combobox";
 import { Switch } from "./ui/switch";
 import { RoleDot } from "./role-badge";
 import { useWorkspace } from "./workspace";
+import { errorMessage } from "@orbit/core/errors";
 export const kindNames: Record<ResourceKind, string> = {
   panel: "role panel",
   rule: "automod rule",
@@ -224,8 +225,8 @@ export function ResourceEditor({
       toast.success(`${resource ? "Updated" : "Created"} ${kindNames[kind]}`);
       onSaved?.();
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -1029,8 +1030,8 @@ function GameSearch({
     setLoading(true);
     try {
       setResults(await api(`/game-search?q=${encodeURIComponent(q)}`));
-    } catch (e: any) {
-      toast.error(e.message);
+    } catch (e) {
+      toast.error(errorMessage(e));
     } finally {
       setLoading(false);
     }

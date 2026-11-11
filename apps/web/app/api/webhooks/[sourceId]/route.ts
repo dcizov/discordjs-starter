@@ -1,4 +1,6 @@
 import { rateLimit, readBounded } from "@/lib/security";
+import { HttpError } from "@/lib/auth";
+import { errorMessage } from "@orbit/core/errors";
 import { decrypt, safeText, verifyWebhook } from "@orbit/core";
 import { isDemo, required } from "@orbit/core/environment";
 import { safeLink } from "@orbit/core/feeds";
@@ -76,15 +78,17 @@ export async function POST(
       { accepted, duplicate: accepted === 0 },
       { status: 202 }
     );
-  } catch (e: any) {
+  } catch (e) {
     return NextResponse.json(
       {
         error:
           e instanceof z.ZodError
             ? "Invalid event payload"
-            : (e.message ?? "Webhook rejected"),
+            : errorMessage(e, "Webhook rejected"),
       },
-      { status: e.status ?? 400 }
+      // HttpError carries the status the caller should see; anything else is
+      // a fault of ours and 400 was the previous fallback.
+      { status: e instanceof HttpError ? e.status : 400 }
     );
   }
 }
