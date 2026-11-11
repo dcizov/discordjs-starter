@@ -172,14 +172,51 @@ test("the table toolbar is a single row at phone width", async ({ page }) => {
   const count = await controls.count();
   expect(count).toBeGreaterThan(1);
 
-  const tops: number[] = [];
+  const boxes: { top: number; bottom: number }[] = [];
   for (let index = 0; index < count; index += 1) {
     const box = await controls.nth(index).boundingBox();
     expect(box, `control ${index} is laid out`).not.toBeNull();
-    tops.push(Math.round(box!.y));
+    boxes.push({ top: box!.y, bottom: box!.y + box!.height });
   }
-  // One row: no control sits below another.
-  expect(new Set(tops).size, `toolbar rows: ${tops.join(", ")}`).toBe(1);
+
+  /*
+   * One row: every control overlaps *every other one* vertically.
+   *
+   * Pairwise, not "each against the union of them all". Two stacked rows both
+   * sit inside their own union, so a whole-span comparison passes on two rows
+   * just as happily as on one; only pairwise overlap can tell them apart.
+   *
+   * Overlap rather than equal tops, because equal tops is not what the layout
+   * engine promises. Controls of different heights sharing a baseline have
+   * tops that differ by a fraction of a pixel, and rounding those to integers
+   * turned a single row into two — CI reported `toolbar rows: 447, 447, 446`,
+   * which is one row measured three times, not two rows.
+   */
+  for (let i = 0; i < boxes.length; i += 1) {
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const a = boxes[i];
+      const b = boxes[j];
+      expect(
+        a.top < b.bottom && b.top < a.bottom,
+        `controls ${i} (${a.top}–${a.bottom}) and ${j} (${b.top}–${b.bottom}) ` +
+          `share a line: the toolbar is more than one row`
+      ).toBe(true);
+    }
+  }
+
+  /*
+   * And the toolbar is only as tall as one row of them.
+   *
+   * The overlap check alone would pass on two rows if a control happened to be
+   * tall enough to bridge them. One row of `h-8` controls plus the row's own
+   * vertical padding is well under this; two rows plus the gap are not.
+   */
+  const bar = await table.locator("[data-table-toolbar]").boundingBox();
+  expect(bar, "the toolbar has a box").not.toBeNull();
+  const tallest = Math.max(...boxes.map((b) => b.bottom - b.top));
+  expect(bar!.height, "the toolbar is one control tall").toBeLessThan(
+    tallest + 24
+  );
 });
 
 /*
