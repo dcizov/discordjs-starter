@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import { describeOffenders, scanOverflowOffenders } from "./overflow-scan";
 
 /**
  * Choose an option from a shadcn/Radix `Select` or `Combobox`.
@@ -118,4 +119,38 @@ export async function setTheme(page: Page, theme: "light" | "dark" | "system") {
   await expect(page.locator("html")).toHaveClass(
     theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*/
   );
+}
+
+/**
+ * Assert the document does not scroll sideways, naming what overflows.
+ *
+ * Replaces the bare `scrollWidth <= innerWidth` comparison. That form answered
+ * "no" and stopped there, so every failure came back as a manual bisect in a
+ * real browser; this one names the element and the distance, which is usually
+ * enough to fix it without reproducing it.
+ */
+export async function expectNoHorizontalOverflow(
+  page: Page,
+  label: string
+): Promise<void> {
+  const vw = await page.evaluate(() => window.innerWidth);
+  // Serialised into the page, so the scan must close over nothing.
+  const bad = await page.evaluate(scanOverflowOffenders, vw);
+  // Sub-pixel layout is not overflow. The tolerance is spelled out rather
+  // than imported: this function is serialised into the page, where a
+  // module binding would not exist.
+  const scrolls = await page.evaluate(
+    () =>
+      document.documentElement.scrollWidth >
+      document.documentElement.clientWidth + 1
+  );
+  if (bad.length === 0 && !scrolls) return;
+  const detail =
+    bad.length > 0
+      ? `\n${describeOffenders(bad, vw)}`
+      : "\n  (no element's right edge is over the line, but the document still scrolls)";
+  expect(
+    bad.length + (scrolls ? 1 : 0),
+    `${label}: the ${vw}px viewport scrolls sideways.${detail}`
+  ).toBe(0);
 }

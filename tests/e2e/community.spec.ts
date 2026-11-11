@@ -6,7 +6,7 @@ import {
   type APIRequestContext,
 } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-import { setTheme } from "./support/ui";
+import { expectNoHorizontalOverflow, setTheme } from "./support/ui";
 const gid = "120000000000000001",
   base = `/api/guilds/${gid}`,
   root = `/dashboard/${gid}`,
@@ -294,11 +294,7 @@ test("mobile editor remains keyboard accessible, restores focus and has no page 
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   await expect(create).toBeFocused();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true);
+  await expectNoHorizontalOverflow(page, "templates at 390px");
 });
 test("real origin, tenant and body-size guards protect new endpoints; own history ignores account selectors", async ({
   request,

@@ -1,4 +1,9 @@
-import { chooseComboboxOption, chooseFacet, chooseOption } from "./support/ui";
+import {
+  chooseComboboxOption,
+  chooseFacet,
+  chooseOption,
+  expectNoHorizontalOverflow,
+} from "./support/ui";
 import { test, expect } from "@playwright/test";
 const root = "/dashboard/120000000000000001";
 test("read-only permission setup evaluates the selected channel, preserves protection and makes no grant requests", async ({
@@ -46,11 +51,7 @@ test("read-only permission setup evaluates the selected channel, preserves prote
   await expect(setup.getByText(/Administrator does not bypass/)).toBeVisible();
   expect(mutations).toEqual([]);
   await page.setViewportSize({ width: 390, height: 844 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true);
+  await expectNoHorizontalOverflow(page, "permission setup at 390px");
 });
 test("module setup filters are useful and publisher starters remain explicitly setup-required", async ({
   page,

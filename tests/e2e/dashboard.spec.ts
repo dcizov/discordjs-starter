@@ -1,5 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
-import { chooseOption, setTheme } from "./support/ui";
+import {
+  chooseOption,
+  expectNoHorizontalOverflow,
+  setTheme,
+} from "./support/ui";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, url: string) {
@@ -427,21 +431,13 @@ test("mobile navigation and layouts have no page-level horizontal overflow", asy
   await expect(
     page.getByRole("heading", { name: "Server overview" })
   ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true);
+  await expectNoHorizontalOverflow(page, "/overview at 390px");
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page.getByRole("link", { name: "News & feeds", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Keep your corner in the know." })
   ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true);
+  await expectNoHorizontalOverflow(page, "News & feeds at 390px");
 });
 
 test("unavailable server permissions render a recoverable page without exposing workspace data", async ({

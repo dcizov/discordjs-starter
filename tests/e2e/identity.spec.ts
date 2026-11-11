@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { setTheme } from "./support/ui";
+import { expectNoHorizontalOverflow, setTheme } from "./support/ui";
 const root = "/dashboard/120000000000000001/overview";
 const guildButton = (page: Page, name = "The Cozy Corner") =>
   page.getByRole("button", {
@@ -307,11 +307,7 @@ test("identity controls remain keyboard-accessible on mobile and reject forged p
   await expect(accountButton(page)).toBeFocused();
   await page.getByRole("button", { name: "Open navigation" }).click();
   await decoded(guildButton(page).locator("img"));
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true);
+  await expectNoHorizontalOverflow(page, "identity page at 390px");
   await page.screenshot({ path: ".artifacts/dashboard-identity-mobile.png" });
   const csrf = await request.post("/api/auth/profile", {
     headers: { origin: "https://attacker.example" },

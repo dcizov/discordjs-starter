@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { chooseOption } from "./support/ui";
+import { chooseOption, expectNoHorizontalOverflow } from "./support/ui";
 import { getCommandCatalog } from "@orbit/core/command-catalog";
 import { defaultConfig } from "@orbit/core/config";
 
@@ -106,11 +106,7 @@ test("command reference is usable on mobile without page-level horizontal overfl
   await expect(
     card.getByText("Additional runtime permission: Manage Server.")
   ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth
-    )
-  ).toBe(true);
+  await expectNoHorizontalOverflow(page, "/commands at 390px");
 });
 test("command reference handles a failed load and retries instead of showing an empty catalog", async ({
   page,

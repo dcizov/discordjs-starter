@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { chooseFacet } from "./support/ui";
+import { chooseFacet, expectNoHorizontalOverflow } from "./support/ui";
 
 /**
  * The table surface at phone width.
@@ -67,13 +67,6 @@ async function assertEveryColumnReachable(page: Page, region: Locator) {
 }
 
 /** The page itself must never be the thing that scrolls sideways. */
-async function documentOverflow(page: Page) {
-  return page.evaluate(
-    () =>
-      document.documentElement.scrollWidth -
-      document.documentElement.clientWidth
-  );
-}
 
 test("the channel table stays usable and does not overflow a phone viewport", async ({
   page,
@@ -92,7 +85,7 @@ test("the channel table stays usable and does not overflow a phone viewport", as
 
   // Nothing gets squeezed off the page: the document itself never scrolls
   // sideways, and the table container does the scrolling instead.
-  expect(await documentOverflow(page)).toBeLessThanOrEqual(1);
+  await expectNoHorizontalOverflow(page, "channel table at 390px");
 
   await assertEveryColumnReachable(page, table);
 
@@ -107,7 +100,7 @@ test("the channel table stays usable and does not overflow a phone viewport", as
   await nameHeader.getByRole("button").focus();
   await page.keyboard.press("Enter");
   await expect(nameHeader).toHaveAttribute("aria-sort", "ascending");
-  expect(await documentOverflow(page)).toBeLessThanOrEqual(1);
+  await expectNoHorizontalOverflow(page, "pinned first column at 390px");
 });
 
 /*
@@ -205,10 +198,9 @@ for (const { path, region } of tablePages) {
     const table = page.getByRole("region", { name: region });
     await expect(table).toBeVisible();
 
-    expect(
-      await documentOverflow(page),
-      "the page never scrolls sideways"
-    ).toBeLessThanOrEqual(1);
+    // Throws with the offending element and its label, so a failure names the
+    // page instead of reporting a bare "expected 0 to be <= 1".
+    await expectNoHorizontalOverflow(page, `${region} at 390px`);
     await assertEveryColumnReachable(page, table);
   });
 }
@@ -244,7 +236,7 @@ test("the +N role count still opens and closes at phone width", async ({
   await expect(panel.getByText("Orbit", { exact: true })).toBeVisible();
 
   // Neither the panel nor the control widened the page.
-  expect(await documentOverflow(page)).toBeLessThanOrEqual(1);
+  await expectNoHorizontalOverflow(page, "+N roles popover at 390px");
 
   await page.keyboard.press("Escape");
   await expect(panel).toBeHidden();
