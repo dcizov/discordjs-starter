@@ -136,6 +136,7 @@ Configuration is read on every bot action/message; feed schedules are reconciled
 - **Music:** the supplied Lavalink image includes the nine requested plugins plus Soundy, with unique source ownership and adult adapters disabled. See the [music/startup guide](docs/MUSIC.md) and [plugin inventory/SFW boundaries](docs/MUSIC-PLUGINS.md). Public catalogs are not universally SFW-rated; curate clean recordings. Playback from arbitrary providers is not promised.
 - **RSS/Atom:** enter a verified publisher URL. The bot never guesses feed URLs or scrapes sites. A **Test source** preview shows the exact cards, images, links and metadata gaps; nothing is sent to Discord.
 - **Webhook:** create an incoming-webhook source, save it, then use **Webhook credentials** to generate a secret. See the signed request example in the integration guide.
+- **WoW: Forever rulesets:** set `BLIZZARD_CLIENT_ID`/`BLIZZARD_CLIENT_SECRET` on bot and worker, then `/wowforever watch` in the channel to announce in. Leave them blank and nothing runs. It reports when a ruleset stops reporting UP — it cannot see the in-game error, the faction lock or throttled creation, so read [what it cannot see](docs/WOW-FOREVER.md#what-this-cannot-see) before trusting it.
 
 ## Docker Compose
 

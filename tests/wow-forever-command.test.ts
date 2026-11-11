@@ -24,7 +24,9 @@ import type { CommandContext } from "../apps/bot/src/commands/context";
 const UP = { id: 1, name: "Normal", raw: "UP", state: "up" as const };
 
 function makeContext(subcommand: string, manager = true) {
-  const reply = vi.fn(async () => undefined);
+  // Typed as taking something, so `mock.calls[0][0]` is `unknown` rather than
+  // an empty tuple — the cast below then needs no `as unknown as`.
+  const reply = vi.fn(async (_input: unknown) => undefined);
   const context = {
     i: {
       commandName: "wowforever",

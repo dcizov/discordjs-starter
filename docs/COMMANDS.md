@@ -79,6 +79,31 @@ know where it landed" cannot disagree. A row from before this column, a retry th
 never confirmed, or a simulation has no id and therefore no link — the title stays
 plain text instead of pointing at a guessed message.
 
+## WoW: Forever ruleset watching
+
+`/wowforever status|watch|unwatch` reports whether each WoW: Forever ruleset
+is up, and announces it in a bound channel when one changes. `watch` and
+`unwatch` need Manage Server.
+
+Three rules govern what it says, all of them to stop it crying wolf. **A
+failed poll is never an event** — the previous reading is kept. **The first
+successful poll sets the baseline and stays quiet**, because without a prior
+reading "these are down" is a guess at how long they had been. **A ruleset
+whose own request failed is `unknown`, and `unknown` never produces a flip in
+either direction**: collapsing it into `down` fires an outage on every rate
+limit and an all-clear on every recovery.
+
+The signal is narrow and the copy stays inside it. The ruleset `status` field
+is served by the web API, while the error people hit in the game client comes
+from the login and character-creation services — a separate system, and the
+two have disagreed. A faction locked for PvP balance, and character creation
+throttled under load, produce look-alike messages and are invisible here. So
+every message says a ruleset _is not reporting UP_ and carries the caveat.
+
+Unconfigured is a supported state: with no Blizzard credentials nothing runs
+and nothing is logged. See [the guide](WOW-FOREVER.md) for setup, polling
+interval, and what has not been verified against the live API.
+
 ## New opt-in community commands
 
 The shared definitions now contain **29 command roots / 44 flattened invocations**. New roots are `/poll`, `/announce` and `/transactions`; no live registration is claimed by this count.
