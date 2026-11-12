@@ -12,8 +12,30 @@ export APP_URL=http://localhost:3000
 export COMPOSE_ANSI=never
 export COMPOSE_PROGRESS=plain
 # Compose Bake rejects the CLI-generated Dockerfile outside the checkout on
-# recent Buildx versions. Use Compose's regular builder, not broad fs grants.
+# recent Buildx versions.
 export COMPOSE_BAKE=false
+# `COMPOSE_BAKE=false` alone is not enough, despite what the comment above
+# used to claim. Since Buildx 0.37.2 (advisory GHSA-gwr2-q96m-6682) bake
+# refuses to read a Dockerfile outside the build context without an fs.read
+# entitlement, and Compose *always* builds through bake now, so the opt-out is
+# ignored. The Dev Container CLI writes its generated
+# `Dockerfile-with-features` to /tmp, which is outside the context, so every
+# `devcontainer up` failed with:
+#
+#   additional privileges requested: pass
+#   "--allow=fs.read=/tmp/devcontainercli-runner/container-features/.../Dockerfile-with-features"
+#
+# BUILDX_BAKE_ENTITLEMENTS_FS=0 turns the check back off, which is what this
+# step ran with before Buildx 0.37.2 arrived on the runner image. It is a
+# widening, and it is deliberate rather than free: with it off, a compose file
+# in this repository could name a Dockerfile outside the checkout and bake
+# would read it without asking. That is accepted here because this step only
+# ever builds this repository's own compose files in a disposable CI project
+# (COMPOSE_PROJECT_NAME above), and the one path it reads outside the context
+# is the CLI's own generated file. It must not be exported into other steps.
+# Remove it once docker/compose#14286 lands and the runner's Buildx grants the
+# Dockerfile's directory.
+export BUILDX_BAKE_ENTITLEMENTS_FS=0
 export POSTGRES_PASSWORD=ci-only-database-password
 export LAVALINK_PASSWORD=ci-only-devcontainer-password
 # No command in this test needs live credentials.
