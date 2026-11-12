@@ -249,3 +249,50 @@ describe("Dev Container and dashboard startup contract", () => {
     );
   });
 });
+
+/*
+ * Running the checks without Node on the host.
+ *
+ * `docs/WORKFLOWS.md` tells a Docker-only host to run `npm test`, lint,
+ * typecheck and build inside the `dev` service. That only works while the
+ * `dev` image target carries devDependencies — the production `runtime`
+ * target installs with `--omit=dev` and has no vitest, ESLint or tsc. Nothing
+ * in the build would fail if the `dev` target were changed to omit them; the
+ * documented commands would just stop working for the people who need them
+ * most, because they have no host Node to fall back on.
+ */
+describe("the dev image can run the checks a Docker-only host is told to run", () => {
+  it("builds the dev target from the stage that installs devDependencies", () => {
+    // `deps` is the stage that runs a plain `npm ci`. If `dev` ever becomes
+    // `FROM production-deps`, every command in that docs section breaks.
+    expect(dockerfile).toMatch(/^FROM\s+deps\s+AS\s+dev\s*$/m);
+    expect(dockerfile).toMatch(/^FROM\s+manifests\s+AS\s+deps\s*$/m);
+    expect(dockerfile).toMatch(/^RUN\s+npm\s+ci\s+--no-audit\s+--no-fund\s*$/m);
+  });
+
+  it("installs the production stage with --omit=dev, so the two targets really differ", () => {
+    // The contrast is the point of the docs paragraph: runtime cannot run
+    // these, dev can.
+    expect(dockerfile).toMatch(/^FROM\s+manifests\s+AS\s+production-deps\s*$/m);
+    expect(dockerfile).toMatch(
+      /^RUN\s+npm\s+ci\s+--omit=dev\s+--no-audit\s+--no-fund\s*$/m
+    );
+  });
+
+  it("exposes the dev service under a profile, so an ordinary up does not start it", () => {
+    expect(compose.services.dev.profiles).toEqual(["dev"]);
+  });
+
+  it("bind-mounts the working tree into the dev service", () => {
+    // The documented commands run against the developer's files, not a copy.
+    expect(compose.services.dev.volumes).toContain(".:/app");
+  });
+
+  it("keeps installed dependencies in a named volume, which a rebuild does not refresh", () => {
+    // Documented as a caveat: `docker compose build` will not update
+    // dependencies, so the docs tell you to run `npm ci` inside the volume.
+    expect(compose.services.dev.volumes).toContain(
+      "dev_node_modules:/app/node_modules"
+    );
+  });
+});

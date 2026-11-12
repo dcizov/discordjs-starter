@@ -106,6 +106,43 @@ npm run test:e2e       # Playwright, builds and starts the demo web app
 
 `npm run test:e2e` needs a Playwright browser download on first use. CI installs Chromium and Firefox and runs the same suites; a local pass is useful evidence, not a substitute for CI.
 
+### Running those commands with no Node on the host
+
+Every line above is an npm script, and npm is installed **inside the images** — a Docker host needs neither Node nor npm. The `dev` service is the container to use: it is built from the Dockerfile's `dev` target, which includes devDependencies, so vitest, ESLint and the TypeScript compiler are all present. The production `runtime` target installs with `--omit=dev` and cannot run any of them.
+
+Run any check as a one-off container against your working tree:
+
+```sh
+docker compose --profile dev run --rm --no-deps dev npm test
+docker compose --profile dev run --rm --no-deps dev npm run lint
+docker compose --profile dev run --rm --no-deps dev npm run typecheck
+docker compose --profile dev run --rm --no-deps dev npm run build
+docker compose --profile dev run --rm --no-deps dev npm run format:check
+```
+
+`--profile dev` enables the `dev` service, which is profile-gated so an ordinary `up` does not start a container whose command is `sleep infinity`. `--no-deps` skips PostgreSQL, Redis and the migration container: none of the suites need them, because the database tests run against in-process PGlite rather than a server.
+
+The service bind-mounts the repository at `/app`, so these run against your working tree, not a copy of it.
+
+**A rebuild does not refresh dependencies.** `dev_node_modules` is a named volume, so `docker compose build` leaves the installed tree untouched. After any lockfile change, reinstall inside the volume — the same reason [the full-stack workflow has to do it](DEVELOPMENT.md#development-lifecycle):
+
+```sh
+docker compose --profile dev run --rm --no-deps dev npm ci --no-audit --no-fund
+```
+
+If you would rather work in a shell than type `run` each time, the [Dev Container](DEVCONTAINER.md) is this same service with an editor attached to it; its terminal is a normal shell inside the image.
+
+#### Browser tests in a container
+
+`npm run test:e2e` also needs a Playwright browser inside the container, and the system libraries that browser needs. Installing those means running as root, because the `dev` image runs as the unprivileged `node` user — and the browser cache lives under the installing user's home directory, so installing as root and testing as `node` would not find it. Do both in the same container:
+
+```sh
+docker compose --profile dev run --rm --no-deps --user root dev \
+  bash -lc "npx playwright install --with-deps chromium && npm run build && npm run test:e2e"
+```
+
+The e2e server listens on 3100 inside the container and Playwright runs in that same container, so no port needs publishing. `npm run build` is required first because the e2e server is `next start`, which serves a production build.
+
 ### The e2e server runs on its own port
 
 The browser tests start a **demo** web app (`DEMO_MODE=true`, `.data/e2e.json`) on **port 3100**, not 3000, so `npm run dev` can keep running at the same time. Outside CI Playwright reuses a server that is already listening rather than starting a second one — which is worth keeping, but it means a non-demo server on that port becomes the system under test. Every spec then fails the same opaque way, as a timeout waiting for the page to hydrate, with nothing in the output that mentions the server.
