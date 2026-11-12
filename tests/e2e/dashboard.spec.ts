@@ -4,6 +4,7 @@ import {
   expectNoHorizontalOverflow,
   setTheme,
 } from "./support/ui";
+import { E2E_ORIGIN } from "./support/e2e-server";
 const guild = "120000000000000001";
 const root = `/dashboard/${guild}`;
 async function visit(page: Page, url: string) {
@@ -371,7 +372,7 @@ test("authorization, CSRF, and protected role checks cannot be bypassed", async 
     (r: any) => r.permissions === "8"
   );
   const unsafe = await request.post(`/api/guilds/${guild}/resources/panel`, {
-    headers: { origin: "http://localhost:3000" },
+    headers: { origin: E2E_ORIGIN },
     data: {
       name: "Unsafe role",
       enabled: true,

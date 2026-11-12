@@ -1,5 +1,19 @@
 import { defineConfig, devices } from "@playwright/test";
 import { resolve } from "node:path";
+import { e2eOrigin, e2ePort } from "./tests/e2e/support/e2e-server";
+
+/*
+ * The e2e server gets its own port.
+ *
+ * `reuseExistingServer` is on outside CI, which is worth keeping — it saves a
+ * server start on every run — but on the shared port 3000 it meant a dev
+ * server against real data was silently adopted as the system under test.
+ * Everything then failed as a hydration timeout on demo fixtures, with nothing
+ * in the output that pointed at the server. See `e2e-server.ts` for the
+ * preflight that now refuses to run against the wrong build.
+ */
+const PORT = e2ePort();
+const ORIGIN = e2eOrigin(PORT);
 
 /**
  * The specs that run in more than one engine.
@@ -23,6 +37,7 @@ const SMOKE_SPECS = [
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  globalSetup: "./tests/e2e/support/e2e-server.ts",
   fullyParallel: false,
   workers: 1,
   timeout: 45000,
@@ -46,7 +61,7 @@ export default defineConfig({
   // is unavailable to a restricted development environment.
   reporter: process.env.CI ? [["list"], ["github"]] : "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: ORIGIN,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     // The dashboard introduction is shown once per person. Browser tests start
@@ -56,7 +71,7 @@ export default defineConfig({
       cookies: [],
       origins: [
         {
-          origin: "http://localhost:3000",
+          origin: ORIGIN,
           localStorage: [
             {
               name: "orbit:tour:v1:120000000000000099",
@@ -96,11 +111,15 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm start",
-    url: "http://localhost:3000",
+    // `start:e2e` is `next start` without a hardcoded `--port`, so it takes
+    // the port from the environment as Next does by default. `npm start` pins
+    // 3000, which is exactly the collision this avoids.
+    command: "npm run start:e2e",
+    url: `${ORIGIN}/api/healthz`,
     reuseExistingServer: !process.env.CI,
     timeout: 90000,
     env: {
+      PORT: String(PORT),
       DEMO_MODE: "true",
       DEMO_DATA_PATH: resolve(".data/e2e.json"),
       TZ: "UTC",

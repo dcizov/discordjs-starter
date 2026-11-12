@@ -98,7 +98,26 @@ npm run format:check   # Prettier, as CI runs it
 npm run test:e2e       # Playwright, builds and starts the demo web app
 ```
 
-`npm run test:e2e` needs a Playwright browser download on first use. CI installs Chromium and runs the same suites; a local pass is useful evidence, not a substitute for CI.
+`npm run test:e2e` needs a Playwright browser download on first use. CI installs Chromium and Firefox and runs the same suites; a local pass is useful evidence, not a substitute for CI.
+
+### The e2e server runs on its own port
+
+The browser tests start a **demo** web app (`DEMO_MODE=true`, `.data/e2e.json`) on **port 3100**, not 3000, so `npm run dev` can keep running at the same time. Outside CI Playwright reuses a server that is already listening rather than starting a second one — which is worth keeping, but it means a non-demo server on that port becomes the system under test. Every spec then fails the same opaque way, as a timeout waiting for the page to hydrate, with nothing in the output that mentions the server.
+
+A preflight runs first and refuses to continue when the port is held by something that is not the demo build:
+
+```
+port 3100 is serving a non-demo build; stop it or set E2E_PORT. It reports mode "live";
+  The browser tests need the demo server (DEMO_MODE=true) on this port, and
+  Playwright is configured to reuse whatever is already listening. Set
+  E2E_PORT to a free port to run alongside it.
+```
+
+`GET /api/healthz` is the discriminator: it reports `mode` as `"demo"` or `"live"`. To point the run somewhere else:
+
+```sh
+E2E_PORT=3300 npm run test:e2e
+```
 
 > **Note:** documentation lives in `docs/*.md` and `README.md` and is the source of truth for the in-app guides. If you change a command in a guide, change it in the file — do not edit the rendered page, which is generated at build time.
 

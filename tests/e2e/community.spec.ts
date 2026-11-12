@@ -7,10 +7,11 @@ import {
 } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { expectNoHorizontalOverflow, setTheme } from "./support/ui";
+import { E2E_ORIGIN } from "./support/e2e-server";
 const gid = "120000000000000001",
   base = `/api/guilds/${gid}`,
   root = `/dashboard/${gid}`,
-  origin = "http://localhost:3000";
+  origin = E2E_ORIGIN;
 test.use({ timezoneId: "America/Los_Angeles" });
 let original: any;
 let configChanged = false;
@@ -235,7 +236,7 @@ test("stored posts and own-ledger content render without JavaScript; hydration m
     timezoneId: "Asia/Tokyo",
   });
   const noJS = await server.newPage();
-  await noJS.goto(`http://localhost:3000${root}/polls`);
+  await noJS.goto(`${E2E_ORIGIN}${root}/polls`);
   await expect(
     noJS.getByRole("article", { name: title, exact: true })
   ).toContainText("Which game should we play?");
@@ -252,7 +253,7 @@ test("stored posts and own-ledger content render without JavaScript; hydration m
     timezoneId: "Pacific/Kiritimati",
   });
   const ledgerPage = await ledger.newPage();
-  await ledgerPage.goto(`http://localhost:3000${root}/economy`);
+  await ledgerPage.goto(`${E2E_ORIGIN}${root}/economy`);
   await expect(
     ledgerPage.getByRole("heading", {
       name: "Your transaction history",

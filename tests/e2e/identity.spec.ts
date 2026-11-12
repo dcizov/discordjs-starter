@@ -3,6 +3,7 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expectNoHorizontalOverflow, setTheme } from "./support/ui";
+import { E2E_ORIGIN } from "./support/e2e-server";
 const root = "/dashboard/120000000000000001/overview";
 const guildButton = (page: Page, name = "The Cozy Corner") =>
   page.getByRole("button", {
@@ -315,7 +316,7 @@ test("identity controls remain keyboard-accessible on mobile and reject forged p
   });
   expect(csrf.status()).toBe(403);
   const forged = await request.post("/api/auth/profile", {
-    headers: { origin: "http://localhost:3000" },
+    headers: { origin: E2E_ORIGIN },
     data: { userId: "120000000000000098" },
   });
   expect(forged.status()).toBe(422);
