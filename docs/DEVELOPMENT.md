@@ -1,5 +1,7 @@
 # Full-stack development in Docker
 
+**Requires Node.js 22.14.0 or newer** (22.22.3 is what `.nvmrc` pins and what CI and the container images use). Every npm command in this workflow runs inside a container, so a Docker host does not need Node installed at all — the requirement applies to [the host-Node workflow](WORKFLOWS.md#host-node-workflow) and to anything that installs dependencies outside the image. `npm ci` refuses to install on an older Node rather than warning and continuing; run `nvm use` in the repository root to pick up the pinned version.
+
 This is one of the three supported workflows — the other two are the host-Node workflow in the README and the Dev Container. [Development workflows](WORKFLOWS.md) compares them; this page owns the Docker commands.
 
 This runs the **dashboard, Discord bot, background worker, PostgreSQL, Redis, and Lavalink** together. The web app uses Next development mode; the bot and worker use `tsx watch`. Source changes are bind-mounted, so ordinary code edits do not need an image rebuild. Use a dedicated Discord application/test server: **development mode is not demo mode**, and real messages/moderation/audio actions are possible.

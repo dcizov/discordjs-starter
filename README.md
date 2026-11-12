@@ -10,9 +10,10 @@ This is an executable monorepo, not a collection of dashboard mockups. Demo mode
 
 ## Try it without credentials
 
-This optional **host-Node** workflow requires Node **22.14+** and npm 10+.
+This optional **host-Node** workflow requires Node **22.14+** and npm 10+. The version is pinned in [`.nvmrc`](.nvmrc) (22.22.3), which CI reads as well; `npm ci` fails on an older Node instead of warning and continuing.
 
 ```sh
+nvm use      # picks up .nvmrc
 npm ci
 npm run dev
 # http://localhost:3000

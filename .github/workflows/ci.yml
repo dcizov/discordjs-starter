@@ -29,7 +29,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          # Read from `.nvmrc` rather than naming a major here. A major means
+          # "whatever 22.x is newest today", so CI and a developer running
+          # `nvm use` silently test different Node versions, and a break that
+          # depends on the patch shows up in one and not the other.
+          node-version-file: .nvmrc
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -69,7 +73,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: .nvmrc
       - name: Test plugin artifact integrity/packaging installer offline
         run: python3 -m unittest discover -s docker/lavalink -p 'test_*.py'
       - name: Validate full-stack and headless development Compose profiles

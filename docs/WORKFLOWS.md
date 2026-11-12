@@ -1,5 +1,7 @@
 # Development workflows
 
+**All three workflows need Node.js 22.14.0 or newer.** The version is pinned in `.nvmrc` (22.22.3), read by CI and by `nvm use`; `npm ci` refuses to install on an older Node rather than warning and continuing. The Docker and Dev Container workflows run npm inside the image, so their hosts need no Node installed.
+
 Orbit supports three development workflows. This page is a **router**: it tells you which one fits your machine, shows the command that starts it, and links to the guide that owns the exact steps. It deliberately does not repeat those steps — a second copy of a setup procedure is a second thing that can drift out of date.
 
 The three labels below are the same ones used in the [README](../README.md) and in the dashboard.
@@ -54,7 +56,11 @@ works **inside** the Compose network; the published port works **outside** it.
 
 Use it when Node is already installed on your machine and you only want containers for PostgreSQL and Redis. It is also the path the [demo](../README.md#try-it-without-credentials) uses, where no Discord credentials are configured at all.
 
+This is the workflow the Node requirement applies to directly. Run `nvm use` in the repository root first, or make sure `node -v` reports at least 22.14.0; `npm ci` stops with `EBADENGINE` if it does not.
+
 ```sh
+nvm use            # picks up .nvmrc
+node -v            # must be v22.14.0 or newer
 npm ci
 npm run dev            # dashboard on http://localhost:3000
 npm run dev:bot        # Discord gateway, command handler, dashboard-action worker

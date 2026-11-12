@@ -1,8 +1,10 @@
 # Deployment checklist
 
+**Requires Node.js 22.14.0 or newer.** The images are built from `node:22-bookworm-slim`, so a Docker host needs no Node at all; the requirement applies to the non-Docker workflow and to anything that runs `npm ci` outside an image. The version is pinned in `.nvmrc` (22.22.3), which CI and `nvm use` both read, and `npm ci` fails on an older Node instead of warning and continuing.
+
 ## Before launch
 
-- [ ] Node 22.14+, PostgreSQL 17+, Redis 7+, and optional current Lavalink v4 are available **inside containers**, or installed for the non-Docker workflow. Docker hosts do not need Node/npm installed.
+- [ ] Node 22.14+ (22.22.3 per `.nvmrc`), PostgreSQL 17+, Redis 7+, and optional current Lavalink v4 are available **inside containers**, or installed for the non-Docker workflow. Docker hosts do not need Node/npm installed.
 - [ ] `DEMO_MODE=false` is explicit on all live services; demo mode is never used as authentication.
 - [ ] Discord application, OAuth callback, bot token, members/message-content intents, and command registration are configured.
 - [ ] `ORBIT_SOURCE_REF` (optional) is the commit id you deployed, so the docs
