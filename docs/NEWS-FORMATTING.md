@@ -172,9 +172,32 @@ documented endpoints, no HTML parsing of event pages.
 
 The lookup is cached per app id (6 h success, 10 min failure) and shared across
 every item in a poll, so ten announcements from one game cost one request; there
-is no per-item metadata call. `STEAM_APP_ARTWORK=false` disables it and leaves
-those cards text-only. A failed lookup is not an error: the item renders without
-an image, and the preview says so.
+is no per-item metadata call. A failed lookup is not an error: the item renders
+without an image, and the preview says so.
+
+### Turning the store artwork off
+
+Set `STEAM_APP_ARTWORK=false` to leave items with no image of their own
+text-only. Cards that use it are labelled `Steam store artwork`, and the
+dashboard's **Test source** result says "Shown with Steam store artwork", so the
+setting is discoverable from the UI without reading this page.
+
+**It has to be set on more than the worker.** Three services read it, and each
+one runs the lookup on its own:
+
+| Service  | What it does with it                         |
+| -------- | -------------------------------------------- |
+| `worker` | Scheduled polls and delivered cards          |
+| `web`    | The **Test source** preview in the dashboard |
+| `bot`    | The `/news` command                          |
+
+Setting it on the worker alone leaves the dashboard preview and `/news` still
+showing store artwork, which looks like the setting did not take.
+
+It is declared in the shared `app-env` block in `docker-compose.yml`, so it
+reaches all three whether it comes from `.env` or is exported in the shell. An
+empty value means enabled: `steamArtworkEnabled` treats only the literal
+`false` as off. Restart the services after changing it.
 
 Open Graph fetching remains unimplemented: it needs SSRF-safe resolution,
 redirect and DNS-rebinding checks, timeouts, body limits, content-type

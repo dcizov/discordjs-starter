@@ -335,9 +335,12 @@ export async function pollSourceDetailed(
     const artwork = await withSteamAppArtwork(mapped.items, d.appId);
     const notices = [...mapped.notices];
     if (artwork.used)
-      notices.push(
-        "Items without their own image show the game's Steam store artwork, which is app artwork rather than a picture supplied by the article. Set STEAM_APP_ARTWORK=false on the worker to leave those items text-only."
-      );
+      // Attribution, not configuration. The operator reading a test result
+      // needs to know the picture came from the store rather than from the
+      // article; how to turn the lookup off is an ops instruction, and ops
+      // instructions belong in the docs, where they can name every service
+      // they have to be set on.
+      notices.push("Shown with Steam store artwork.");
     else if (!mapped.items.some((item) => item.image))
       notices.push(
         "No article image and no store artwork were available for these items, so the cards are text-only."

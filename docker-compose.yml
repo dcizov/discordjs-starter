@@ -25,6 +25,14 @@ x-app: &app
     WOW_FOREVER_REGION: ${WOW_FOREVER_REGION:-eu}
     BLIZZARD_CLIENT_ID: ${BLIZZARD_CLIENT_ID:-}
     BLIZZARD_CLIENT_SECRET: ${BLIZZARD_CLIENT_SECRET:-}
+    # Steam store artwork fallback for news items with no image of their own.
+    # Empty means enabled, which matches `steamArtworkEnabled`: only the
+    # literal "false" turns it off. Declared here because three services read
+    # it, not one — the worker polls and delivers, the web app renders the
+    # "Test source" preview, and the bot serves `/news`. A variable set only
+    # in `.env` would reach all three through env_file, but one exported in
+    # the shell with no `.env` would reach none of them.
+    STEAM_APP_ARTWORK: ${STEAM_APP_ARTWORK:-}
     DEMO_DATA_PATH: /app/.data/demo.json
   init: true
   restart: unless-stopped

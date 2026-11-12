@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { parseDocument } from "yaml";
 import {
   appArtworkFromStore,
   isSteamImageUrl,
@@ -9,6 +11,11 @@ import {
 import { mapSteamNews, withSteamAppArtwork } from "@orbit/core/feeds";
 import { feedEmbed, newsCard } from "@orbit/core/news-presentation";
 import type { FeedItem } from "@orbit/core/types";
+
+const compose = parseDocument(
+  readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8"),
+  { merge: true }
+).toJS();
 
 /**
  * Steam app artwork is a *fallback*: the news API has no image field, so the
@@ -350,5 +357,49 @@ describe("mapSteamNews still reports what the provider did not send", () => {
       "https://clan.cloudflare.steamstatic.com/images/123/art.png"
     );
     expect(items[0].imageKind).toBe("article");
+  });
+});
+
+/*
+ * The switch is documented as reaching three services. Three services really
+ * do read it — the worker polls and delivers, the web app renders the "Test
+ * source" preview, and the bot serves `/news` — so a note saying "set it on
+ * the worker" would leave two of them unchanged and look like it had not
+ * taken. Asserting the declaration is in the shared anchor, and that all
+ * three inherit it, is what keeps the documented instruction true.
+ */
+describe("the STEAM_APP_ARTWORK switch reaches every service that reads it", () => {
+  const servicesThatPoll = ["worker", "web", "bot"];
+
+  it("is declared in the shared app environment", () => {
+    // Bracket notation, not `compose.x-app`: that reads as a subtraction
+    // against an undefined variable, which throws rather than failing the
+    // assertion.
+    expect(compose["x-app"].environment).toHaveProperty("STEAM_APP_ARTWORK");
+  });
+
+  it("reaches all three services through the shared anchor", () => {
+    for (const name of servicesThatPoll) {
+      const service = compose.services[name];
+      expect(service, `compose has a ${name} service`).toBeDefined();
+      expect(
+        service.environment,
+        `${name} inherits the shared app environment`
+      ).toHaveProperty("STEAM_APP_ARTWORK");
+    }
+  });
+
+  it("defaults to empty, which means enabled", () => {
+    // `steamArtworkEnabled` treats only the literal "false" as off, so an
+    // unset variable must not switch the feature off by accident. Declaring
+    // the key with an empty default is what makes that true.
+    // The declaration is the interpolation, whose resolved value is empty when
+    // the variable is unset. Asserting the form rather than a literal empty
+    // string, so a `:-false` default — which would silently disable the
+    // feature for everyone — is caught here.
+    expect(compose["x-app"].environment.STEAM_APP_ARTWORK).toBe(
+      "${STEAM_APP_ARTWORK:-}"
+    );
+    expect(steamArtworkEnabled({})).toBe(true);
   });
 });
